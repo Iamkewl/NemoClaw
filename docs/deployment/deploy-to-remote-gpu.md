@@ -31,6 +31,10 @@ The deploy command provisions the VM, installs dependencies, and connects you to
 
 ## Deploy the Instance
 
+:::{warning}
+The `nemoclaw deploy` command is experimental and may not work as expected.
+:::
+
 Create a Brev instance and run the NemoClaw setup:
 
 ```console

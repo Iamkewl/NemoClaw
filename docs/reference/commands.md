@@ -114,6 +114,10 @@ $ nemoclaw list
 
 ### `nemoclaw deploy`
 
+:::{warning}
+The `nemoclaw deploy` command is experimental and may not work as expected.
+:::
+
 Deploy NemoClaw to a remote GPU instance through [Brev](https://brev.nvidia.com).
 The deploy script installs Docker, NVIDIA Container Toolkit if a GPU is present, and OpenShell on the VM, then runs the nemoclaw setup and connects to the sandbox.
 
