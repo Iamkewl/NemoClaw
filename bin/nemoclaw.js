@@ -288,8 +288,56 @@ function sandboxStatus(sandboxName) {
 }
 
 function sandboxLogs(sandboxName, follow) {
-  const followFlag = follow ? " --follow" : "";
-  run(`openshell sandbox logs "${sandboxName}"${followFlag}`);
+  // Verify sandbox exists and is running (exits non-zero for deleted/stopped sandboxes)
+  try {
+    execSync(`openshell sandbox get "${sandboxName}"`, {
+      encoding: "utf-8",
+      timeout: 10000,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+  } catch {
+    console.log(`  Sandbox '${sandboxName}' is not running. No live logs available.`);
+    return;
+  }
+
+  // Get SSH config for the sandbox
+  let sshConfig;
+  try {
+    sshConfig = execSync(`openshell sandbox ssh-config "${sandboxName}"`, {
+      encoding: "utf-8",
+      timeout: 10000,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+  } catch {
+    console.log(`  Sandbox '${sandboxName}' is not running. No live logs available.`);
+    return;
+  }
+
+  // Write temp ssh config
+  const confPath = `/tmp/nemoclaw-logs-${process.pid}.conf`;
+  fs.writeFileSync(confPath, sshConfig);
+
+  console.log(`  Streaming logs from sandbox '${sandboxName}'...`);
+  console.log("");
+
+  const tailCmd = follow
+    ? "tail -f -n 50 /tmp/nemoclaw.log /tmp/openclaw.log 2>/dev/null"
+    : "tail -n 50 /tmp/nemoclaw.log /tmp/openclaw.log 2>/dev/null";
+
+  const result = spawnSync("ssh", [
+    "-T", "-F", confPath,
+    "-o", "StrictHostKeyChecking=no",
+    "-o", "UserKnownHostsFile=/dev/null",
+    "-o", "LogLevel=ERROR",
+    `openshell-${sandboxName}`,
+    tailCmd,
+  ], { stdio: "inherit" });
+
+  try { fs.unlinkSync(confPath); } catch {}
+
+  if (result.status !== 0 && result.status !== null && !follow) {
+    console.error(`  Failed to stream logs (exit ${result.status})`);
+  }
 }
 
 async function sandboxPolicyAdd(sandboxName) {
@@ -353,7 +401,7 @@ function help() {
     nemoclaw list                    List all sandboxes
     nemoclaw <name> connect          Connect to a sandbox
     nemoclaw <name> status           Show sandbox status and health
-    nemoclaw <name> logs [--follow]  View sandbox logs
+    nemoclaw <name> logs [-f|--follow]  View sandbox logs
     nemoclaw <name> destroy          Stop NIM + delete sandbox
 
   Policy Presets:
@@ -416,7 +464,7 @@ const [cmd, ...args] = process.argv.slice(2);
     switch (action) {
       case "connect":     sandboxConnect(cmd); break;
       case "status":      sandboxStatus(cmd); break;
-      case "logs":        sandboxLogs(cmd, actionArgs.includes("--follow")); break;
+      case "logs":        sandboxLogs(cmd, actionArgs.includes("--follow") || actionArgs.includes("-f")); break;
       case "policy-add":  await sandboxPolicyAdd(cmd); break;
       case "policy-list": sandboxPolicyList(cmd); break;
       case "destroy":     sandboxDestroy(cmd); break;
