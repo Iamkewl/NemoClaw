@@ -16,6 +16,7 @@
  *   OLLAMA_BACKEND_PORT — Ollama port on localhost (default: 11434)
  */
 
+const crypto = require("crypto");
 const http = require("http");
 
 const TOKEN = process.env.OLLAMA_PROXY_TOKEN;
@@ -31,7 +32,10 @@ const server = http.createServer((clientReq, clientRes) => {
   const auth = clientReq.headers.authorization;
   // Allow unauthenticated health checks (model list only, not inference)
   const isHealthCheck = clientReq.method === "GET" && clientReq.url === "/api/tags";
-  if (!isHealthCheck && auth !== `Bearer ${TOKEN}`) {
+  const expected = `Bearer ${TOKEN}`;
+  const tokenMatch = auth && auth.length === expected.length &&
+    crypto.timingSafeEqual(Buffer.from(auth), Buffer.from(expected));
+  if (!isHealthCheck && !tokenMatch) {
     clientRes.writeHead(401, { "Content-Type": "text/plain" });
     clientRes.end("Unauthorized");
     return;

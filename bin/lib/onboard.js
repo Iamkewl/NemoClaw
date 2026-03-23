@@ -285,6 +285,8 @@ function sleep(seconds) {
 let ollamaProxyToken = null;
 
 function startOllamaAuthProxy() {
+  // Kill any stale proxy from a previous onboard run so the new token takes effect
+  run('lsof -ti :11435 | xargs kill 2>/dev/null || true', { ignoreError: true });
   const crypto = require("crypto");
   ollamaProxyToken = crypto.randomBytes(24).toString("hex");
   run(
@@ -293,6 +295,11 @@ function startOllamaAuthProxy() {
     { ignoreError: true },
   );
   sleep(1);
+  // Verify proxy is actually listening before proceeding
+  const probe = runCapture("curl -sf --connect-timeout 2 http://127.0.0.1:11435/api/tags 2>/dev/null", { ignoreError: true });
+  if (!probe) {
+    console.error("  Warning: Ollama auth proxy did not start on :11435");
+  }
 }
 
 function getOllamaProxyToken() {

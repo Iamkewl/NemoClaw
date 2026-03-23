@@ -84,7 +84,7 @@ sleep 1
 # ── Test 1: Mock backend is NOT reachable on 0.0.0.0 ─────────────
 
 info "1. Verify Ollama is NOT on 0.0.0.0:$MOCK_PORT"
-if curl -sf --connect-timeout 2 http://0.0.0.0:11434/api/tags > /dev/null 2>&1; then
+if curl -sf --connect-timeout 2 http://0.0.0.0:$MOCK_PORT/api/tags > /dev/null 2>&1; then
   # On Linux, 0.0.0.0 may resolve to localhost — check via a non-loopback interface
   # This is expected behavior; the real protection is that external IPs can't reach it
   # On macOS, this correctly fails. Accept either outcome.
