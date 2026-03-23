@@ -39,7 +39,12 @@ export DEBIAN_FRONTEND=noninteractive
 # --- 0. Node.js (needed for services) ---
 if ! command -v node >/dev/null 2>&1; then
   info "Installing Node.js..."
-  curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - >/dev/null 2>&1
+  # Upstream URL is a rolling release so SHA-256 pinning isn't practical,
+  # but download-then-execute allows inspection and prevents partial-download execution.
+  tmpdir=$(mktemp -d)
+  curl -fsSL https://deb.nodesource.com/setup_22.x -o "$tmpdir/setup_node.sh"
+  sudo -E bash "$tmpdir/setup_node.sh" >/dev/null 2>&1
+  rm -rf "$tmpdir"
   sudo apt-get install -y -qq nodejs >/dev/null 2>&1
   info "Node.js $(node --version) installed"
 else

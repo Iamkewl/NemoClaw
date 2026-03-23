@@ -208,4 +208,41 @@ describe("runner helpers", () => {
       expect(!src.includes("execSync")).toBeTruthy();
     });
   });
+
+  describe("curl-pipe-to-shell guards (#574, #583)", () => {
+    // Match actual curl-pipe-to-shell executions, not printf/echo documentation
+    const isViolation = (line) => {
+      const trimmed = line.trim();
+      if (trimmed.startsWith("#") || trimmed.startsWith("printf") || trimmed.startsWith("echo")) return false;
+      return /curl\s[^|]*\|\s*(sh|bash|sudo)/.test(trimmed);
+    };
+
+    it("install.sh does not pipe curl to shell", () => {
+      const src = fs.readFileSync(path.join(import.meta.dirname, "..", "install.sh"), "utf-8");
+      const violations = src.split("\n").filter(isViolation);
+      expect(violations).toEqual([]);
+    });
+
+    it("scripts/install.sh does not pipe curl to shell", () => {
+      const src = fs.readFileSync(path.join(import.meta.dirname, "..", "scripts", "install.sh"), "utf-8");
+      const violations = src.split("\n").filter(isViolation);
+      expect(violations).toEqual([]);
+    });
+
+    it("scripts/brev-setup.sh does not pipe curl to shell", () => {
+      const src = fs.readFileSync(path.join(import.meta.dirname, "..", "scripts", "brev-setup.sh"), "utf-8");
+      const violations = src.split("\n").filter(isViolation);
+      expect(violations).toEqual([]);
+    });
+
+    it("bin/nemoclaw.js does not pipe curl to shell", () => {
+      const src = fs.readFileSync(path.join(import.meta.dirname, "..", "bin", "nemoclaw.js"), "utf-8");
+      const violations = src.split("\n").filter((l) => {
+        const t = l.trim();
+        if (t.startsWith("//") || t.startsWith("*")) return false;
+        return /curl.*\|\s*(sh|bash|sudo)/.test(t);
+      });
+      expect(violations).toEqual([]);
+    });
+  });
 });
