@@ -19,6 +19,12 @@ set -euo pipefail
 # into commands executed by the entrypoint or auto-pair watcher.
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
+# Config overrides file: the OpenClaw shim patch reads this and deep-merges
+# onto the frozen openclaw.json at load time.  Set unconditionally so the
+# shim is active regardless of how the sandbox was started.
+# Ref: https://github.com/NVIDIA/NemoClaw/issues/915
+export OPENCLAW_CONFIG_OVERRIDES_FILE=/sandbox/.openclaw-data/config-overrides.json5
+
 # ── Drop unnecessary Linux capabilities ──────────────────────────
 # CIS Docker Benchmark 5.3: containers should not run with default caps.
 # OpenShell manages the container runtime so we cannot pass --cap-drop=ALL

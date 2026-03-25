@@ -62,6 +62,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         iproute2=6.1.0-3 \
         iptables=1.8.9-2 \
         libcap2-bin=1:2.66-4+deb12u2+b2 \
+        patch=2.7.6-7 \
     && rm -rf /var/lib/apt/lists/*
 
 # gosu for privilege separation (gateway vs sandbox user).
@@ -117,5 +118,15 @@ RUN mkdir -p /sandbox/.openclaw-data/agents/main/agent \
 
 # Install OpenClaw CLI + PyYAML for inline Python scripts in e2e tests.
 # When bumping the openclaw version, rebuild this base image.
+#
+# Apply config overrides shim patch after install.  This adds support for
+# OPENCLAW_CONFIG_OVERRIDES_FILE: a deep-merged overlay that enables runtime
+# config changes (e.g. channel tokens) without modifying the frozen
+# openclaw.json.  The gateway.* section is excluded from overrides to prevent
+# auth/CORS tampering.  See patches/openclaw-config-overrides.patch.
+# Ref: https://github.com/NVIDIA/NemoClaw/issues/915
+COPY patches/openclaw-config-overrides.patch /tmp/openclaw-config-overrides.patch
 RUN npm install -g openclaw@2026.3.11 \
+    && patch -d /usr/local/lib/node_modules/openclaw -p1 < /tmp/openclaw-config-overrides.patch \
+    && rm /tmp/openclaw-config-overrides.patch \
     && pip3 install --no-cache-dir --break-system-packages "pyyaml==6.0.3"

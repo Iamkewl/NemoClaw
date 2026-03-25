@@ -1,0 +1,50 @@
+--- a/dist/config-CO7zBdn8.js	2026-03-24 22:29:33
++++ b/dist/config-CO7zBdn8.js	2026-03-25 13:27:34
+@@ -14376,8 +14376,36 @@
+ 		}),
+ 		parseJson: (raw) => deps.json5.parse(raw)
+ 	});
++}
++function _nemoClawMergeOverrides(cfg) {
++	const _p = (typeof process !== "undefined" && process.env || {}).OPENCLAW_CONFIG_OVERRIDES_FILE;
++	console.log("[nemoclaw] config overrides shim: OPENCLAW_CONFIG_OVERRIDES_FILE=" + (_p || "(not set)"));
++	if (!_p) return cfg;
++	try {
++		const _raw = fs$1.readFileSync(_p, "utf-8");
++		console.log("[nemoclaw] config overrides: read " + _raw.length + " bytes from " + _p);
++		const _ov = JSON5.parse(_raw);
++		if (_ov && typeof _ov === "object") {
++			delete _ov.gateway;
++			const _dm = (t, s) => {
++				if (isPlainObject$2(t) && isPlainObject$2(s)) {
++					const r = { ...t };
++					for (const k of Object.keys(s)) { r[k] = k in r ? _dm(r[k], s[k]) : s[k]; }
++					return r;
++				}
++				return s;
++			};
++			console.log("[nemoclaw] config overrides: merged successfully");
++			return _dm(cfg, _ov);
++		}
++	} catch (e) {
++		if (e.code === "ENOENT") { console.log("[nemoclaw] config overrides: file not found (ok, no overrides)"); }
++		else { console.warn("[nemoclaw] config overrides error:", e.message); }
++	}
++	return cfg;
+ }
+ function resolveConfigForRead(resolvedIncludes, env) {
++	resolvedIncludes = _nemoClawMergeOverrides(resolvedIncludes);
+ 	if (resolvedIncludes && typeof resolvedIncludes === "object" && "env" in resolvedIncludes) applyConfigEnvVars(resolvedIncludes, env);
+ 	const envWarnings = [];
+ 	return {
+--- a/dist/gateway-cli-B-E8XzUM.js	2026-03-24 22:29:33
++++ b/dist/gateway-cli-B-E8XzUM.js	2026-03-24 22:30:04
+@@ -2145,6 +2145,8 @@
+ 		},
+ 		usePolling: Boolean(process.env.VITEST)
+ 	});
++	const _ncOverridesPath = process.env.OPENCLAW_CONFIG_OVERRIDES_FILE;
++	if (_ncOverridesPath) watcher.add(_ncOverridesPath);
+ 	watcher.on("add", schedule);
+ 	watcher.on("change", schedule);
+ 	watcher.on("unlink", schedule);
