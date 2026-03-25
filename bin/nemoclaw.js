@@ -202,6 +202,14 @@ function getReconciledSandboxGatewayState(sandboxName) {
       }
       return { ...retried, recoveredGateway: true, recoveryVia: recovery.via || null };
     }
+    const latestLifecycle = getNamedGatewayLifecycleState();
+    const latestStatus = stripAnsi(latestLifecycle.status || "");
+    if (/Connection refused|client error \(Connect\)|tcp connect error/i.test(latestStatus) && /Gateway:\s+nemoclaw/i.test(latestStatus)) {
+      return {
+        state: "gateway_unreachable_after_restart",
+        output: latestLifecycle.status || lookup.output,
+      };
+    }
     if (recovery.after?.state === "named_unreachable" || recovery.before?.state === "named_unreachable") {
       return {
         state: "gateway_unreachable_after_restart",
