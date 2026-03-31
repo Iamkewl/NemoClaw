@@ -877,22 +877,54 @@ For the full platform-level controls reference, see <a class="reference external
 <p>NemoClaw enforces security at four layers.
 NemoClaw locks some when it creates the sandbox and requires a restart to change them.
 You can hot-reload others while the sandbox runs.</p>
+<p>The following diagram shows the default posture immediately after <code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">onboard</span></code>, before you approve any endpoints or apply any presets.</p>
 <pre  class="mermaid">
-        flowchart LR
-    subgraph locked [&quot;Locked at Creation&quot;]
-        FS[&quot;Filesystem&lt;br/&gt;Read-only mounts&lt;br/&gt;Landlock LSM&lt;br/&gt;Config integrity hash&lt;br/&gt;Immutable flag&quot;]
-        PROC[&quot;Process&lt;br/&gt;Capability drops&lt;br/&gt;ulimit · PATH lock&lt;br/&gt;Gateway user isolation&lt;br/&gt;Non-root agent&quot;]
+        flowchart TB
+    subgraph HOST[&quot;Your Machine — default posture after nemoclaw onboard&quot;]
+        direction TB
+
+        YOU[&quot;👤 Operator&quot;]
+
+        subgraph NC[&quot;NemoClaw + OpenShell&quot;]
+            direction TB
+
+            subgraph SB[&quot;Sandbox — the agent's isolated world&quot;]
+                direction LR
+                PROC[&quot;⚙️ Process Layer&lt;br/&gt;Controls what the agent can execute&quot;]
+                FS[&quot;📁 Filesystem Layer&lt;br/&gt;Controls what the agent can read and write&quot;]
+                AGENT[&quot;🤖 Agent&quot;]
+            end
+
+            subgraph GW[&quot;Gateway — the gatekeeper&quot;]
+                direction LR
+                NET[&quot;🌐 Network Layer&lt;br/&gt;Controls where the agent can connect&quot;]
+                INF[&quot;🧠 Inference Layer&lt;br/&gt;Controls which AI models the agent can use&quot;]
+            end
+        end
     end
 
-    subgraph hotReload [&quot;Hot-Reloadable at Runtime&quot;]
-        NET[&quot;Network&lt;br/&gt;Deny-by-default egress&lt;br/&gt;Binary-scoped rules&lt;br/&gt;Operator approval&quot;]
-        INF[&quot;Inference&lt;br/&gt;Routed through gateway&lt;br/&gt;Credential isolation&lt;br/&gt;Provider selection&quot;]
-    end
+    OUTSIDE[&quot;🌍 Outside World&lt;br/&gt;Internet · AI Providers · APIs&quot;]
 
-    AGENT[&quot;Agent in Sandbox&quot;] --&gt; NET
-    AGENT --&gt; FS
-    AGENT --&gt; PROC
-    AGENT --&gt; INF
+    AGENT -- &quot;all requests&quot; --&gt; GW
+    GW -- &quot;approved only&quot; --&gt; OUTSIDE
+    YOU -. &quot;approve / deny&quot; .-&gt; GW
+
+    classDef agent fill:#76b900,stroke:#5a8f00,color:#fff,stroke-width:2px,font-weight:bold
+    classDef locked fill:#1a1a1a,stroke:#76b900,color:#fff,stroke-width:2px
+    classDef hot fill:#333,stroke:#76b900,color:#e6f2cc,stroke-width:2px
+    classDef external fill:#f5f5f5,stroke:#ccc,color:#1a1a1a,stroke-width:1px
+    classDef operator fill:#fff,stroke:#76b900,color:#1a1a1a,stroke-width:2px,font-weight:bold
+
+    class AGENT agent
+    class PROC,FS locked
+    class NET,INF hot
+    class OUTSIDE external
+    class YOU operator
+
+    style HOST fill:none,stroke:#76b900,stroke-width:2px,color:#1a1a1a
+    style NC fill:none,stroke:#76b900,stroke-width:1px,stroke-dasharray:5 5,color:#1a1a1a
+    style SB fill:#f5faed,stroke:#76b900,stroke-width:2px,color:#1a1a1a
+    style GW fill:#2a2a2a,stroke:#76b900,stroke-width:2px,color:#fff
     </pre><div class="pst-scrollable-table-container"><table class="table">
 <colgroup>
 <col style="width: 20.0%" />

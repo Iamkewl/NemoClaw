@@ -474,7 +474,7 @@ Running <code class="docutils literal notranslate"><span class="pre">nemoclaw</s
 </section>
 <section id="nemoclaw-onboard">
 <h3><code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">onboard</span></code><a class="headerlink" href="#nemoclaw-onboard" title="Link to this heading">#</a></h3>
-<p>Run the interactive setup wizard.
+<p>Run the interactive setup wizard (recommended for new installs).
 The wizard creates an OpenShell gateway, registers inference providers, builds the sandbox image, and creates the sandbox.
 Use this command for new installs and for recreating a sandbox after changes to policy or configuration.</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>nemoclaw<span class="w"> </span>onboard
@@ -482,7 +482,8 @@ Use this command for new installs and for recreating a sandbox after changes to 
 </div>
 <p>The wizard prompts for a provider first, then collects the provider credential if needed.
 Supported non-experimental choices include NVIDIA Endpoints, OpenAI, Anthropic, Google Gemini, and compatible OpenAI or Anthropic endpoints.
-Credentials are stored in <code class="docutils literal notranslate"><span class="pre">~/.nemoclaw/credentials.json</span></code>.</p>
+Credentials are stored in <code class="docutils literal notranslate"><span class="pre">~/.nemoclaw/credentials.json</span></code>.
+The legacy <code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">setup</span></code> command is deprecated; use <code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">onboard</span></code> instead.</p>
 <p>The wizard prompts for a sandbox name.
 Names must follow RFC 1123 subdomain rules: lowercase alphanumeric characters and hyphens only, and must start and end with an alphanumeric character.
 Uppercase letters are automatically lowercased.</p>
@@ -503,7 +504,7 @@ On systems with cgroup v2 (Ubuntu 24.04, DGX Spark, WSL2), it verifies that Dock
 <p>The <code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">deploy</span></code> command is experimental and may not work as expected.</p>
 </div>
 <p>Deploy NemoClaw to a remote GPU instance through <a class="reference external" href="https://brev.nvidia.com" rel="noreferer noopener" target="_blank">Brev</a>.
-The deploy script installs Docker, NVIDIA Container Toolkit if a GPU is present, and OpenShell on the VM, then runs the nemoclaw setup and connects to the sandbox.</p>
+The deploy script installs Docker, NVIDIA Container Toolkit if a GPU is present, and OpenShell on the VM, then runs <code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">onboard</span></code> and connects to the sandbox.</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>nemoclaw<span class="w"> </span>deploy<span class="w"> </span>&lt;instance-name&gt;
 </pre></div>
 </div>
@@ -655,11 +656,10 @@ The CLI uses the local <code class="docutils literal notranslate"><span class="p
 </pre></div>
 </div>
 </section>
-<section id="nemoclaw-setup-deprecated">
-<h3><code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">setup</span></code> (deprecated)<a class="headerlink" href="#nemoclaw-setup-deprecated" title="Link to this heading">#</a></h3>
-<p>Run the legacy setup workflow for backwards compatibility.
-NemoClaw prints a deprecation warning, then runs the older <code class="docutils literal notranslate"><span class="pre">setup.sh</span></code> path.
-Prefer <code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">onboard</span></code> for new installs and reconfiguration.</p>
+<section id="legacy-nemoclaw-setup">
+<h3>Legacy <code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">setup</span></code><a class="headerlink" href="#legacy-nemoclaw-setup" title="Link to this heading">#</a></h3>
+<p>Deprecated. Use <code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">onboard</span></code> instead.
+The legacy setup command runs the old setup script for backwards compatibility only.</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>nemoclaw<span class="w"> </span>setup
 </pre></div>
 </div>
@@ -736,7 +736,7 @@ Prefer <code class="docutils literal notranslate"><span class="pre">nemoclaw</sp
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nemoclaw-setup-spark"><code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">setup-spark</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nemoclaw-debug"><code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">debug</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nemoclaw-uninstall"><code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">uninstall</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nemoclaw-setup-deprecated"><code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">setup</span></code> (deprecated)</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#legacy-nemoclaw-setup">Legacy <code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">setup</span></code></a></li>
 </ul>
 </li>
 </ul>
