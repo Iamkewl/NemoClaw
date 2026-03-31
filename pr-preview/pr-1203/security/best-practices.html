@@ -1565,26 +1565,37 @@ They are not separate policy files. They are guidance on which controls to keep 
 <section id="common-mistakes">
 <h2>Common Mistakes<a class="headerlink" href="#common-mistakes" title="Link to this heading">#</a></h2>
 <p>The following patterns weaken security without providing meaningful benefit.</p>
-<p><strong>Omitting <code class="docutils literal notranslate"><span class="pre">protocol:</span> <span class="pre">rest</span></code> on REST API endpoints.</strong>
-Endpoints without a <code class="docutils literal notranslate"><span class="pre">protocol</span></code> field use L4-only enforcement.
-The proxy allows the TCP stream through after checking host, port, and binary, but cannot see or filter individual HTTP requests.
-Add <code class="docutils literal notranslate"><span class="pre">protocol:</span> <span class="pre">rest</span></code> with explicit <code class="docutils literal notranslate"><span class="pre">rules</span></code> to enable per-request method and path control on REST APIs.</p>
-<p><strong>Adding endpoints to the baseline policy for one-off requests.</strong>
-If the agent needs an endpoint temporarily, use operator approval.
-Approved endpoints persist within the sandbox instance but reset when the sandbox is destroyed and recreated.
-Adding an endpoint to the baseline policy makes it permanently reachable across all sandbox instances.</p>
-<p><strong>Relying solely on the entrypoint for capability drops.</strong>
-The entrypoint drops dangerous capabilities via <code class="docutils literal notranslate"><span class="pre">capsh</span></code>, but this is best-effort.
-If <code class="docutils literal notranslate"><span class="pre">capsh</span></code> is unavailable or <code class="docutils literal notranslate"><span class="pre">CAP_SETPCAP</span></code> is not in the bounding set, the container runs with the default capability set.
-Pass <code class="docutils literal notranslate"><span class="pre">--cap-drop=ALL</span></code> at the container runtime level as defense-in-depth.</p>
-<p><strong>Granting write access to <code class="docutils literal notranslate"><span class="pre">/sandbox/.openclaw</span></code>.</strong>
-This directory contains the OpenClaw gateway configuration.
-A writable <code class="docutils literal notranslate"><span class="pre">.openclaw</span></code> lets the agent modify auth tokens, disable CORS, or redirect inference routing.
-Agent-writable state belongs in <code class="docutils literal notranslate"><span class="pre">/sandbox/.openclaw-data</span></code>.</p>
-<p><strong>Adding inference provider hosts to the network policy.</strong>
-Do not add hosts like <code class="docutils literal notranslate"><span class="pre">api.openai.com</span></code> or <code class="docutils literal notranslate"><span class="pre">api.anthropic.com</span></code> to the network policy.
-Use OpenShell inference routing instead.
-Direct network access to an inference host bypasses credential isolation and usage tracking.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Mistake</p></th>
+<th class="head"><p>Why it matters</p></th>
+<th class="head"><p>What to do instead</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Omitting <code class="docutils literal notranslate"><span class="pre">protocol:</span> <span class="pre">rest</span></code> on REST API endpoints</p></td>
+<td><p>Endpoints without a <code class="docutils literal notranslate"><span class="pre">protocol</span></code> field use L4-only enforcement. The proxy allows the TCP stream through after checking host, port, and binary, but cannot see or filter individual HTTP requests.</p></td>
+<td><p>Add <code class="docutils literal notranslate"><span class="pre">protocol:</span> <span class="pre">rest</span></code> with explicit <code class="docutils literal notranslate"><span class="pre">rules</span></code> to enable per-request method and path control on REST APIs.</p></td>
+</tr>
+<tr class="row-odd"><td><p>Adding endpoints to the baseline policy for one-off requests</p></td>
+<td><p>Adding an endpoint to the baseline policy makes it permanently reachable across all sandbox instances.</p></td>
+<td><p>Use operator approval. Approved endpoints persist within the sandbox instance but reset when the sandbox is destroyed and recreated.</p></td>
+</tr>
+<tr class="row-even"><td><p>Relying solely on the entrypoint for capability drops</p></td>
+<td><p>The entrypoint drops dangerous capabilities via <code class="docutils literal notranslate"><span class="pre">capsh</span></code>, but this is best-effort. If <code class="docutils literal notranslate"><span class="pre">capsh</span></code> is unavailable or <code class="docutils literal notranslate"><span class="pre">CAP_SETPCAP</span></code> is not in the bounding set, the container runs with the default capability set.</p></td>
+<td><p>Pass <code class="docutils literal notranslate"><span class="pre">--cap-drop=ALL</span></code> at the container runtime level as defense-in-depth.</p></td>
+</tr>
+<tr class="row-odd"><td><p>Granting write access to <code class="docutils literal notranslate"><span class="pre">/sandbox/.openclaw</span></code></p></td>
+<td><p>This directory contains the OpenClaw gateway configuration. A writable <code class="docutils literal notranslate"><span class="pre">.openclaw</span></code> lets the agent modify auth tokens, disable CORS, or redirect inference routing.</p></td>
+<td><p>Store agent-writable state in <code class="docutils literal notranslate"><span class="pre">/sandbox/.openclaw-data</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p>Adding inference provider hosts to the network policy</p></td>
+<td><p>Direct network access to an inference host bypasses credential isolation and usage tracking.</p></td>
+<td><p>Use OpenShell inference routing instead of adding hosts like <code class="docutils literal notranslate"><span class="pre">api.openai.com</span></code> or <code class="docutils literal notranslate"><span class="pre">api.anthropic.com</span></code> to the network policy.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
 </section>
 <section id="related-topics">
 <h2>Related Topics<a class="headerlink" href="#related-topics" title="Link to this heading">#</a></h2>
