@@ -380,30 +380,13 @@ Use when the agent talks to internal APIs or third-party services during testing
 
 The following patterns weaken security without providing meaningful benefit.
 
-**Omitting `protocol: rest` on REST API endpoints.**
-Endpoints without a `protocol` field use L4-only enforcement.
-The proxy allows the TCP stream through after checking host, port, and binary, but cannot see or filter individual HTTP requests.
-Add `protocol: rest` with explicit `rules` to enable per-request method and path control on REST APIs.
-
-**Adding endpoints to the baseline policy for one-off requests.**
-If the agent needs an endpoint temporarily, use operator approval.
-Approved endpoints persist within the sandbox instance but reset when the sandbox is destroyed and recreated.
-Adding an endpoint to the baseline policy makes it permanently reachable across all sandbox instances.
-
-**Relying solely on the entrypoint for capability drops.**
-The entrypoint drops dangerous capabilities via `capsh`, but this is best-effort.
-If `capsh` is unavailable or `CAP_SETPCAP` is not in the bounding set, the container runs with the default capability set.
-Pass `--cap-drop=ALL` at the container runtime level as defense-in-depth.
-
-**Granting write access to `/sandbox/.openclaw`.**
-This directory contains the OpenClaw gateway configuration.
-A writable `.openclaw` lets the agent modify auth tokens, disable CORS, or redirect inference routing.
-Agent-writable state belongs in `/sandbox/.openclaw-data`.
-
-**Adding inference provider hosts to the network policy.**
-Do not add hosts like `api.openai.com` or `api.anthropic.com` to the network policy.
-Use OpenShell inference routing instead.
-Direct network access to an inference host bypasses credential isolation and usage tracking.
+| Mistake | Why it matters | What to do instead |
+|---------|---------------|-------------------|
+| Omitting `protocol: rest` on REST API endpoints | Endpoints without a `protocol` field use L4-only enforcement. The proxy allows the TCP stream through after checking host, port, and binary, but cannot see or filter individual HTTP requests. | Add `protocol: rest` with explicit `rules` to enable per-request method and path control on REST APIs. |
+| Adding endpoints to the baseline policy for one-off requests | Adding an endpoint to the baseline policy makes it permanently reachable across all sandbox instances. | Use operator approval. Approved endpoints persist within the sandbox instance but reset when the sandbox is destroyed and recreated. |
+| Relying solely on the entrypoint for capability drops | The entrypoint drops dangerous capabilities via `capsh`, but this is best-effort. If `capsh` is unavailable or `CAP_SETPCAP` is not in the bounding set, the container runs with the default capability set. | Pass `--cap-drop=ALL` at the container runtime level as defense-in-depth. |
+| Granting write access to `/sandbox/.openclaw` | This directory contains the OpenClaw gateway configuration. A writable `.openclaw` lets the agent modify auth tokens, disable CORS, or redirect inference routing. | Store agent-writable state in `/sandbox/.openclaw-data`. |
+| Adding inference provider hosts to the network policy | Direct network access to an inference host bypasses credential isolation and usage tracking. | Use OpenShell inference routing instead of adding hosts like `api.openai.com` or `api.anthropic.com` to the network policy. |
 
 ## Related Topics
 
