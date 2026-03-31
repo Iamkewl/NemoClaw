@@ -151,12 +151,18 @@ describe.runIf(hasRequiredVars)("Brev E2E", () => {
     remoteDir = "/home/ubuntu/nemoclaw";
     remoteExec(`mkdir -p ${remoteDir}`);
 
-    // Create tarball locally, pipe to remote via brev exec
+    // Create tarball locally, then use brev's SCP to copy and extract
     console.log("[setup] Syncing code to remote instance...");
     execSync(
-      `tar -czf - --exclude=node_modules --exclude=.git --exclude=dist --exclude=.venv -C "${REPO_DIR}" . | brev exec ${INSTANCE_NAME} "tar -xzf - -C ${remoteDir}"`,
+      `tar -czf /tmp/nemoclaw-src.tar.gz --exclude=node_modules --exclude=.git --exclude=dist --exclude=.venv -C "${REPO_DIR}" .`,
+      { encoding: "utf-8", timeout: 60_000 },
+    );
+    // Use brev refresh + scp via the instance name (brev exec handles SSH internally)
+    execSync(
+      `brev copy /tmp/nemoclaw-src.tar.gz ${INSTANCE_NAME}:/tmp/nemoclaw-src.tar.gz`,
       { encoding: "utf-8", timeout: 120_000, stdio: ["pipe", "pipe", "pipe"] },
     );
+    remoteExec(`tar -xzf /tmp/nemoclaw-src.tar.gz -C ${remoteDir}`, { timeout: 60_000 });
 
     // Bootstrap VM
     console.log("[setup] Running bootstrap...");
