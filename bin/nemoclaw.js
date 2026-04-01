@@ -623,13 +623,9 @@ async function onboard(args) {
 async function setup() {
   console.log("");
   console.log("  ⚠  `nemoclaw setup` is deprecated. Use `nemoclaw onboard` instead.");
-  console.log("     Running legacy setup.sh for backwards compatibility...");
   console.log("");
-  await ensureApiKey();
-  const { defaultSandbox } = registry.listSandboxes();
-  const safeName =
-    defaultSandbox && /^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(defaultSandbox) ? defaultSandbox : "";
-  run(`bash "${SCRIPTS}/setup.sh" ${shellQuote(safeName)}`);
+  const { onboard: runOnboard } = require("./lib/onboard");
+  await runOnboard({ nonInteractive: false, resume: false });
 }
 
 async function setupSpark() {

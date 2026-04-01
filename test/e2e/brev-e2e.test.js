@@ -169,13 +169,10 @@ describe.runIf(hasRequiredVars)("Brev E2E", () => {
     });
     console.log(`[${elapsed()}] Bootstrap complete`);
 
-    // Install nemoclaw CLI — brev-setup.sh creates the sandbox but doesn't
-    // install the host-side CLI that the test scripts need for `nemoclaw <name> status`.
-    // The `bin` field is in the root package.json (not nemoclaw/), so we need to:
-    //   1. Build the TypeScript plugin (in nemoclaw/)
-    //   2. npm link from the repo root (where bin.nemoclaw is defined)
-    // Use npm_config_prefix so npm link writes to ~/.local/bin (no sudo needed),
-    // which is already on PATH in runRemoteTest.
+    // Install nemoclaw CLI into ~/.local so test helper scripts can find it.
+    // brev-setup.sh already installs and runs onboard, but npm link there uses
+    // the default prefix; re-linking here with npm_config_prefix ensures the
+    // binary lands on the PATH used by runRemoteTest.
     console.log(`[${elapsed()}] Installing nemoclaw CLI...`);
     ssh(
       [
@@ -189,9 +186,9 @@ describe.runIf(hasRequiredVars)("Brev E2E", () => {
     );
     console.log(`[${elapsed()}] nemoclaw CLI installed`);
 
-    // Register the sandbox in nemoclaw's local registry.
-    // setup.sh creates the sandbox via openshell directly but doesn't write
-    // ~/.nemoclaw/sandboxes.json, which `nemoclaw <name> status` needs.
+    // Overwrite the sandbox registry with a known-good entry.
+    // nemoclaw onboard writes this during bootstrap, but we rewrite it here
+    // to ensure a deterministic state for the test assertions.
     console.log(`[${elapsed()}] Registering sandbox in nemoclaw registry...`);
     ssh(
       `mkdir -p ~/.nemoclaw && cat > ~/.nemoclaw/sandboxes.json << 'REGISTRY'
