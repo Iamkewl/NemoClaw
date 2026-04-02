@@ -602,6 +602,97 @@ fi`,
     );
   });
 
+  it("upgrades OpenShell before non-interactive onboard when the installed version is too old", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-install-openshell-upgrade-"));
+    const fakeBin = path.join(tmp, "bin");
+    const prefix = path.join(tmp, "prefix");
+    const onboardLog = path.join(tmp, "onboard.log");
+    const nvmDir = path.join(tmp, ".nvm");
+    fs.mkdirSync(fakeBin);
+    fs.mkdirSync(path.join(prefix, "bin"), { recursive: true });
+    fs.mkdirSync(path.join(tmp, "nemoclaw"), { recursive: true });
+    fs.mkdirSync(path.join(tmp, "scripts"), { recursive: true });
+    fs.mkdirSync(path.join(tmp, "nemoclaw-blueprint"), { recursive: true });
+    fs.mkdirSync(nvmDir, { recursive: true });
+    fs.writeFileSync(path.join(nvmDir, "nvm.sh"), "# stub nvm\n");
+
+    writeNodeStub(fakeBin);
+    writeExecutable(
+      path.join(fakeBin, "openshell"),
+      `#!/usr/bin/env bash
+if [ "$1" = "--version" ] || [ "$1" = "-V" ]; then
+  echo "openshell 0.0.21"
+  exit 0
+fi
+exit 0
+`,
+    );
+    writeNpmStub(
+      fakeBin,
+      `if [ "$1" = "pack" ]; then exit 1; fi
+if [ "$1" = "install" ] || [ "$1" = "run" ]; then exit 0; fi
+if [ "$1" = "link" ]; then
+  cat > "$NPM_PREFIX/bin/nemoclaw" <<'EOS'
+#!/usr/bin/env bash
+printf '%s\\n' "$*" >> "$NEMOCLAW_ONBOARD_LOG"
+exit 0
+EOS
+  chmod +x "$NPM_PREFIX/bin/nemoclaw"
+  exit 0
+fi`,
+    );
+
+    fs.writeFileSync(
+      path.join(tmp, "package.json"),
+      JSON.stringify({ name: "nemoclaw", version: "0.1.0" }, null, 2),
+    );
+    fs.writeFileSync(
+      path.join(tmp, "nemoclaw", "package.json"),
+      JSON.stringify({ name: "nemoclaw-plugin", version: "0.1.0" }, null, 2),
+    );
+    fs.writeFileSync(
+      path.join(tmp, "nemoclaw-blueprint", "blueprint.yaml"),
+      'version: "0.1.0"\nmin_openshell_version: "0.1.0"\n',
+    );
+    fs.writeFileSync(
+      path.join(tmp, "scripts", "install-openshell.sh"),
+      `#!/usr/bin/env bash
+cat > "${path.join(fakeBin, "openshell")}" <<'EOS'
+#!/usr/bin/env bash
+if [ "$1" = "--version" ] || [ "$1" = "-V" ]; then
+  echo "openshell 0.1.0"
+  exit 0
+fi
+exit 0
+EOS
+chmod +x "${path.join(fakeBin, "openshell")}"
+`,
+      { mode: 0o755 },
+    );
+
+    const result = spawnSync("bash", [INSTALLER, "--non-interactive"], {
+      cwd: tmp,
+      encoding: "utf-8",
+      env: {
+        ...process.env,
+        HOME: tmp,
+        PATH: `${fakeBin}:${TEST_SYSTEM_PATH}`,
+        NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE: "1",
+        NEMOCLAW_ONBOARD_LOG: onboardLog,
+        NPM_PREFIX: prefix,
+        NVM_DIR: nvmDir,
+      },
+    });
+
+    const output = `${result.stdout}${result.stderr}`;
+    expect(result.status).toBe(0);
+    expect(output).toMatch(/OpenShell v0\.0\.21 is below NemoClaw blueprint minimum v0\.1\.0/);
+    expect(output).toMatch(/OpenShell v0\.1\.0 meets minimum requirement/);
+    expect(fs.readFileSync(onboardLog, "utf-8")).toMatch(
+      /^onboard --non-interactive --yes-i-accept-third-party-software$/m,
+    );
+  });
+
   it("spin() non-TTY: dumps wrapped-command output and exits non-zero on failure", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-install-spin-fail-"));
     const fakeBin = path.join(tmp, "bin");
@@ -746,7 +837,7 @@ exit 0
       path.join(fakeBin, "openshell"),
       `#!/usr/bin/env bash
 if [ "$1" = "--version" ]; then
-  echo "openshell 0.0.9"
+  echo "openshell 0.1.0"
   exit 0
 fi
 exit 0
@@ -865,7 +956,7 @@ exit 0
       path.join(fakeBin, "openshell"),
       `#!/usr/bin/env bash
 if [ "$1" = "--version" ]; then
-  echo "openshell 0.0.9"
+  echo "openshell 0.1.0"
   exit 0
 fi
 exit 0
@@ -1533,7 +1624,7 @@ exit 0`,
     writeExecutable(
       path.join(fakeBin, "openshell"),
       `#!/usr/bin/env bash
-if [ "$1" = "--version" ]; then echo "openshell 0.0.9"; exit 0; fi
+if [ "$1" = "--version" ]; then echo "openshell 0.1.0"; exit 0; fi
 exit 0`,
     );
 

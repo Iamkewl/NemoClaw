@@ -11,9 +11,10 @@ import { describe, expect, it } from "vitest";
 import {
   buildSandboxConfigSyncScript,
   classifySandboxCreateFailure,
-  getGatewayReuseState,
-  getPortConflictServiceHints,
   getFutureShellPathHint,
+  getGatewayReuseState,
+  getMinimumOpenshellVersion,
+  getPortConflictServiceHints,
   getSandboxInferenceConfig,
   getInstalledOpenshellVersion,
   getRequestedModelHint,
@@ -24,6 +25,7 @@ import {
   getSandboxStateFromOutputs,
   getStableGatewayImageRef,
   isGatewayHealthy,
+  isInstalledOpenshellCompatible,
   classifyValidationFailure,
   isLoopbackHostname,
   normalizeProviderBaseUrl,
@@ -245,6 +247,11 @@ describe("onboard helpers", () => {
     expect(getInstalledOpenshellVersion("openshell 0.0.12")).toBe("0.0.12");
     expect(getInstalledOpenshellVersion("openshell 0.0.13-dev.8+gbbcaed2ea")).toBe("0.0.13");
     expect(getInstalledOpenshellVersion("bogus")).toBe(null);
+    expect(getMinimumOpenshellVersion()).toBe("0.1.0");
+    expect(isInstalledOpenshellCompatible("0.1.0", "0.1.0")).toBe(true);
+    expect(isInstalledOpenshellCompatible("0.1.1", "0.1.0")).toBe(true);
+    expect(isInstalledOpenshellCompatible("0.0.21", "0.1.0")).toBe(false);
+    expect(isInstalledOpenshellCompatible(null, "0.1.0")).toBe(false);
     expect(getStableGatewayImageRef("openshell 0.0.12")).toBe(
       "ghcr.io/nvidia/openshell/cluster:0.0.12",
     );

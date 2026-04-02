@@ -747,7 +747,7 @@ describe("CLI dispatch", () => {
     expect(saved.sandboxes.alpha).toBeUndefined();
   });
 
-  it("recovers a missing registry entry from the last onboard session during list", () => {
+  it("does not revive session-only or stale local sandboxes when the live gateway reports none", () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-cli-list-session-recover-"));
     const localBin = path.join(home, "bin");
     const nemoclawDir = path.join(home, ".nemoclaw");
@@ -852,18 +852,20 @@ describe("CLI dispatch", () => {
 
     expect(r.code).toBe(0);
     expect(
-      r.out.includes("Recovered sandbox inventory from the last onboard session."),
+      r.out.includes(
+        "No sandboxes registered locally, but the last onboarded sandbox was 'alpha'.",
+      ),
     ).toBeTruthy();
-    expect(r.out.includes("alpha")).toBeTruthy();
-    expect(r.out.includes("gamma")).toBeTruthy();
+    expect(
+      r.out.includes("Recovered sandbox inventory from the last onboard session."),
+    ).toBeFalsy();
+    expect(r.out.includes("  Sandboxes:")).toBeFalsy();
+    expect(r.out.includes("      model:")).toBeFalsy();
     const saved = JSON.parse(fs.readFileSync(path.join(nemoclawDir, "sandboxes.json"), "utf8"));
-    expect(saved.sandboxes.alpha).toBeTruthy();
-    expect(saved.sandboxes.alpha.policies).toEqual(["pypi"]);
-    expect(saved.sandboxes.gamma).toBeTruthy();
-    expect(saved.defaultSandbox).toBe("gamma");
+    expect(saved.sandboxes).toEqual({});
   });
 
-  it("imports additional live sandboxes into the registry during list recovery", () => {
+  it("imports live sandboxes and drops stale local entries during list recovery", () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-cli-list-live-recover-"));
     const localBin = path.join(home, "bin");
     const nemoclawDir = path.join(home, ".nemoclaw");
@@ -977,13 +979,13 @@ describe("CLI dispatch", () => {
     ).toBeTruthy();
     expect(r.out.includes("alpha")).toBeTruthy();
     expect(r.out.includes("beta")).toBeTruthy();
-    expect(r.out.includes("gamma")).toBeTruthy();
+    expect(r.out.includes("gamma")).toBeFalsy();
     const saved = JSON.parse(fs.readFileSync(path.join(nemoclawDir, "sandboxes.json"), "utf8"));
     expect(saved.sandboxes.alpha).toBeTruthy();
     expect(saved.sandboxes.alpha.policies).toEqual(["pypi"]);
     expect(saved.sandboxes.beta).toBeTruthy();
-    expect(saved.sandboxes.gamma).toBeTruthy();
-    expect(saved.defaultSandbox).toBe("gamma");
+    expect(saved.sandboxes.gamma).toBeUndefined();
+    expect(saved.defaultSandbox).toBe("alpha");
   });
 
   it("skips invalid recovered sandbox names during list recovery", () => {
@@ -1098,7 +1100,7 @@ describe("CLI dispatch", () => {
     expect(saved.sandboxes.alpha).toBeTruthy();
     expect(saved.sandboxes.Bad_Name).toBeUndefined();
     expect(saved.sandboxes.Alpha).toBeUndefined();
-    expect(saved.sandboxes.gamma).toBeTruthy();
+    expect(saved.sandboxes.gamma).toBeUndefined();
   });
 
   it("connect recovers a named sandbox from the last onboard session when the registry is empty", () => {
@@ -1171,7 +1173,8 @@ describe("CLI dispatch", () => {
         "  exit 0",
         "fi",
         'if [ "$1" = "sandbox" ] && [ "$2" = "list" ]; then',
-        "  echo 'No sandboxes found.'",
+        "  echo 'NAME        PHASE'",
+        "  echo 'alpha       Ready'",
         "  exit 0",
         "fi",
         'if [ "$1" = "sandbox" ] && [ "$2" = "get" ] && [ "$3" = "alpha" ]; then',
@@ -1295,7 +1298,7 @@ describe("CLI dispatch", () => {
 
     expect(r.code).toBe(1);
     expect(r.out.includes("Unknown command: beta")).toBeTruthy();
-    expect(r.out.includes("Try: nemoclaw <sandbox-name> connect")).toBeTruthy();
+    expect(r.out.includes("Try: nemoclaw <sandbox-name> connect")).toBeFalsy();
   });
 
   it("preserves SIGINT exit semantics for logs --follow", () => {
@@ -1443,6 +1446,11 @@ describe("CLI dispatch", () => {
         "  echo 'Gateway Info'",
         "  echo",
         "  echo '  Gateway: nemoclaw'",
+        "  exit 0",
+        "fi",
+        'if [ "$1" = "sandbox" ] && [ "$2" = "list" ]; then',
+        "  echo 'NAME        PHASE'",
+        "  echo 'alpha       Ready'",
         "  exit 0",
         "fi",
         "exit 0",
@@ -1701,6 +1709,11 @@ describe("CLI dispatch", () => {
         "  echo '  Gateway: nemoclaw'",
         "  exit 0",
         "fi",
+        'if [ "$1" = "sandbox" ] && [ "$2" = "list" ]; then',
+        "  echo 'NAME        PHASE'",
+        "  echo 'alpha       Ready'",
+        "  exit 0",
+        "fi",
         "exit 0",
       ].join("\n"),
       { mode: 0o755 },
@@ -1717,6 +1730,15 @@ describe("CLI dispatch", () => {
     expect(statusResult.code).toBe(0);
     expect(statusResult.out.includes("gateway trust material rotated after restart")).toBeTruthy();
     expect(statusResult.out.includes("cannot be reattached safely")).toBeTruthy();
+
+    const listResult = runWithEnv("list", {
+      HOME: home,
+      PATH: `${localBin}:${process.env.PATH || ""}`,
+    });
+    expect(listResult.code).toBe(0);
+    expect(
+      listResult.out.includes("state: gateway identity drift after restart; recreate required"),
+    ).toBeTruthy();
 
     const connectResult = runWithEnv("alpha connect", {
       HOME: home,

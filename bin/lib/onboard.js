@@ -58,6 +58,7 @@ const { checkPortAvailable, ensureSwap, getMemoryInfo } = require("./preflight")
 
 // Typed modules (compiled from src/lib/*.ts → dist/lib/*.js)
 const gatewayState = require("../../dist/lib/gateway-state");
+const openshellCompat = require("../../dist/lib/openshell-compat");
 const validation = require("../../dist/lib/validation");
 const urlUtils = require("../../dist/lib/url-utils");
 const buildContext = require("../../dist/lib/build-context");
@@ -433,9 +434,18 @@ function step(n, total, msg) {
 
 function getInstalledOpenshellVersion(versionOutput = null) {
   const output = String(versionOutput ?? runCapture("openshell -V", { ignoreError: true })).trim();
-  const match = output.match(/openshell\s+([0-9]+\.[0-9]+\.[0-9]+)/i);
-  if (!match) return null;
-  return match[1];
+  return openshellCompat.parseOpenshellVersion(output);
+}
+
+function getMinimumOpenshellVersion() {
+  return openshellCompat.getBlueprintMinOpenshellVersion({ rootDir: ROOT });
+}
+
+function isInstalledOpenshellCompatible(
+  version = null,
+  minimumVersion = getMinimumOpenshellVersion(),
+) {
+  return Boolean(version && openshellCompat.versionGte(version, minimumVersion));
 }
 
 function getStableGatewayImageRef(versionOutput = null) {
@@ -1746,6 +1756,7 @@ async function preflight() {
 
   // OpenShell CLI
   let openshellInstall = { localBin: null, futureShellPathHint: null };
+  const minimumOpenshellVersion = getMinimumOpenshellVersion();
   if (!isOpenshellInstalled()) {
     console.log("  openshell CLI not found. Installing...");
     openshellInstall = installOpenshell();
@@ -1755,9 +1766,30 @@ async function preflight() {
       process.exit(1);
     }
   }
-  console.log(
-    `  ✓ openshell CLI: ${runCaptureOpenshell(["--version"], { ignoreError: true }) || "unknown"}`,
-  );
+  let openshellVersionOutput = runCaptureOpenshell(["--version"], { ignoreError: true });
+  let installedOpenshellVersion = getInstalledOpenshellVersion(openshellVersionOutput);
+  if (!isInstalledOpenshellCompatible(installedOpenshellVersion, minimumOpenshellVersion)) {
+    const currentLabel = installedOpenshellVersion ? `v${installedOpenshellVersion}` : "unknown";
+    console.log(
+      `  openshell CLI ${currentLabel} is below the NemoClaw minimum (>= v${minimumOpenshellVersion}). Installing a compatible version...`,
+    );
+    openshellInstall = installOpenshell();
+    if (!openshellInstall.installed) {
+      console.error("  Failed to install a compatible openshell CLI.");
+      console.error("  Install manually: https://github.com/NVIDIA/OpenShell/releases");
+      process.exit(1);
+    }
+    openshellVersionOutput = runCaptureOpenshell(["--version"], { ignoreError: true });
+    installedOpenshellVersion = getInstalledOpenshellVersion(openshellVersionOutput);
+  }
+  if (!isInstalledOpenshellCompatible(installedOpenshellVersion, minimumOpenshellVersion)) {
+    console.error(
+      `  Installed openshell CLI (${installedOpenshellVersion || "unknown"}) does not satisfy NemoClaw minimum ${minimumOpenshellVersion}.`,
+    );
+    console.error("  Upgrade OpenShell and rerun `nemoclaw onboard`.");
+    process.exit(1);
+  }
+  console.log(`  ✓ openshell CLI: ${openshellVersionOutput || "unknown"}`);
   if (openshellInstall.futureShellPathHint) {
     console.log(
       `  Note: openshell was installed to ${openshellInstall.localBin} for this onboarding run.`,
@@ -3758,6 +3790,7 @@ module.exports = {
   getFutureShellPathHint,
   getGatewayStartEnv,
   getGatewayReuseState,
+  getMinimumOpenshellVersion,
   getSandboxInferenceConfig,
   getInstalledOpenshellVersion,
   getRequestedModelHint,
@@ -3765,6 +3798,7 @@ module.exports = {
   getStableGatewayImageRef,
   getResumeConfigConflicts,
   isGatewayHealthy,
+  isInstalledOpenshellCompatible,
   hasStaleGateway,
   getRequestedSandboxNameHint,
   getResumeSandboxConflict,

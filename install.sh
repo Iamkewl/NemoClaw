@@ -327,6 +327,7 @@ ORIGINAL_PATH="${PATH:-}"
 NEMOCLAW_READY_NOW=false
 NEMOCLAW_RECOVERY_PROFILE=""
 NEMOCLAW_RECOVERY_EXPORT_DIR=""
+NEMOCLAW_SOURCE_ROOT="$SCRIPT_DIR"
 ONBOARD_RAN=false
 
 # Compare two semver strings (major.minor.patch). Returns 0 if $1 >= $2.
@@ -343,6 +344,65 @@ version_gte() {
     if ((ai < bi)); then return 1; fi
   done
   return 0
+}
+
+get_blueprint_min_openshell_version() {
+  local source_root="${1:-$SCRIPT_DIR}"
+  local blueprint_file="${source_root}/nemoclaw-blueprint/blueprint.yaml"
+  if [[ ! -f "$blueprint_file" ]]; then
+    blueprint_file="${SCRIPT_DIR}/nemoclaw-blueprint/blueprint.yaml"
+  fi
+  local version=""
+  version="$(sed -nE 's/^min_openshell_version:[[:space:]]*"([^"]+)".*/\1/p' "$blueprint_file" | head -1)"
+  [[ -n "$version" ]] || error "Could not determine min_openshell_version from ${blueprint_file}"
+  printf "%s" "$version"
+}
+
+get_installed_openshell_version() {
+  if ! command_exists openshell; then
+    return 1
+  fi
+  openshell --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1
+}
+
+ensure_compatible_openshell_for_onboard() {
+  local source_root="${NEMOCLAW_SOURCE_ROOT:-$SCRIPT_DIR}"
+  local install_script="${source_root}/scripts/install-openshell.sh"
+  if [[ ! -f "$install_script" ]]; then
+    install_script="${SCRIPT_DIR}/scripts/install-openshell.sh"
+  fi
+
+  if ! command_exists openshell; then
+    return 0
+  fi
+
+  local required_version current_version
+  required_version="$(get_blueprint_min_openshell_version "$source_root")"
+  current_version="$(get_installed_openshell_version || true)"
+
+  if [[ -n "$current_version" ]] && version_gte "$current_version" "$required_version"; then
+    info "OpenShell v${current_version} meets minimum requirement (>= v${required_version})"
+    return 0
+  fi
+
+  if [[ -n "$current_version" ]]; then
+    info "OpenShell v${current_version} is below NemoClaw blueprint minimum v${required_version} — upgrading…"
+  else
+    info "OpenShell not found or version unknown — installing a compatible version…"
+  fi
+
+  spin "Installing OpenShell CLI" bash "$install_script"
+  refresh_path
+
+  current_version="$(get_installed_openshell_version || true)"
+  if [[ -z "$current_version" ]]; then
+    error "OpenShell CLI is still unavailable after installation."
+  fi
+  if ! version_gte "$current_version" "$required_version"; then
+    error "Installed OpenShell v${current_version} is below NemoClaw blueprint minimum v${required_version}. Upgrade OpenShell and rerun onboarding."
+  fi
+
+  info "OpenShell v${current_version} meets minimum requirement (>= v${required_version})"
 }
 
 # Ensure nvm environment is loaded in the current shell.
@@ -747,6 +807,7 @@ install_nemoclaw() {
   command_exists git || error "git was not found on PATH."
   if [[ -f "./package.json" ]] && grep -q '"name": "nemoclaw"' ./package.json 2>/dev/null; then
     info "NemoClaw package.json found in current directory — installing from source…"
+    NEMOCLAW_SOURCE_ROOT="$(pwd)"
     spin "Preparing OpenClaw package" bash -c "$(declare -f info warn pre_extract_openclaw); pre_extract_openclaw \"\$1\"" _ "$(pwd)" \
       || warn "Pre-extraction failed — npm install may fail if openclaw tarball is broken"
     spin "Installing NemoClaw dependencies" npm install --ignore-scripts
@@ -765,6 +826,7 @@ install_nemoclaw() {
     local nemoclaw_src="${HOME}/.nemoclaw/source"
     rm -rf "$nemoclaw_src"
     mkdir -p "$(dirname "$nemoclaw_src")"
+    NEMOCLAW_SOURCE_ROOT="$nemoclaw_src"
     spin "Cloning NemoClaw source" git clone --depth 1 --branch "$release_ref" https://github.com/NVIDIA/NemoClaw.git "$nemoclaw_src"
     # Fetch version tags into the shallow clone so `git describe --tags
     # --match "v*"` works at runtime (the shallow clone only has the
@@ -829,6 +891,7 @@ verify_nemoclaw() {
 # 5. Onboard
 # ---------------------------------------------------------------------------
 run_onboard() {
+  ensure_compatible_openshell_for_onboard
   show_usage_notice
   info "Running nemoclaw onboard…"
   local -a onboard_cmd=(onboard)

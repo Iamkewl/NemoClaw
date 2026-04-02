@@ -163,8 +163,25 @@ describe("probePortAvailability", () => {
 
 describe("checkPortAvailable — real probe fallback", () => {
   it("returns ok for a free port via full detection chain", async () => {
-    // skipLsof forces the net probe path; use port 0 which is always free
-    const result = await checkPortAvailable(0, { skipLsof: true });
+    const net = require("node:net");
+    const srv = net.createServer();
+    let port: number;
+    try {
+      port = await new Promise<number>((resolve, reject) => {
+        srv.once("error", reject);
+        srv.listen(0, "127.0.0.1", () => {
+          srv.removeListener("error", reject);
+          resolve(srv.address().port);
+        });
+      });
+    } catch (error) {
+      expect(["EPERM", "EACCES"]).toContain(error?.code);
+      return;
+    }
+    await new Promise<void>((resolve) => srv.close(resolve));
+
+    // skipLsof forces the net probe path; probe a known-free ephemeral port.
+    const result = await checkPortAvailable(port, { skipLsof: true });
     expect(result.ok).toBe(true);
   });
 
