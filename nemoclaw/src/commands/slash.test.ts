@@ -16,6 +16,13 @@ vi.mock("../onboard/config.js", () => ({
   describeOnboardProvider: vi.fn(),
 }));
 
+vi.mock("../memory/index.js", () => ({
+  getMemoryStats: vi.fn(),
+  INDEX_SOFT_CAP: 200,
+  TOPIC_SOFT_CAP: 500,
+  MEMORY_TYPES: ["user", "project", "decision", "reference"],
+}));
+
 import { handleSlashCommand } from "./slash.js";
 import { loadState } from "../blueprint/state.js";
 import {
@@ -23,11 +30,14 @@ import {
   describeOnboardEndpoint,
   describeOnboardProvider,
 } from "../onboard/config.js";
+import { getMemoryStats } from "../memory/index.js";
+import type { MemoryStats } from "../memory/index.js";
 
 const mockedLoadState = vi.mocked(loadState);
 const mockedLoadOnboardConfig = vi.mocked(loadOnboardConfig);
 const mockedDescribeOnboardEndpoint = vi.mocked(describeOnboardEndpoint);
 const mockedDescribeOnboardProvider = vi.mocked(describeOnboardProvider);
+const mockedGetMemoryStats = vi.mocked(getMemoryStats);
 
 function makeCtx(args?: string): PluginCommandContext {
   return {
@@ -71,6 +81,14 @@ describe("commands/slash", () => {
     vi.clearAllMocks();
     mockedLoadState.mockReturnValue(blankState());
     mockedLoadOnboardConfig.mockReturnValue(null);
+    mockedGetMemoryStats.mockReturnValue({
+      indexEntryCount: 0,
+      indexLineCount: 0,
+      indexOverCap: false,
+      topicCount: 0,
+      topicsByType: { user: 0, project: 0, decision: 0, reference: 0 },
+      oversizedTopics: [],
+    } satisfies MemoryStats);
   });
 
   // -------------------------------------------------------------------------
@@ -85,6 +103,7 @@ describe("commands/slash", () => {
       expect(result.text).toContain("status");
       expect(result.text).toContain("eject");
       expect(result.text).toContain("onboard");
+      expect(result.text).toContain("memory");
     });
 
     it("returns help text for unknown subcommand", () => {
@@ -241,6 +260,62 @@ describe("commands/slash", () => {
       mockedDescribeOnboardProvider.mockReturnValue("NVIDIA Cloud Partner");
       const result = handleSlashCommand(makeCtx("onboard"), makeApi());
       expect(result.text).toContain("NCP Partner: PartnerCo");
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // memory
+  // -------------------------------------------------------------------------
+
+  describe("memory", () => {
+    it("returns stats for empty memory", () => {
+      const result = handleSlashCommand(makeCtx("memory"), makeApi());
+      expect(result.text).toContain("Memory Stats");
+      expect(result.text).toContain("Index entries: 0");
+      expect(result.text).toContain("Topic files: 0");
+    });
+
+    it("returns stats with type breakdown", () => {
+      mockedGetMemoryStats.mockReturnValue({
+        indexEntryCount: 5,
+        indexLineCount: 12,
+        indexOverCap: false,
+        topicCount: 5,
+        topicsByType: { user: 2, project: 1, decision: 1, reference: 1 },
+        oversizedTopics: [],
+      });
+      const result = handleSlashCommand(makeCtx("memory"), makeApi());
+      expect(result.text).toContain("Index entries: 5");
+      expect(result.text).toContain("user: 2");
+      expect(result.text).toContain("project: 1");
+    });
+
+    it("shows over-cap warning", () => {
+      mockedGetMemoryStats.mockReturnValue({
+        indexEntryCount: 201,
+        indexLineCount: 210,
+        indexOverCap: true,
+        topicCount: 201,
+        topicsByType: { user: 201, project: 0, decision: 0, reference: 0 },
+        oversizedTopics: [],
+      });
+      const result = handleSlashCommand(makeCtx("memory"), makeApi());
+      expect(result.text).toContain("over 200 soft cap!");
+    });
+
+    it("lists oversized topics", () => {
+      mockedGetMemoryStats.mockReturnValue({
+        indexEntryCount: 2,
+        indexLineCount: 8,
+        indexOverCap: false,
+        topicCount: 2,
+        topicsByType: { user: 1, project: 1, decision: 0, reference: 0 },
+        oversizedTopics: ["big-topic", "huge-topic"],
+      });
+      const result = handleSlashCommand(makeCtx("memory"), makeApi());
+      expect(result.text).toContain("Oversized topics");
+      expect(result.text).toContain("big-topic");
+      expect(result.text).toContain("huge-topic");
     });
   });
 });

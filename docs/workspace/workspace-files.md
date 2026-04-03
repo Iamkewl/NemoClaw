@@ -33,8 +33,9 @@ Each file controls a distinct aspect of the agent's behavior and memory.
 | `USER.md` | Preferences, context, and facts the agent learns about you. | [USER template](https://docs.openclaw.ai/reference/templates/USER) |
 | `IDENTITY.md` | Agent name, creature type, emoji, and self-presentation. | [IDENTITY template](https://docs.openclaw.ai/reference/templates/IDENTITY) |
 | `AGENTS.md` | Multi-agent coordination, memory conventions, and safety guidelines. | [AGENTS template](https://docs.openclaw.ai/reference/templates/AGENTS) |
-| `MEMORY.md` | Curated long-term memory distilled from daily notes. | — |
+| `MEMORY.md` | Memory index table pointing to individual topic files in `memory/topics/`. | — |
 | `memory/` | Directory of daily note files (`YYYY-MM-DD.md`) for session continuity. | — |
+| `memory/topics/` | Individual curated memory entries with typed YAML frontmatter. | — |
 
 ## Where They Live
 
@@ -44,12 +45,15 @@ All workspace files reside inside the sandbox filesystem:
 /sandbox/.openclaw/workspace/
 ├── AGENTS.md
 ├── IDENTITY.md
-├── MEMORY.md
+├── MEMORY.md              ← index table
 ├── SOUL.md
 ├── USER.md
 └── memory/
-    ├── 2026-03-18.md
-    └── 2026-03-19.md
+    ├── 2026-03-18.md      ← daily note
+    ├── 2026-03-19.md
+    └── topics/
+        ├── preferred-editor.md
+        └── api-rate-limits.md
 ```
 
 :::{note}
@@ -78,6 +82,27 @@ You can edit them in two ways:
 
 1. **Let the agent do it** — Ask your agent to update its persona, memory, or user context during a session.
 2. **Edit manually** — Use `openshell sandbox connect` to open a terminal inside the sandbox and edit files directly, or use `openshell sandbox upload` to push edited files from your host.
+
+## Memory Index and Topic Files
+
+`MEMORY.md` serves as a curated index of one-line entries, each pointing to a topic file under `memory/topics/`.
+Topic files use YAML frontmatter with a typed schema.
+
+Each topic file has a `type` field that categorizes the memory entry:
+
+| Type | When to use |
+|---|---|
+| `user` | Preferences, habits, and context about the user. |
+| `project` | Project structure, conventions, and tooling choices. |
+| `decision` | Architectural or design decisions with rationale. |
+| `reference` | Frequently-referenced facts, APIs, or commands. |
+
+**Daily notes vs curated memory:**
+Use daily notes (`memory/YYYY-MM-DD.md`) for ephemeral session context.
+Use topic files (`memory/topics/`) for durable facts that should persist across sessions.
+
+The index has a soft cap of ~200 entries and individual topic files have a soft cap of ~500 lines.
+Use `/nemoclaw memory` inside the agent chat to view memory stats.
 
 ## Next Steps
 

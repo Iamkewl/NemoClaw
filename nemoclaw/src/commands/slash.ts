@@ -17,6 +17,7 @@ import {
   describeOnboardProvider,
   loadOnboardConfig,
 } from "../onboard/config.js";
+import { getMemoryStats, INDEX_SOFT_CAP, TOPIC_SOFT_CAP, MEMORY_TYPES } from "../memory/index.js";
 
 export function handleSlashCommand(
   ctx: PluginCommandContext,
@@ -31,6 +32,8 @@ export function handleSlashCommand(
       return slashEject();
     case "onboard":
       return slashOnboard();
+    case "memory":
+      return slashMemory();
     default:
       return slashHelp();
   }
@@ -47,6 +50,7 @@ function slashHelp(): PluginCommandResult {
       "  `status`  - Show sandbox, blueprint, and inference state",
       "  `eject`   - Show rollback instructions",
       "  `onboard` - Show onboarding status and instructions",
+      "  `memory`  - Show memory index stats",
       "",
       "For full management use the NemoClaw CLI:",
       "  `nemoclaw <name> status`",
@@ -115,6 +119,30 @@ function slashOnboard(): PluginCommandResult {
       "```",
     ].join("\n"),
   };
+}
+
+function slashMemory(): PluginCommandResult {
+  const stats = getMemoryStats();
+
+  const lines = [
+    "**Memory Stats**",
+    "",
+    `Index entries: ${String(stats.indexEntryCount)}${stats.indexOverCap ? ` (over ${String(INDEX_SOFT_CAP)} soft cap!)` : ""}`,
+    `Index lines: ${String(stats.indexLineCount)}`,
+    `Topic files: ${String(stats.topicCount)}`,
+    "",
+    "**By type:**",
+    ...MEMORY_TYPES.map((t) => `  ${t}: ${String(stats.topicsByType[t])}`),
+  ];
+
+  if (stats.oversizedTopics.length > 0) {
+    lines.push(
+      "",
+      `Oversized topics (>${String(TOPIC_SOFT_CAP)} lines): ${stats.oversizedTopics.join(", ")}`,
+    );
+  }
+
+  return { text: lines.join("\n") };
 }
 
 function slashEject(): PluginCommandResult {
