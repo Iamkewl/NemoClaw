@@ -1312,7 +1312,9 @@ describe("installer pure helpers", () => {
   });
 
   it("installer_version_for_display: hides the placeholder default", () => {
-    const r = callInstallerFn('NEMOCLAW_VERSION="$DEFAULT_NEMOCLAW_VERSION"; installer_version_for_display');
+    const r = callInstallerFn(
+      'NEMOCLAW_VERSION="$DEFAULT_NEMOCLAW_VERSION"; installer_version_for_display',
+    );
     expect(r.status).toBe(0);
     expect(r.stdout).toBe("");
   });
