@@ -2732,7 +2732,14 @@ async function setupNim(gpu) {
           if (!validation.ok) {
             continue;
           }
-          preferredInferenceApi = validation.api;
+          // Ollama's /v1/responses endpoint does not produce correctly
+          // formatted tool calls — force chat completions like vLLM/NIM.
+          if (validation.api !== "openai-completions") {
+            console.log(
+              "  ℹ Using chat completions API (Ollama tool calls require /v1/chat/completions)",
+            );
+          }
+          preferredInferenceApi = "openai-completions";
           break;
         }
         break;
@@ -2777,7 +2784,14 @@ async function setupNim(gpu) {
           if (!validation.ok) {
             continue;
           }
-          preferredInferenceApi = validation.api;
+          // Ollama's /v1/responses endpoint does not produce correctly
+          // formatted tool calls — force chat completions like vLLM/NIM.
+          if (validation.api !== "openai-completions") {
+            console.log(
+              "  ℹ Using chat completions API (Ollama tool calls require /v1/chat/completions)",
+            );
+          }
+          preferredInferenceApi = "openai-completions";
           break;
         }
         break;
@@ -3281,10 +3295,20 @@ async function setupPoliciesWithSelection(sandboxName, options = {}) {
   }
 
   const knownPresets = new Set(allPresets.map((p) => p.name));
-  const invalidPresets = interactiveChoice.filter((name) => !knownPresets.has(name));
-  if (invalidPresets.length > 0) {
+  let invalidPresets = interactiveChoice.filter((name) => !knownPresets.has(name));
+  while (invalidPresets.length > 0) {
     console.error(`  Unknown policy preset(s): ${invalidPresets.join(", ")}`);
-    process.exit(1);
+    console.log("  Available presets:");
+    for (const p of allPresets) {
+      console.log(`    - ${p.name}`);
+    }
+    const retry = await prompt("  Enter preset names (comma-separated), or leave empty to skip: ");
+    if (!retry.trim()) {
+      console.log("  Skipping policy presets.");
+      return [];
+    }
+    interactiveChoice = parsePolicyPresetEnv(retry);
+    invalidPresets = interactiveChoice.filter((name) => !knownPresets.has(name));
   }
 
   if (onSelection) onSelection(interactiveChoice);
