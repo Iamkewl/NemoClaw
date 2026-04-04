@@ -34,6 +34,7 @@ import {
   versionGte,
   writeSandboxConfigSyncFile,
 } from "../bin/lib/onboard";
+import { buildWebSearchDockerConfig } from "../dist/lib/web-search";
 
 describe("onboard helpers", () => {
   it("classifies sandbox create timeout failures and tracks upload progress", () => {
@@ -102,6 +103,7 @@ describe("onboard helpers", () => {
         "ARG NEMOCLAW_PRIMARY_MODEL_REF=nvidia/nemotron-3-super-120b-a12b",
         "ARG CHAT_UI_URL=http://127.0.0.1:18789",
         "ARG NEMOCLAW_INFERENCE_COMPAT_B64=e30=",
+        "ARG NEMOCLAW_WEB_CONFIG_B64=e30=",
         "ARG NEMOCLAW_BUILD_ID=default",
       ].join("\n"),
     );
@@ -197,6 +199,7 @@ describe("onboard helpers", () => {
         "ARG NEMOCLAW_INFERENCE_BASE_URL=https://inference.local/v1",
         "ARG NEMOCLAW_INFERENCE_API=openai-completions",
         "ARG NEMOCLAW_INFERENCE_COMPAT_B64=e30=",
+        "ARG NEMOCLAW_WEB_CONFIG_B64=e30=",
         "ARG NEMOCLAW_BUILD_ID=default",
       ].join("\n"),
     );
@@ -216,6 +219,55 @@ describe("onboard helpers", () => {
       assert.match(patched, /^ARG NEMOCLAW_INFERENCE_BASE_URL=https:\/\/inference\.local$/m);
       assert.match(patched, /^ARG NEMOCLAW_INFERENCE_API=anthropic-messages$/m);
     } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("patches the staged Dockerfile with Brave Search config when enabled", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-onboard-dockerfile-web-"));
+    const dockerfilePath = path.join(tmpDir, "Dockerfile");
+    fs.writeFileSync(
+      dockerfilePath,
+      [
+        "ARG NEMOCLAW_MODEL=nvidia/nemotron-3-super-120b-a12b",
+        "ARG NEMOCLAW_PROVIDER_KEY=nvidia",
+        "ARG NEMOCLAW_PRIMARY_MODEL_REF=nvidia/nemotron-3-super-120b-a12b",
+        "ARG CHAT_UI_URL=http://127.0.0.1:18789",
+        "ARG NEMOCLAW_INFERENCE_BASE_URL=https://inference.local/v1",
+        "ARG NEMOCLAW_INFERENCE_API=openai-completions",
+        "ARG NEMOCLAW_INFERENCE_COMPAT_B64=e30=",
+        "ARG NEMOCLAW_WEB_CONFIG_B64=e30=",
+        "ARG NEMOCLAW_BUILD_ID=default",
+      ].join("\n"),
+    );
+
+    const priorBraveKey = process.env.BRAVE_API_KEY;
+    process.env.BRAVE_API_KEY = "brv-test-key";
+    try {
+      patchStagedDockerfile(
+        dockerfilePath,
+        "gpt-5.4",
+        "http://127.0.0.1:18789",
+        "build-web",
+        "openai-api",
+        null,
+        { fetchEnabled: true },
+      );
+      const patched = fs.readFileSync(dockerfilePath, "utf8");
+      const expected = buildWebSearchDockerConfig({ fetchEnabled: true }, "brv-test-key");
+      assert.match(
+        patched,
+        new RegExp(
+          `^ARG NEMOCLAW_WEB_CONFIG_B64=${expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+          "m",
+        ),
+      );
+    } finally {
+      if (priorBraveKey === undefined) {
+        delete process.env.BRAVE_API_KEY;
+      } else {
+        process.env.BRAVE_API_KEY = priorBraveKey;
+      }
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   });
@@ -256,11 +308,11 @@ describe("onboard helpers", () => {
   });
 
   it("versionGte compares semver correctly for OpenShell pin checks", () => {
-    expect(versionGte("0.0.21", "0.0.21")).toBe(true);
-    expect(versionGte("0.0.22", "0.0.21")).toBe(true);
-    expect(versionGte("0.1.0", "0.0.21")).toBe(true);
-    expect(versionGte("0.0.20", "0.0.21")).toBe(false);
-    expect(versionGte("0.0.7", "0.0.21")).toBe(false);
+    expect(versionGte("0.0.22", "0.0.22")).toBe(true);
+    expect(versionGte("0.0.23", "0.0.22")).toBe(true);
+    expect(versionGte("0.1.0", "0.0.22")).toBe(true);
+    expect(versionGte("0.0.21", "0.0.22")).toBe(false);
+    expect(versionGte("0.0.7", "0.0.22")).toBe(false);
   });
 
   it("treats the gateway as healthy only when nemoclaw is running and connected", () => {
@@ -1083,7 +1135,7 @@ const { setupInference } = require(${onboardPath});
 
     assert.match(
       source,
-      /startRecordedStep\("sandbox", \{ sandboxName, provider, model \}\);\s*sandboxName = await createSandbox\(gpu, model, provider, preferredInferenceApi, sandboxName\);/,
+      /startRecordedStep\("sandbox", \{ sandboxName, provider, model \}\);\s*sandboxName = await createSandbox\(\s*gpu,\s*model,\s*provider,\s*preferredInferenceApi,\s*sandboxName,\s*webSearchConfig,\s*\);/,
     );
   });
 

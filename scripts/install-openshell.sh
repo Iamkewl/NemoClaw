@@ -36,8 +36,9 @@ info "Detected $OS_LABEL ($ARCH_LABEL)"
 # OPENSHELL_PIN_VERSION (set by onboard.js from package.json) is the version
 # NemoClaw was tested against.  When set, download that exact release and treat
 # it as the minimum required version.  When unset, fall back to the static
-# floor (cgroup v2 fix, NVIDIA/OpenShell#329) and download the latest release.
-REQUIRED_VERSION="${OPENSHELL_PIN_VERSION:-0.0.7}"
+# floor for sandbox persistence across gateway restarts
+# (deterministic k3s node name + workspace PVC: NVIDIA/OpenShell#739, #488).
+REQUIRED_VERSION="${OPENSHELL_PIN_VERSION:-0.0.22}"
 
 version_gte() {
   # Returns 0 (true) if $1 >= $2 — portable, no sort -V (BSD compat)
