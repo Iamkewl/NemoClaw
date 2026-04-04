@@ -435,12 +435,13 @@
 The preferred path is to provision the VM, run the standard NemoClaw installer on that host, and then run <code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">onboard</span></code>.</p>
 <section id="quick-start">
 <h2>Quick Start<a class="headerlink" href="#quick-start" title="Link to this heading">#</a></h2>
-<p>If your Brev instance is already up and you want to try NemoClaw immediately, start with the standard installer and sandbox chat flow:</p>
+<p>If your Brev instance is already up and has already been onboarded with a sandbox, start with the standard sandbox chat flow:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>nemoclaw<span class="w"> </span>my-assistant<span class="w"> </span>connect
 <span class="gp">$ </span>openclaw<span class="w"> </span>tui
 </pre></div>
 </div>
-<p>This gets you into the sandbox shell first and opens the OpenClaw chat UI right away.</p>
+<p>This gets you into the sandbox shell first and opens the OpenClaw chat UI right away.
+If the VM is fresh, run the standard installer on that host and then run <code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">onboard</span></code> before trying <code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">my-assistant</span> <span class="pre">connect</span></code>.</p>
 <p>If you are connecting from your local machine and still need to provision the remote VM, you can still use <code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">deploy</span> <span class="pre">&lt;instance-name&gt;</span></code> as the legacy compatibility path described below.</p>
 </section>
 <section id="prerequisites">
