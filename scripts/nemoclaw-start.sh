@@ -138,85 +138,18 @@ PYAUTH
 }
 
 configure_messaging_channels() {
-  # If any messaging tokens are present (injected as placeholders by the
-  # OpenShell provider system), patch openclaw.json to enable the
-  # corresponding OpenClaw native channels. The placeholder values flow
-  # through to API calls where the L7 proxy swaps them for real secrets.
-  # Real tokens are never visible inside the sandbox.
+  # Channel entries are baked into openclaw.json at image build time via
+  # NEMOCLAW_MESSAGING_CHANNELS_B64 (see Dockerfile). Placeholder tokens
+  # (openshell:resolve:env:*) flow through to API calls where the L7 proxy
+  # rewrites them with real secrets at egress. Real tokens are never visible
+  # inside the sandbox.
   #
-  # Requires root: openclaw.json is owned by root with chmod 444.
-  # Non-root mode relies on channels being pre-baked into openclaw.json
-  # at build time via NEMOCLAW_MESSAGING_CHANNELS_B64.
+  # Runtime patching of /sandbox/.openclaw/openclaw.json is not possible:
+  # Landlock enforces read-only on /sandbox/.openclaw/ at the kernel level,
+  # regardless of DAC (file ownership/chmod). Writes fail with EPERM.
   [ -n "${TELEGRAM_BOT_TOKEN:-}" ] || [ -n "${DISCORD_BOT_TOKEN:-}" ] || [ -n "${SLACK_BOT_TOKEN:-}" ] || return 0
 
-  if [ "$(id -u)" -ne 0 ]; then
-    echo "[channels] Messaging tokens detected (non-root mode)" >&2
-    echo "[channels] Channel entries should be baked into openclaw.json at build time" >&2
-    echo "[channels] (NEMOCLAW_MESSAGING_CHANNELS_B64). L7 proxy rewrites placeholder tokens at egress." >&2
-    return 0
-  fi
-
-  local config_path="/sandbox/.openclaw/openclaw.json"
-  local hash_path="/sandbox/.openclaw/.config-hash"
-
-  # Temporarily make config writable. Use a trap to guarantee restoration
-  # on early exit (set -e can bail before the manual chmod 444 below).
-  chmod 644 "$config_path"
-  chmod 644 "$hash_path"
-  trap 'chmod 444 "$config_path" "$hash_path" 2>/dev/null; chown root:root "$hash_path" 2>/dev/null' RETURN
-
-  python3 - <<'PYCHANNELS'
-import json, os
-
-config_path = '/sandbox/.openclaw/openclaw.json'
-config = json.load(open(config_path))
-
-channels = config.get('channels', {'defaults': {'configWrites': False}})
-
-telegram_token = os.environ.get('TELEGRAM_BOT_TOKEN', '')
-if telegram_token:
-    channels['telegram'] = {
-        'accounts': {
-            'main': {
-                'botToken': telegram_token,
-                'enabled': True,
-            }
-        }
-    }
-
-discord_token = os.environ.get('DISCORD_BOT_TOKEN', '')
-if discord_token:
-    channels['discord'] = {
-        'accounts': {
-            'main': {
-                'token': discord_token,
-                'enabled': True,
-            }
-        }
-    }
-
-slack_token = os.environ.get('SLACK_BOT_TOKEN', '')
-if slack_token:
-    channels['slack'] = {
-        'accounts': {
-            'main': {
-                'botToken': slack_token,
-                'enabled': True,
-            }
-        }
-    }
-
-config['channels'] = channels
-json.dump(config, open(config_path, 'w'), indent=2)
-os.chmod(config_path, 0o444)
-PYCHANNELS
-
-  # Recompute config hash after patching
-  (cd /sandbox/.openclaw && sha256sum openclaw.json >.config-hash)
-  chmod 444 "$hash_path"
-  chown root:root "$hash_path"
-
-  echo "[channels] Messaging channels configured:" >&2
+  echo "[channels] Messaging channels active (baked at build time):" >&2
   [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && echo "[channels]   telegram (native)" >&2
   [ -n "${DISCORD_BOT_TOKEN:-}" ] && echo "[channels]   discord (native)" >&2
   [ -n "${SLACK_BOT_TOKEN:-}" ] && echo "[channels]   slack (native)" >&2
