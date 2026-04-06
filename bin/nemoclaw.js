@@ -41,6 +41,7 @@ const onboardSession = require("./lib/onboard-session");
 const { parseLiveSandboxNames } = require("./lib/runtime-recovery");
 const { NOTICE_ACCEPT_ENV, NOTICE_ACCEPT_FLAG } = require("./lib/usage-notice");
 const { executeDeploy } = require("../dist/lib/deploy");
+const { runStartCommand, runStopCommand } = require("../dist/lib/services-command");
 
 // ── Global commands ──────────────────────────────────────────────
 
@@ -833,18 +834,18 @@ async function deploy(instanceName) {
 
 async function start() {
   const { startAll } = require("./lib/services");
-  const { defaultSandbox } = registry.listSandboxes();
-  const safeName =
-    defaultSandbox && /^[a-zA-Z0-9._-]+$/.test(defaultSandbox) ? defaultSandbox : null;
-  await startAll({ sandboxName: safeName || undefined });
+  await runStartCommand({
+    listSandboxes: () => registry.listSandboxes(),
+    startAll,
+  });
 }
 
 function stop() {
   const { stopAll } = require("./lib/services");
-  const { defaultSandbox } = registry.listSandboxes();
-  const safeName =
-    defaultSandbox && /^[a-zA-Z0-9._-]+$/.test(defaultSandbox) ? defaultSandbox : null;
-  stopAll({ sandboxName: safeName || undefined });
+  runStopCommand({
+    listSandboxes: () => registry.listSandboxes(),
+    stopAll,
+  });
 }
 
 function debug(args) {
