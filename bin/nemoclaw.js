@@ -40,6 +40,13 @@ const { getVersion } = require("./lib/version");
 const onboardSession = require("./lib/onboard-session");
 const { parseLiveSandboxNames } = require("./lib/runtime-recovery");
 const { NOTICE_ACCEPT_ENV, NOTICE_ACCEPT_FLAG } = require("./lib/usage-notice");
+const {
+  captureOpenshellCommand,
+  getInstalledOpenshellVersion,
+  runOpenshellCommand,
+  stripAnsi,
+  versionGte,
+} = require("../dist/lib/openshell");
 const { executeDeploy } = require("../dist/lib/deploy");
 
 // ── Global commands ──────────────────────────────────────────────
@@ -81,30 +88,22 @@ function getOpenshellBinary() {
 }
 
 function runOpenshell(args, opts = {}) {
-  const result = spawnSync(getOpenshellBinary(), args, {
+  return runOpenshellCommand(getOpenshellBinary(), args, {
     cwd: ROOT,
     env: { ...process.env, ...opts.env },
-    encoding: "utf-8",
-    stdio: opts.stdio ?? "inherit",
+    stdio: opts.stdio,
+    ignoreError: opts.ignoreError,
+    errorLine: console.error,
+    exit: (code) => process.exit(code),
   });
-  if (result.status !== 0 && !opts.ignoreError) {
-    console.error(`  Command failed (exit ${result.status}): openshell ${args.join(" ")}`);
-    process.exit(result.status || 1);
-  }
-  return result;
 }
 
 function captureOpenshell(args, opts = {}) {
-  const result = spawnSync(getOpenshellBinary(), args, {
+  return captureOpenshellCommand(getOpenshellBinary(), args, {
     cwd: ROOT,
     env: { ...process.env, ...opts.env },
-    encoding: "utf-8",
-    stdio: ["ignore", "pipe", "pipe"],
+    ignoreError: opts.ignoreError,
   });
-  return {
-    status: result.status ?? 1,
-    output: `${result.stdout || ""}${opts.ignoreError ? "" : result.stderr || ""}`.trim(),
-  };
 }
 
 function cleanupGatewayAfterLastSandbox() {
@@ -138,36 +137,11 @@ function getSandboxDeleteOutcome(deleteResult) {
   };
 }
 
-function parseVersionFromText(value = "") {
-  const match = String(value || "").match(/([0-9]+\.[0-9]+\.[0-9]+)/);
-  return match ? match[1] : null;
-}
-
-function versionGte(left = "0.0.0", right = "0.0.0") {
-  const lhs = String(left)
-    .split(".")
-    .map((part) => Number.parseInt(part, 10) || 0);
-  const rhs = String(right)
-    .split(".")
-    .map((part) => Number.parseInt(part, 10) || 0);
-  const length = Math.max(lhs.length, rhs.length);
-  for (let index = 0; index < length; index += 1) {
-    const a = lhs[index] || 0;
-    const b = rhs[index] || 0;
-    if (a > b) return true;
-    if (a < b) return false;
-  }
-  return true;
-}
-
-function getInstalledOpenshellVersion() {
-  const versionResult = captureOpenshell(["--version"], { ignoreError: true });
-  return parseVersionFromText(versionResult.output);
-}
-
-function stripAnsi(value = "") {
-  // eslint-disable-next-line no-control-regex
-  return String(value).replace(/\x1b\[[0-9;]*m/g, "");
+function getInstalledOpenshellVersionOrNull() {
+  return getInstalledOpenshellVersion(getOpenshellBinary(), {
+    cwd: ROOT,
+    env: process.env,
+  });
 }
 
 // ── Sandbox process health (OpenClaw gateway inside the sandbox) ─────────
@@ -1136,7 +1110,7 @@ async function sandboxStatus(sandboxName) {
 }
 
 function sandboxLogs(sandboxName, follow) {
-  const installedVersion = getInstalledOpenshellVersion();
+  const installedVersion = getInstalledOpenshellVersionOrNull();
   if (installedVersion && !versionGte(installedVersion, MIN_LOGS_OPENSHELL_VERSION)) {
     printOldLogsCompatibilityGuidance(installedVersion);
     process.exit(1);
