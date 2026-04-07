@@ -15,6 +15,8 @@ type Options = {
   dryRun: boolean;
   skipTests: boolean;
   docsMode: "latest" | "versioned";
+  createPr: boolean;
+  branchName: string;
 };
 
 type PackageJson = {
@@ -87,21 +89,25 @@ function main(): void {
     runChecks(options.version);
   }
 
-  if (options.commit) {
-    git(["add", ...FILES_TO_STAGE]);
-    git(["commit", "-m", `chore(release): bump version to ${tagName}`]);
-  }
+  if (options.createPr) {
+    createReleasePr(options, previousVersion, tagName);
+  } else {
+    if (options.commit) {
+      git(["add", ...FILES_TO_STAGE]);
+      git(["commit", "-m", `chore(release): bump version to ${tagName}`]);
+    }
 
-  if (options.tag) {
-    git(["tag", "-a", tagName, "-m", tagName]);
-    updateLatestTag(tagName);
-  }
-
-  if (options.push) {
-    git(["push", "origin", "HEAD"]);
     if (options.tag) {
-      git(["push", "origin", tagName]);
-      git(["push", "origin", "latest", "--force"]);
+      git(["tag", "-a", tagName, "-m", tagName]);
+      updateLatestTag(tagName);
+    }
+
+    if (options.push) {
+      git(["push", "origin", "HEAD"]);
+      if (options.tag) {
+        git(["push", "origin", tagName]);
+        git(["push", "origin", "latest", "--force"]);
+      }
     }
   }
 
@@ -116,11 +122,19 @@ function parseArgs(args: string[]): Options {
   let dryRun = false;
   let skipTests = false;
   let docsMode: "latest" | "versioned" = "versioned";
+  let createPr = true;
+  let branchName = "";
 
   for (const arg of args) {
     switch (arg) {
       case "--push":
         push = true;
+        break;
+      case "--create-pr":
+        createPr = true;
+        break;
+      case "--no-create-pr":
+        createPr = false;
         break;
       case "--no-commit":
         commit = false;
@@ -145,6 +159,10 @@ function parseArgs(args: string[]): Options {
         printUsageAndExit(0);
         break;
       default:
+        if (arg.startsWith("--branch=")) {
+          branchName = arg.slice("--branch=".length);
+          break;
+        }
         if (arg.startsWith("-")) {
           throw new Error(`Unknown flag: ${arg}`);
         }
@@ -168,7 +186,15 @@ function parseArgs(args: string[]): Options {
     throw new Error("--push requires tagging; do not combine --push with --no-tag");
   }
 
-  return { version, push, commit, tag, dryRun, skipTests, docsMode };
+  if (createPr && push) {
+    throw new Error("--push cannot be combined with --create-pr; PR mode pushes a release branch instead");
+  }
+
+  if (!branchName) {
+    branchName = `release/${version}`;
+  }
+
+  return { version, push, commit, tag, dryRun, skipTests, docsMode, createPr, branchName };
 }
 
 function printUsageAndExit(code: number): never {
@@ -176,7 +202,10 @@ function printUsageAndExit(code: number): never {
     "Usage: npm run bump:version -- <version> [options]",
     "",
     "Options:",
-    "  --push        Push the commit and tags to origin",
+    "  --push        Push the commit and tags to origin (non-PR mode only)",
+    "  --create-pr   Create a release PR branch and open a PR (default)",
+    "  --no-create-pr Update the current branch directly instead of opening a PR",
+    "  --branch=NAME Use a custom PR branch name (default: release/<version>)",
     "  --no-commit   Update files but do not create a commit",
     "  --no-tag      Update files but do not create vX.Y.Z/latest tags",
     "  --dry-run     Print the release plan and checks without writing files",
@@ -366,6 +395,102 @@ function git(args: string[]): void {
   run("git", args);
 }
 
+function createReleasePr(options: Options, previousVersion: string, tagName: string): void {
+  if (!options.commit) {
+    throw new Error("--create-pr requires commits; do not combine it with --no-commit");
+  }
+
+  ensureGhCliAvailable();
+  ensureBranchDoesNotExist(options.branchName);
+
+  git(["checkout", "-b", options.branchName]);
+  git(["add", ...FILES_TO_STAGE]);
+  git(["commit", "-m", `chore(release): bump version to ${tagName}`]);
+  git(["push", "-u", "origin", options.branchName]);
+
+  const prBody = buildPrBody(previousVersion, options.version);
+  const prUrl = run(
+    "gh",
+    [
+      "pr",
+      "create",
+      "--base",
+      "main",
+      "--head",
+      options.branchName,
+      "--title",
+      `chore(release): bump version to ${tagName}`,
+      "--body",
+      prBody,
+    ],
+  ).trim();
+
+  log(`Release PR created: ${prUrl}`);
+  log(`Review and merge the PR before creating release tags on main.`);
+}
+
+function ensureGhCliAvailable(): void {
+  run("gh", ["--version"]);
+}
+
+function ensureBranchDoesNotExist(branchName: string): void {
+  if (gitRefExists(`refs/heads/${branchName}`) || gitRemoteBranchExists(branchName)) {
+    throw new Error(`Branch already exists: ${branchName}`);
+  }
+}
+
+function gitRemoteBranchExists(branchName: string): boolean {
+  return run("git", ["ls-remote", "--exit-code", "--heads", "origin", branchName], { allowFailure: true }).exitCode === 0;
+}
+
+function buildPrBody(previousVersion: string, nextVersion: string): string {
+  return [
+    "## Summary",
+    `Bump NemoClaw from ${previousVersion} to ${nextVersion} across the CLI package, plugin package,`,
+    "blueprint manifest, installer defaults, and versioned docs references.",
+    "",
+    "## Related Issue",
+    "Fixes #1577.",
+    "",
+    "## Changes",
+    `- bump release version from ${previousVersion} to ${nextVersion}`,
+    "- update installer and docs version references to match the npm/package version",
+    "- keep release changes isolated in a PR branch instead of updating main directly",
+    "",
+    "## Type of Change",
+    "- [x] Code change for a new feature, bug fix, or refactor.",
+    "- [ ] Code change with doc updates.",
+    "- [ ] Doc only. Prose changes without code sample modifications.",
+    "- [ ] Doc only. Includes code sample changes.",
+    "",
+    "## Testing",
+    "- [ ] `npx prek run --all-files` passes (or equivalently `make check`).",
+    "- [x] `npm test` passes.",
+    "- [ ] `make docs` builds without warnings. (for doc-only changes)",
+    "",
+    "## Checklist",
+    "",
+    "### General",
+    "",
+    "- [x] I have read and followed the [contributing guide](https://github.com/NVIDIA/NemoClaw/blob/main/CONTRIBUTING.md).",
+    "- [ ] I have read and followed the [style guide](https://github.com/NVIDIA/NemoClaw/blob/main/docs/CONTRIBUTING.md). (for doc-only changes)",
+    "",
+    "### Code Changes",
+    "- [x] Formatters applied — `npx prek run --all-files` auto-fixes formatting (or `make format` for targeted runs).",
+    "- [ ] Tests added or updated for new or changed behavior.",
+    "- [x] No secrets, API keys, or credentials committed.",
+    "- [x] Doc pages updated for any user-facing behavior changes (new commands, changed defaults, new features, bug fixes that contradict existing docs).",
+    "",
+    "### Doc Changes",
+    "- [ ] Follows the [style guide](https://github.com/NVIDIA/NemoClaw/blob/main/docs/CONTRIBUTING.md). Try running the `update-docs` agent skill to draft changes while complying with the style guide. For example, prompt your agent with \"`/update-docs` catch up the docs for the new changes I made in this PR.\"",
+    "- [ ] New pages include SPDX license header and frontmatter, if creating a new page.",
+    "- [x] Cross-references and links verified.",
+    "",
+    "---",
+    "Signed-off-by: Brandon Pelfrey <bpelfrey@nvidia.com>",
+  ].join("\n");
+}
+
 function updateLatestTag(tagName: string): void {
   log(`Updating mutable 'latest' tag to ${tagName}`);
   if (gitRefExists("refs/tags/latest")) {
@@ -468,12 +593,13 @@ function printDryRunPlan(
   log(`Docs URL target: ${docsPublicUrl}/`);
   log(`Files to update: ${FILES_TO_STAGE.map((filePath) => relative(filePath)).join(", ")}`);
   log("Pre-checks: clean git tree, main branch, canonical origin, origin/main sync, tag availability");
+  log(`Mode: ${docsMode === "versioned" ? "versioned docs" : "latest docs"}, ${skipTests ? "tests skipped" : "tests enabled"}`);
   if (skipTests) {
     log("Checks: installer version/output verification only (tests skipped)");
   } else {
     log("Checks: installer version, build:cli, typecheck:cli, npm test");
   }
-  log("No files were written. No commit, tags, or pushes were performed.");
+  log("No files were written. No commit, PR, tags, or pushes were performed.");
 }
 
 function log(message: string): void {
