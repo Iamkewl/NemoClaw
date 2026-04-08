@@ -86,11 +86,14 @@ def main():
 
     # API server config
     api_server_key = api_key or secrets.token_hex(32)
+    # Hermes binds to 127.0.0.1 regardless of host config (upstream bug).
+    # Use an internal port (18642); the startup script's socat forwarder
+    # exposes 0.0.0.0:8642 -> 127.0.0.1:18642 for OpenShell port forwarding.
     config.setdefault("platforms", {})["api_server"] = {
         "enabled": True,
         "extra": {
-            "port": 8642,
-            "host": "0.0.0.0",  # Bind all interfaces so OpenShell can forward
+            "port": 18642,
+            "host": "127.0.0.1",
             "key": api_server_key,
         },
     }
@@ -104,7 +107,7 @@ def main():
     # Write .env
     env_lines = [
         f"API_SERVER_KEY={api_server_key}",
-        "API_SERVER_PORT=8642",
+        "API_SERVER_PORT=18642",
         "API_SERVER_HOST=127.0.0.1",
     ]
     for ch in msg_channels:

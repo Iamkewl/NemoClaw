@@ -72,6 +72,9 @@ esac
 NEMOCLAW_CMD=("$@")
 CHAT_UI_URL="${CHAT_UI_URL:-http://127.0.0.1:8642}"
 PUBLIC_PORT=8642
+# Hermes binds to 127.0.0.1 regardless of config (upstream bug).
+# Run it on an internal port and use socat to expose on PUBLIC_PORT.
+INTERNAL_PORT=18642
 HERMES="$(command -v hermes)" # Resolve once, use absolute path everywhere
 
 # Hermes writes state files (PID, state.db, .channel_directory) directly into
@@ -278,11 +281,36 @@ print_dashboard_urls() {
   echo "[gateway] Connect any OpenAI-compatible frontend to this endpoint." >&2
 }
 
+# ── socat forwarder ──────────────────────────────────────────────
+# Hermes API server binds to 127.0.0.1 regardless of config (upstream bug).
+# OpenShell needs the port accessible on 0.0.0.0 for port forwarding.
+# socat bridges 0.0.0.0:PUBLIC_PORT → 127.0.0.1:INTERNAL_PORT.
+SOCAT_PID=""
+start_socat_forwarder() {
+  if ! command -v socat >/dev/null 2>&1; then
+    echo "[gateway] socat not available — port forwarding from host may not work" >&2
+    return
+  fi
+  local attempts=0
+  while [ "$attempts" -lt 30 ]; do
+    if ss -tln 2>/dev/null | grep -q "127.0.0.1:${INTERNAL_PORT}"; then
+      break
+    fi
+    sleep 1
+    attempts=$((attempts + 1))
+  done
+  nohup socat TCP-LISTEN:"${PUBLIC_PORT}",bind=0.0.0.0,fork,reuseaddr \
+    TCP:127.0.0.1:"${INTERNAL_PORT}" >/dev/null 2>&1 &
+  SOCAT_PID=$!
+  echo "[gateway] socat forwarder 0.0.0.0:${PUBLIC_PORT} → 127.0.0.1:${INTERNAL_PORT} (pid $SOCAT_PID)" >&2
+}
+
 # Forward SIGTERM/SIGINT to child processes for graceful shutdown.
 cleanup() {
   echo "[gateway] received signal, forwarding to children..." >&2
   local gateway_status=0
   kill -TERM "$GATEWAY_PID" 2>/dev/null || true
+  [ -n "${SOCAT_PID:-}" ] && kill -TERM "$SOCAT_PID" 2>/dev/null || true
   wait "$GATEWAY_PID" 2>/dev/null || gateway_status=$?
   exit "$gateway_status"
 }
@@ -332,9 +360,11 @@ _write_proxy_snippet() {
   printf '\n%s\n' "$_PROXY_SNIPPET" >>"$target"
 }
 
+# Write proxy snippet — may fail after capsh drops cap_dac_override
+# (root can no longer write sandbox-owned files). Non-fatal.
 if [ -w "$_SANDBOX_HOME" ]; then
-  _write_proxy_snippet "${_SANDBOX_HOME}/.bashrc"
-  _write_proxy_snippet "${_SANDBOX_HOME}/.profile"
+  _write_proxy_snippet "${_SANDBOX_HOME}/.bashrc" 2>/dev/null || true
+  _write_proxy_snippet "${_SANDBOX_HOME}/.profile" 2>/dev/null || true
 fi
 
 # ── Main ─────────────────────────────────────────────────────────
@@ -369,6 +399,7 @@ if [ "$(id -u)" -ne 0 ]; then
   GATEWAY_PID=$!
   echo "[gateway] hermes gateway launched (pid $GATEWAY_PID)" >&2
   trap cleanup SIGTERM SIGINT
+  start_socat_forwarder
   print_dashboard_urls
 
   wait "$GATEWAY_PID"
@@ -403,6 +434,7 @@ HERMES_HOME="${HERMES_WRITABLE}" nohup gosu gateway "$HERMES" gateway run >/tmp/
 GATEWAY_PID=$!
 echo "[gateway] hermes gateway launched as 'gateway' user (pid $GATEWAY_PID)" >&2
 trap cleanup SIGTERM SIGINT
+start_socat_forwarder
 print_dashboard_urls
 
 # Keep container running by waiting on the gateway process.
