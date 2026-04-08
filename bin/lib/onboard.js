@@ -3904,7 +3904,11 @@ async function setupPoliciesWithSelection(sandboxName, options = {}) {
 
 // ── Dashboard ────────────────────────────────────────────────────
 
-const CONTROL_UI_PORT = 18789;
+// Agent-aware dashboard port: Hermes uses 8642, OpenClaw uses 18789.
+function getControlUiPort() {
+  return _selectedAgent?.forwardPort || 18789;
+}
+const CONTROL_UI_PORT = 18789; // Legacy default — use getControlUiPort() for agent-aware code
 
 // Dashboard helpers — delegated to src/lib/dashboard.ts
 // isLoopbackHostname — see urlUtils import above
@@ -3968,6 +3972,37 @@ function fetchGatewayAuthTokenFromSandbox(sandboxName) {
 
 // buildControlUiUrls — see dashboard import above
 
+function printDashboardUiSection(sandboxName, token) {
+  const uiPort = getControlUiPort();
+  if (token) {
+    console.log(`  ${_selectedAgentDisplayName} UI (tokenized URL; treat it like a password)`);
+    console.log(`  Port ${uiPort} must be forwarded before opening this URL.`);
+    for (const url of buildControlUiUrls(token)) {
+      console.log(`  ${url}`);
+    }
+  } else {
+    note("  Could not read gateway token from the sandbox (download failed).");
+    console.log(`  ${_selectedAgentDisplayName} UI`);
+    console.log(`  Port ${uiPort} must be forwarded before opening this URL.`);
+    for (const url of buildControlUiUrls()) {
+      console.log(`  ${url}`);
+    }
+    if (_selectedAgentName === "openclaw") {
+      const configPaths = _selectedAgent?.configPaths || {};
+      console.log(
+        `  Token:       nemoclaw ${sandboxName} connect  →  jq -r '.gateway.auth.token' ${configPaths.immutableDir || "/sandbox/.openclaw"}/${configPaths.configFile || "openclaw.json"}`,
+      );
+    } else {
+      console.log(
+        `  API Key:     nemoclaw ${sandboxName} connect  →  cat ${(_selectedAgent?.configPaths || {}).immutableDir || "/sandbox/.hermes"}/.env | grep API_SERVER_KEY`,
+      );
+    }
+    console.log(
+      "               append  #token=<token>  to the URL, or see /tmp/gateway.log inside the sandbox.",
+    );
+  }
+}
+
 function printDashboard(sandboxName, model, provider, nimContainer = null) {
   const nimStat = nimContainer ? nim.nimStatusByName(nimContainer) : nim.nimStatus(sandboxName);
   const nimLabel = nimStat.running ? "running" : "not running";
@@ -3996,26 +4031,7 @@ function printDashboard(sandboxName, model, provider, nimContainer = null) {
   console.log(`  Status:      nemoclaw ${sandboxName} status`);
   console.log(`  Logs:        nemoclaw ${sandboxName} logs --follow`);
   console.log("");
-  if (token) {
-    console.log(`  ${_selectedAgentDisplayName} UI (tokenized URL; treat it like a password)`);
-    console.log(`  Port ${CONTROL_UI_PORT} must be forwarded before opening this URL.`);
-    for (const url of buildControlUiUrls(token)) {
-      console.log(`  ${url}`);
-    }
-  } else {
-    note("  Could not read gateway token from the sandbox (download failed).");
-    console.log(`  ${_selectedAgentDisplayName} UI`);
-    console.log(`  Port ${CONTROL_UI_PORT} must be forwarded before opening this URL.`);
-    for (const url of buildControlUiUrls()) {
-      console.log(`  ${url}`);
-    }
-    console.log(
-      `  Token:       nemoclaw ${sandboxName} connect  →  jq -r '.gateway.auth.token' /sandbox/.openclaw/openclaw.json`,
-    );
-    console.log(
-      `               append  #token=<token>  to the URL, or see /tmp/gateway.log inside the sandbox.`,
-    );
-  }
+  printDashboardUiSection(sandboxName, token);
   console.log(`  ${"─".repeat(50)}`);
   console.log("");
 }

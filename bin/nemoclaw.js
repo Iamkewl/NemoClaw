@@ -81,6 +81,21 @@ let OPENSHELL_BIN = null;
 const MIN_LOGS_OPENSHELL_VERSION = "0.0.7";
 const NEMOCLAW_GATEWAY_NAME = "nemoclaw";
 const DASHBOARD_FORWARD_PORT = "18789";
+const { loadAgent } = require("./lib/agent-defs");
+
+/**
+ * Resolve the agent for the current sandbox from the onboard session.
+ * Returns the loaded agent definition, or the openclaw default.
+ */
+function getSessionAgent() {
+  try {
+    const session = onboardSession.loadSession();
+    const name = session?.agent || "openclaw";
+    return loadAgent(name);
+  } catch {
+    return loadAgent("openclaw");
+  }
+}
 
 function getOpenshellBinary() {
   if (!OPENSHELL_BIN) {
@@ -207,9 +222,11 @@ function executeSandboxCommand(sandboxName, command) {
  * Returns true (running), false (stopped), or null (cannot determine).
  */
 function isSandboxGatewayRunning(sandboxName) {
+  const agent = getSessionAgent();
+  const probeUrl = agent.healthProbe?.url || "http://127.0.0.1:18789/";
   const result = executeSandboxCommand(
     sandboxName,
-    "curl -sf --max-time 3 http://127.0.0.1:18789/ > /dev/null 2>&1 && echo RUNNING || echo STOPPED",
+    `curl -sf --max-time 3 ${probeUrl} > /dev/null 2>&1 && echo RUNNING || echo STOPPED`,
   );
   if (!result) return null;
   if (result.stdout === "RUNNING") return true;
@@ -223,25 +240,29 @@ function isSandboxGatewayRunning(sandboxName) {
  * in the background. Returns true on success.
  */
 function recoverSandboxProcesses(sandboxName) {
+  const agent = getSessionAgent();
+  const probeUrl = agent.healthProbe?.url || "http://127.0.0.1:18789/";
+  const binaryPath = agent.binary_path || "/usr/local/bin/openclaw";
+  const gatewayCmd = agent.gateway_command || "openclaw gateway run";
+  const isHermes = agent.name === "hermes";
+  const hermesHome = isHermes ? "export HERMES_HOME=/sandbox/.hermes-data; " : "";
+
   // The recovery script runs as the sandbox user (non-root). This matches
-  // the non-root fallback path in nemoclaw-start.sh — no privilege
+  // the non-root fallback path in the agent's start.sh — no privilege
   // separation, but the gateway runs and inference works.
   const script = [
     // Source proxy config (written to .bashrc by nemoclaw-start on first boot)
     "[ -f ~/.bashrc ] && . ~/.bashrc 2>/dev/null;",
-    // Re-check liveness before touching anything — another caller may have
-    // already recovered the gateway between our initial check and now (TOCTOU).
-    "if curl -sf --max-time 3 http://127.0.0.1:18789/ > /dev/null 2>&1; then echo ALREADY_RUNNING; exit 0; fi;",
-    // Clean stale lock files from the previous run (gateway checks these)
-    "rm -rf /tmp/openclaw-*/gateway.*.lock 2>/dev/null;",
+    hermesHome,
+    // Re-check liveness before touching anything (TOCTOU guard).
+    `if curl -sf --max-time 3 ${probeUrl} > /dev/null 2>&1; then echo ALREADY_RUNNING; exit 0; fi;`,
     // Clean stale temp files from the previous run
-    "rm -f /tmp/gateway.log /tmp/auto-pair.log;",
+    "rm -f /tmp/gateway.log;",
     "touch /tmp/gateway.log; chmod 600 /tmp/gateway.log;",
-    "touch /tmp/auto-pair.log; chmod 600 /tmp/auto-pair.log;",
     // Resolve and start gateway
-    'OPENCLAW="$(command -v openclaw)";',
-    'if [ -z "$OPENCLAW" ]; then echo OPENCLAW_MISSING; exit 1; fi;',
-    'nohup "$OPENCLAW" gateway run > /tmp/gateway.log 2>&1 &',
+    `AGENT_BIN="$(command -v ${binaryPath.split("/").pop()})";`,
+    'if [ -z "$AGENT_BIN" ]; then echo AGENT_MISSING; exit 1; fi;',
+    `nohup ${gatewayCmd} > /tmp/gateway.log 2>&1 &`,
     "GPID=$!; sleep 2;",
     // Verify the gateway actually started (didn't crash immediately)
     'if kill -0 "$GPID" 2>/dev/null; then echo "GATEWAY_PID=$GPID"; else echo GATEWAY_FAILED; cat /tmp/gateway.log 2>/dev/null | tail -5; fi',
@@ -282,7 +303,10 @@ function checkAndRecoverSandboxProcesses(sandboxName, { quiet = false } = {}) {
   // Gateway not running — attempt recovery
   if (!quiet) {
     console.log("");
-    console.log("  OpenClaw gateway is not running inside the sandbox (sandbox likely restarted).");
+    const agentName = getSessionAgent().displayName;
+    console.log(
+      `  ${agentName} gateway is not running inside the sandbox (sandbox likely restarted).`,
+    );
     console.log("  Recovering...");
   }
 
@@ -300,13 +324,16 @@ function checkAndRecoverSandboxProcesses(sandboxName, { quiet = false } = {}) {
     }
     ensureSandboxPortForward(sandboxName);
     if (!quiet) {
-      console.log(`  ${G}✓${R} OpenClaw gateway restarted inside sandbox.`);
+      console.log(`  ${G}✓${R} ${getSessionAgent().displayName} gateway restarted inside sandbox.`);
       console.log(`  ${G}✓${R} Dashboard port forward re-established.`);
     }
   } else if (!quiet) {
-    console.error("  Could not restart OpenClaw gateway automatically.");
+    const _agent = getSessionAgent();
+    console.error(`  Could not restart ${_agent.displayName} gateway automatically.`);
     console.error("  Connect to the sandbox and run manually:");
-    console.error("    nohup openclaw gateway run > /tmp/gateway.log 2>&1 &");
+    console.error(
+      `    nohup ${_agent.gateway_command || "openclaw gateway run"} > /tmp/gateway.log 2>&1 &`,
+    );
   }
 
   return { checked: true, wasRunning: false, recovered };
@@ -1017,20 +1044,27 @@ async function sandboxStatus(sandboxName) {
   if (lookup.state === "present") {
     const processCheck = checkAndRecoverSandboxProcesses(sandboxName, { quiet: true });
     if (processCheck.checked) {
+      const _statusAgent = getSessionAgent();
       if (processCheck.wasRunning) {
-        console.log(`    OpenClaw: ${G}running${R}`);
+        console.log(`    ${_statusAgent.displayName}: ${G}running${R}`);
       } else if (processCheck.recovered) {
-        console.log(`    OpenClaw: ${G}recovered${R} (gateway restarted after sandbox restart)`);
+        console.log(
+          `    ${_statusAgent.displayName}: ${G}recovered${R} (gateway restarted after sandbox restart)`,
+        );
       } else {
-        console.log(`    OpenClaw: ${_RD}not running${R}`);
+        console.log(`    ${_statusAgent.displayName}: ${_RD}not running${R}`);
         console.log("");
-        console.log("  The sandbox is alive but the OpenClaw gateway process is not running.");
+        console.log(
+          `  The sandbox is alive but the ${_statusAgent.displayName} gateway process is not running.`,
+        );
         console.log("  This typically happens after a gateway restart (e.g., laptop close/open).");
         console.log("");
         console.log("  To recover, run:");
         console.log(`    ${D}nemoclaw ${sandboxName} connect${R}  (auto-recovers on connect)`);
         console.log("  Or manually inside the sandbox:");
-        console.log(`    ${D}nohup openclaw gateway run > /tmp/gateway.log 2>&1 &${R}`);
+        console.log(
+          `    ${D}nohup ${_statusAgent.gateway_command || "openclaw gateway run"} > /tmp/gateway.log 2>&1 &${R}`,
+        );
       }
     }
   }
