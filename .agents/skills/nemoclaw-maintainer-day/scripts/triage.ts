@@ -76,6 +76,7 @@ interface QueueItem {
   churn: number;
   changedFiles: number;
   nextAction: string;
+  ageDays: number;
 }
 
 interface HotCluster {
@@ -272,6 +273,9 @@ function main(): void {
       churn: item.churn,
       changedFiles: item.changed_files,
       nextAction,
+      ageDays: item.updated_at
+        ? Math.floor((Date.now() - new Date(item.updated_at).getTime()) / 86_400_000)
+        : 0,
     });
   }
 

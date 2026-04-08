@@ -14,6 +14,7 @@ interface ProgressItem {
   title: string;
   url: string;
   type: "pr" | "issue";
+  ageDays: number;
 }
 
 interface ProgressOutput {
@@ -33,12 +34,19 @@ function queryItems(
   const out = run("gh", [
     cmd, "list", "--repo", repo,
     "--label", version, "--state", state,
-    "--json", "number,title,url", "--limit", "100",
+    "--json", "number,title,url,createdAt", "--limit", "100",
   ]);
   if (!out) return [];
   try {
-    const items = JSON.parse(out) as Array<{ number: number; title: string; url: string }>;
-    return items.map((i) => ({ ...i, type: kind }));
+    const now = Date.now();
+    const items = JSON.parse(out) as Array<{ number: number; title: string; url: string; createdAt: string }>;
+    return items.map((i) => ({
+      number: i.number,
+      title: i.title,
+      url: i.url,
+      type: kind,
+      ageDays: Math.floor((now - new Date(i.createdAt).getTime()) / 86_400_000),
+    }));
   } catch {
     return [];
   }
