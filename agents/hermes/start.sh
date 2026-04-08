@@ -238,12 +238,36 @@ start_socat_forwarder() {
   echo "[gateway] socat forwarder 0.0.0.0:${PUBLIC_PORT} → 127.0.0.1:${INTERNAL_PORT} (pid $SOCAT_PID)" >&2
 }
 
+# ── URL-decode proxy ─────────────────────────────────────────────
+# Python HTTP clients (httpx) URL-encode colons in paths, breaking
+# OpenShell's openshell:resolve:env: placeholder pattern. This proxy
+# sits between the Hermes process and the OpenShell proxy, URL-decoding
+# paths so the L7 proxy recognizes the placeholders.
+DECODE_PROXY_PID=""
+DECODE_PROXY_PORT=3129
+start_decode_proxy() {
+  nohup python3 /opt/nemoclaw-decode-proxy.py >/dev/null 2>&1 &
+  DECODE_PROXY_PID=$!
+  # Wait for it to start listening
+  local attempts=0
+  while [ "$attempts" -lt 10 ]; do
+    if ss -tln 2>/dev/null | grep -q "127.0.0.1:${DECODE_PROXY_PORT}"; then
+      echo "[gateway] decode-proxy listening on 127.0.0.1:${DECODE_PROXY_PORT} (pid $DECODE_PROXY_PID)" >&2
+      return
+    fi
+    sleep 0.5
+    attempts=$((attempts + 1))
+  done
+  echo "[gateway] decode-proxy failed to start — placeholder rewriting may not work" >&2
+}
+
 # Forward SIGTERM/SIGINT to child processes for graceful shutdown.
 cleanup() {
   echo "[gateway] received signal, forwarding to children..." >&2
   local gateway_status=0
   kill -TERM "$GATEWAY_PID" 2>/dev/null || true
   [ -n "${SOCAT_PID:-}" ] && kill -TERM "$SOCAT_PID" 2>/dev/null || true
+  [ -n "${DECODE_PROXY_PID:-}" ] && kill -TERM "$DECODE_PROXY_PID" 2>/dev/null || true
   wait "$GATEWAY_PID" 2>/dev/null || gateway_status=$?
   exit "$gateway_status"
 }
@@ -326,8 +350,14 @@ if [ "$(id -u)" -ne 0 ]; then
   touch /tmp/gateway.log
   chmod 600 /tmp/gateway.log
 
-  # Start Hermes gateway in background (foreground mode, not systemd)
-  HERMES_HOME="${HERMES_WRITABLE}" nohup "$HERMES" gateway run >/tmp/gateway.log 2>&1 &
+  # Start decode proxy and Hermes gateway
+  start_decode_proxy
+  HERMES_HOME="${HERMES_WRITABLE}" \
+    HTTPS_PROXY="http://127.0.0.1:${DECODE_PROXY_PORT}" \
+    HTTP_PROXY="http://127.0.0.1:${DECODE_PROXY_PORT}" \
+    https_proxy="http://127.0.0.1:${DECODE_PROXY_PORT}" \
+    http_proxy="http://127.0.0.1:${DECODE_PROXY_PORT}" \
+    nohup "$HERMES" gateway run >/tmp/gateway.log 2>&1 &
   GATEWAY_PID=$!
   echo "[gateway] hermes gateway launched (pid $GATEWAY_PID)" >&2
   trap cleanup SIGTERM SIGINT
@@ -361,7 +391,14 @@ validate_hermes_symlinks
 harden_hermes_symlinks
 
 # Start the gateway as the 'gateway' user.
-HERMES_HOME="${HERMES_WRITABLE}" nohup gosu gateway "$HERMES" gateway run >/tmp/gateway.log 2>&1 &
+# Start decode proxy and gateway
+start_decode_proxy
+HERMES_HOME="${HERMES_WRITABLE}" \
+  HTTPS_PROXY="http://127.0.0.1:${DECODE_PROXY_PORT}" \
+  HTTP_PROXY="http://127.0.0.1:${DECODE_PROXY_PORT}" \
+  https_proxy="http://127.0.0.1:${DECODE_PROXY_PORT}" \
+  http_proxy="http://127.0.0.1:${DECODE_PROXY_PORT}" \
+  nohup gosu gateway "$HERMES" gateway run >/tmp/gateway.log 2>&1 &
 GATEWAY_PID=$!
 echo "[gateway] hermes gateway launched as 'gateway' user (pid $GATEWAY_PID)" >&2
 trap cleanup SIGTERM SIGINT

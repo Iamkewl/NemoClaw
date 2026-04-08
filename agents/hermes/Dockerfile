@@ -19,8 +19,9 @@ RUN (apt-get remove --purge -y gcc gcc-12 g++ g++-12 cpp cpp-12 make \
 # Copy NemoClaw plugin for Hermes (Python-based)
 COPY agents/hermes/plugin/ /opt/nemoclaw-hermes-plugin/
 
-# Copy config generation script
+# Copy config generation script and URL-decode proxy
 COPY agents/hermes/generate-config.py /opt/nemoclaw-generate-config.py
+COPY agents/hermes/decode-proxy.py /opt/nemoclaw-decode-proxy.py
 
 # Copy blueprint (shared infrastructure)
 COPY nemoclaw-blueprint/ /opt/nemoclaw-blueprint/
