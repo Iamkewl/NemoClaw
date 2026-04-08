@@ -222,6 +222,7 @@ export function normalizeSession(data: unknown): Session | null {
     mode: typeof d.mode === "string" ? d.mode : undefined,
     startedAt: typeof d.startedAt === "string" ? d.startedAt : undefined,
     updatedAt: typeof d.updatedAt === "string" ? d.updatedAt : undefined,
+    agent: typeof d.agent === "string" ? d.agent : null,
     sandboxName: typeof d.sandboxName === "string" ? d.sandboxName : null,
     provider: typeof d.provider === "string" ? d.provider : null,
     model: typeof d.model === "string" ? d.model : null,
