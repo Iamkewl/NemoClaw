@@ -1539,12 +1539,32 @@ function destroyGateway() {
   if (destroyResult.status === 0) {
     registry.clearAll();
   }
-  // openshell gateway destroy doesn't remove Docker volumes, which leaves
-  // corrupted cluster state that breaks the next gateway start. Clean them up.
+  // openshell gateway destroy may leave behind Docker containers (e.g. after a
+  // Ctrl+C interrupt during gateway start) and volumes. Clean both up so the
+  // next gateway start doesn't hit port conflicts or corrupted state. (#1582)
+  cleanupOrphanedGatewayContainer();
   run(
     `docker volume ls -q --filter "name=openshell-cluster-${GATEWAY_NAME}" | grep . && docker volume ls -q --filter "name=openshell-cluster-${GATEWAY_NAME}" | xargs docker volume rm || true`,
     { ignoreError: true },
   );
+}
+
+/**
+ * Stop and remove any orphaned Docker container left by a previous gateway
+ * that OpenShell no longer tracks (e.g. after Ctrl+C during gateway start).
+ * Returns true if a container was found and removed. (#1582)
+ */
+function cleanupOrphanedGatewayContainer() {
+  const containerName = `openshell-cluster-${GATEWAY_NAME}`;
+  const existing = runCapture(
+    `docker ps -aq --filter "name=^${containerName}$"`,
+    { ignoreError: true },
+  ).trim();
+  if (!existing) return false;
+  console.log(`  Cleaning up orphaned gateway container (${containerName})...`);
+  run(`docker stop ${shellQuote(containerName)} 2>/dev/null || true`, { ignoreError: true });
+  run(`docker rm ${shellQuote(containerName)} 2>/dev/null || true`, { ignoreError: true });
+  return true;
 }
 
 async function ensureNamedCredential(envName, label, helpUrl = null) {
@@ -1704,11 +1724,20 @@ async function preflight() {
     { port: 18789, label: "NemoClaw dashboard" },
   ];
   for (const { port, label } of requiredPorts) {
-    const portCheck = await checkPortAvailable(port);
+    let portCheck = await checkPortAvailable(port);
     if (!portCheck.ok) {
       if ((port === 8080 || port === 18789) && gatewayReuseState === "healthy") {
         console.log(`  ✓ Port ${port} already owned by healthy NemoClaw runtime (${label})`);
         continue;
+      }
+      // Auto-cleanup orphaned gateway container that may be holding the port
+      // (e.g. after Ctrl+C during a previous onboard). (#1582)
+      if (cleanupOrphanedGatewayContainer()) {
+        portCheck = await checkPortAvailable(port);
+        if (portCheck.ok) {
+          console.log(`  ✓ Port ${port} available after orphaned container cleanup (${label})`);
+          continue;
+        }
       }
       console.error("");
       console.error(`  !! Port ${port} is not available.`);
