@@ -84,8 +84,9 @@ function main(): void {
 
   verifyVersionState(options.version, nextDocsPublicUrl, nextDocsVersion);
 
+  runInstallerAndBuild(options.version);
   if (!options.skipTests) {
-    runChecks(options.version);
+    runTypecheckAndTests();
   }
 
   if (options.createPr) {
@@ -183,6 +184,10 @@ function parseArgs(args: string[]): Options {
 
   if (push && !tag) {
     throw new Error("--push requires tagging; do not combine --push with --no-tag");
+  }
+
+  if (tag && !commit) {
+    throw new Error("--tag requires committing; do not combine --tag with --no-commit");
   }
 
   if (createPr && push) {
@@ -365,7 +370,7 @@ function verifyVersionState(version: string, docsPublicUrl: string, docsDisplayV
   }
 }
 
-function runChecks(version: string): void {
+function runInstallerAndBuild(version: string): void {
   log("Running installer version check");
   const installerVersion = run("bash", [INSTALL_SH, "--version"]);
   if (!installerVersion.includes(`v${version}`)) {
@@ -374,7 +379,9 @@ function runChecks(version: string): void {
 
   log("Running build:cli");
   run("npm", ["run", "build:cli"]);
+}
 
+function runTypecheckAndTests(): void {
   log("Running typecheck:cli");
   run("npm", ["run", "typecheck:cli"]);
 
@@ -596,7 +603,7 @@ function printDryRunPlan(
   log("Pre-checks: clean git tree, main branch, canonical origin, origin/main sync, tag availability");
   log(`Mode: ${docsMode === "versioned" ? "versioned docs" : "latest docs"}, ${skipTests ? "tests skipped" : "tests enabled"}`);
   if (skipTests) {
-    log("Checks: installer version/output verification only (tests skipped)");
+    log("Checks: installer version and build:cli only (typecheck and tests skipped)");
   } else {
     log("Checks: installer version, build:cli, typecheck:cli, npm test");
   }
