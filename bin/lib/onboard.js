@@ -3390,10 +3390,13 @@ const MESSAGING_CHANNELS = [
     serverIdHelp:
       "Enable Developer Mode in Discord, then right-click your server and copy the Server ID.",
     serverIdLabel: "Discord Server ID (for guild workspace access)",
+    requireMentionEnvKey: "DISCORD_REQUIRE_MENTION",
+    requireMentionHelp:
+      "Choose whether the bot should reply only when @mentioned or to all messages in this server.",
     userIdEnvKey: "DISCORD_USER_ID",
     userIdHelp:
-      "Enable Developer Mode in Discord, then right-click your user/avatar and copy the User ID.",
-    userIdLabel: "Discord User ID (for guild allowlist)",
+      "Optional: enable Developer Mode in Discord, then right-click your user/avatar and copy the User ID. Leave blank to allow any member of this server to message the bot.",
+    userIdLabel: "Discord User ID (optional guild allowlist)",
     allowIdsMode: "guild",
   },
   {
@@ -3552,8 +3555,25 @@ async function setupMessagingChannels() {
         }
       }
     }
+    if (ch.requireMentionEnvKey && process.env[ch.serverIdEnvKey || ""]) {
+      const existingRequireMention = process.env[ch.requireMentionEnvKey];
+      if (existingRequireMention === "0" || existingRequireMention === "1") {
+        const mode = existingRequireMention === "0" ? "all messages" : "@mentions only";
+        console.log(`  ✓ ${ch.name} — reply mode already set: ${mode}`);
+      } else {
+        console.log(`  ${ch.requireMentionHelp}`);
+        const answer = (
+          await prompt("  Reply only when @mentioned? [Y/n]: ")
+        )
+          .trim()
+          .toLowerCase();
+        process.env[ch.requireMentionEnvKey] = answer === "n" || answer === "no" ? "0" : "1";
+        const mode = process.env[ch.requireMentionEnvKey] === "0" ? "all messages" : "@mentions only";
+        console.log(`  ✓ ${ch.name} reply mode saved: ${mode}`);
+      }
+    }
     // Prompt for user/sender ID when the channel supports allowlisting
-    if (ch.userIdEnvKey) {
+    if (ch.userIdEnvKey && (!ch.serverIdEnvKey || process.env[ch.serverIdEnvKey])) {
       const existingIds = process.env[ch.userIdEnvKey] || "";
       if (existingIds) {
         console.log(`  ✓ ${ch.name} — allowed IDs already set: ${existingIds}`);
@@ -3566,7 +3586,7 @@ async function setupMessagingChannels() {
         } else {
           const skippedReason =
             ch.allowIdsMode === "guild"
-              ? "guild access stays restricted until you configure it later"
+              ? "any member in the configured server can message the bot"
               : "bot will require manual pairing";
           console.log(`  Skipped ${ch.name} user ID (${skippedReason})`);
         }
