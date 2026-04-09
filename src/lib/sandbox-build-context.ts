@@ -89,7 +89,7 @@ function collectBuildContextStats(dir) {
   return { fileCount, totalBytes };
 }
 
-module.exports = {
+export {
   collectBuildContextStats,
   stageLegacySandboxBuildContext,
   stageOptimizedSandboxBuildContext,

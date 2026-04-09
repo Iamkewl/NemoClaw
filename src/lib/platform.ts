@@ -120,7 +120,7 @@ function detectDockerHost(opts = {}) {
   return null;
 }
 
-module.exports = {
+export {
   detectDockerHost,
   findColimaDockerSocket,
   getColimaDockerSocketCandidates,
