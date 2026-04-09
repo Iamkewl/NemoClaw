@@ -7,16 +7,31 @@
 // When the session agent is openclaw (or absent), all functions return
 // defaults that match the hardcoded OpenClaw values on main.
 
+const registry = require("./registry");
 const onboardSession = require("./onboard-session");
 const { loadAgent } = require("./agent-defs");
 
 /**
- * Resolve the agent for the current sandbox from the onboard session.
- * Returns the loaded agent definition for non-OpenClaw agents, or null
- * for openclaw (meaning: callers should use the existing hardcoded path).
+ * Resolve the agent for a sandbox. Checks the per-sandbox registry first
+ * (so status/connect/recovery use the right agent even when multiple
+ * sandboxes exist), then falls back to the global onboard session.
+ * Returns the loaded agent definition for non-OpenClaw agents, or null.
+ *
+ * @param {string} [sandboxName] - sandbox to look up (omit for session fallback)
  */
-function getSessionAgent() {
+function getSessionAgent(sandboxName) {
   try {
+    // Per-sandbox registry (preferred — survives across multiple onboards)
+    if (sandboxName) {
+      const sb = registry.getSandbox(sandboxName);
+      if (sb?.agent && sb.agent !== "openclaw") {
+        return loadAgent(sb.agent);
+      }
+      if (sb?.agent === "openclaw" || (sb && !sb.agent)) {
+        return null;
+      }
+    }
+    // Fallback: global onboard session (for sandboxes created before this change)
     const session = onboardSession.loadSession();
     const name = session?.agent || "openclaw";
     if (name === "openclaw") return null;

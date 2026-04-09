@@ -2567,6 +2567,7 @@ async function createSandbox(
   registry.registerSandbox({
     name: sandboxName,
     gpuEnabled: !!gpu,
+    agent: agent ? agent.name : null,
   });
 
   // DNS proxy — run a forwarder in the sandbox pod so the isolated

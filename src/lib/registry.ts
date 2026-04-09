@@ -14,6 +14,7 @@ export interface SandboxEntry {
   provider?: string | null;
   gpuEnabled?: boolean;
   policies?: string[];
+  agent?: string | null;
 }
 
 export interface SandboxRegistry {
@@ -156,6 +157,7 @@ export function registerSandbox(entry: SandboxEntry): void {
       provider: entry.provider || null,
       gpuEnabled: entry.gpuEnabled || false,
       policies: entry.policies || [],
+      agent: entry.agent || null,
     };
     if (!data.defaultSandbox) {
       data.defaultSandbox = entry.name;

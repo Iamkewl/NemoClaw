@@ -214,7 +214,7 @@ function executeSandboxCommand(sandboxName, command) {
  * Returns true (running), false (stopped), or null (cannot determine).
  */
 function isSandboxGatewayRunning(sandboxName) {
-  const agent = agentRuntime.getSessionAgent();
+  const agent = agentRuntime.getSessionAgent(sandboxName);
   const probeUrl = agentRuntime.getHealthProbeUrl(agent);
   const result = executeSandboxCommand(
     sandboxName,
@@ -232,7 +232,7 @@ function isSandboxGatewayRunning(sandboxName) {
  * in the background. Returns true on success.
  */
 function recoverSandboxProcesses(sandboxName) {
-  const agent = agentRuntime.getSessionAgent();
+  const agent = agentRuntime.getSessionAgent(sandboxName);
   const agentScript = agentRuntime.buildRecoveryScript(agent);
 
   // The recovery script runs as the sandbox user (non-root). This matches
@@ -294,7 +294,7 @@ function checkAndRecoverSandboxProcesses(sandboxName, { quiet = false } = {}) {
   }
 
   // Gateway not running — attempt recovery
-  const _recoveryAgent = agentRuntime.getSessionAgent();
+  const _recoveryAgent = agentRuntime.getSessionAgent(sandboxName);
   if (!quiet) {
     console.log("");
     console.log(
@@ -347,6 +347,7 @@ function buildRecoveredSandboxEntry(name, metadata = {}) {
         ? metadata.policyPresets
         : [],
     nimContainer: metadata.nimContainer || null,
+    agent: metadata.agent || null,
   };
 }
 
@@ -1124,7 +1125,7 @@ async function sandboxStatus(sandboxName) {
   if (lookup.state === "present") {
     const processCheck = checkAndRecoverSandboxProcesses(sandboxName, { quiet: true });
     if (processCheck.checked) {
-      const _sa = agentRuntime.getSessionAgent();
+      const _sa = agentRuntime.getSessionAgent(sandboxName);
       const _saName = agentRuntime.getAgentDisplayName(_sa);
       if (processCheck.wasRunning) {
         console.log(`    ${_saName}: ${G}running${R}`);
