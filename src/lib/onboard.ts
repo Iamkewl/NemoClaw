@@ -2281,7 +2281,8 @@ async function createSandbox(
   step(6, 8, "Creating sandbox");
 
   const sandboxName = sandboxNameOverride || (await promptValidatedSandboxName());
-  const chatUiUrl = process.env.CHAT_UI_URL || `http://127.0.0.1:${CONTROL_UI_PORT}`;
+  const effectivePort = agent ? agent.forwardPort : CONTROL_UI_PORT;
+  const chatUiUrl = process.env.CHAT_UI_URL || `http://127.0.0.1:${effectivePort}`;
 
   // Check whether messaging providers will be needed — this must happen before
   // the sandbox reuse decision so we can detect stale sandboxes that were created
@@ -4028,7 +4029,8 @@ const { resolveDashboardForwardTarget, buildControlUiUrls } = dashboard;
 
 function ensureDashboardForward(sandboxName, chatUiUrl = `http://127.0.0.1:${CONTROL_UI_PORT}`) {
   const forwardTarget = resolveDashboardForwardTarget(chatUiUrl);
-  runOpenshell(["forward", "stop", String(CONTROL_UI_PORT)], { ignoreError: true });
+  const portToStop = String(new URL(chatUiUrl).port || CONTROL_UI_PORT);
+  runOpenshell(["forward", "stop", portToStop], { ignoreError: true });
   // Use stdio "ignore" to prevent spawnSync from waiting on inherited pipe fds.
   // The --background flag forks a child that inherits stdout/stderr; if those are
   // pipes, spawnSync blocks until the background process exits (never).

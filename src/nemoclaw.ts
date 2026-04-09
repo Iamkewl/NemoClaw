@@ -122,7 +122,9 @@ function captureOpenshell(args, opts = {}) {
 }
 
 function cleanupGatewayAfterLastSandbox() {
+  // Stop all known dashboard forward ports (OpenClaw default + agent ports)
   runOpenshell(["forward", "stop", DASHBOARD_FORWARD_PORT], { ignoreError: true });
+  runOpenshell(["forward", "stop", "8642"], { ignoreError: true });
   runOpenshell(["gateway", "destroy", "-g", NEMOCLAW_GATEWAY_NAME], { ignoreError: true });
   run(
     `docker volume ls -q --filter "name=openshell-cluster-${NEMOCLAW_GATEWAY_NAME}" | grep . && docker volume ls -q --filter "name=openshell-cluster-${NEMOCLAW_GATEWAY_NAME}" | xargs docker volume rm || true`,
@@ -269,11 +271,14 @@ function recoverSandboxProcesses(sandboxName) {
 }
 
 /**
- * Re-establish the dashboard port forward (18789) to the sandbox.
+ * Re-establish the dashboard port forward to the sandbox.
+ * Uses the agent's forward port when a non-OpenClaw agent is active.
  */
 function ensureSandboxPortForward(sandboxName) {
-  runOpenshell(["forward", "stop", DASHBOARD_FORWARD_PORT], { ignoreError: true });
-  runOpenshell(["forward", "start", "--background", DASHBOARD_FORWARD_PORT, sandboxName], {
+  const agent = agentRuntime.getSessionAgent(sandboxName);
+  const port = agent ? String(agent.forwardPort) : DASHBOARD_FORWARD_PORT;
+  runOpenshell(["forward", "stop", port], { ignoreError: true });
+  runOpenshell(["forward", "start", "--background", port, sandboxName], {
     ignoreError: true,
   });
 }
