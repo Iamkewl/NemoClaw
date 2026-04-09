@@ -218,7 +218,7 @@ function isSandboxGatewayRunning(sandboxName) {
   const probeUrl = agentRuntime.getHealthProbeUrl(agent);
   const result = executeSandboxCommand(
     sandboxName,
-    `curl -sf --max-time 3 ${probeUrl} > /dev/null 2>&1 && echo RUNNING || echo STOPPED`,
+    `curl -sf --max-time 3 ${shellQuote(probeUrl)} > /dev/null 2>&1 && echo RUNNING || echo STOPPED`,
   );
   if (!result) return null;
   if (result.stdout === "RUNNING") return true;

@@ -10,6 +10,7 @@
 import * as registry from "./registry";
 import * as onboardSession from "./onboard-session";
 import { loadAgent, type AgentDefinition } from "./agent-defs";
+import { shellQuote } from "./runner";
 
 /**
  * Resolve the agent for a sandbox. Checks the per-sandbox registry first
@@ -63,10 +64,10 @@ export function buildRecoveryScript(agent: AgentDefinition | null): string | nul
   return [
     "[ -f ~/.bashrc ] && . ~/.bashrc 2>/dev/null;",
     hermesHome,
-    `if curl -sf --max-time 3 ${probeUrl} > /dev/null 2>&1; then echo ALREADY_RUNNING; exit 0; fi;`,
+    `if curl -sf --max-time 3 ${shellQuote(probeUrl)} > /dev/null 2>&1; then echo ALREADY_RUNNING; exit 0; fi;`,
     "rm -f /tmp/gateway.log;",
     "touch /tmp/gateway.log; chmod 600 /tmp/gateway.log;",
-    `AGENT_BIN="$(command -v ${(binaryPath as string).split("/").pop()})";`,
+    `AGENT_BIN=${shellQuote(binaryPath as string)}; if [ ! -x "$AGENT_BIN" ]; then AGENT_BIN="$(command -v ${shellQuote((binaryPath as string).split("/").pop()!)})"; fi;`,
     'if [ -z "$AGENT_BIN" ]; then echo AGENT_MISSING; exit 1; fi;',
     `nohup ${gatewayCmd} > /tmp/gateway.log 2>&1 &`,
     "GPID=$!; sleep 2;",
