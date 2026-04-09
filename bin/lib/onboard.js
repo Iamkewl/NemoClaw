@@ -108,7 +108,7 @@ const BUILD_ENDPOINT_URL = "https://integrate.api.nvidia.com/v1";
 const OPENAI_ENDPOINT_URL = "https://api.openai.com/v1";
 const ANTHROPIC_ENDPOINT_URL = "https://api.anthropic.com";
 const GEMINI_ENDPOINT_URL = "https://generativelanguage.googleapis.com/v1beta/openai/";
-const BRAVE_SEARCH_HELP_URL = "https://api-dashboard.search.brave.com/app/keys";
+const BRAVE_SEARCH_HELP_URL = "https://brave.com/search/api/";
 
 const REMOTE_PROVIDER_CONFIG = {
   build: {
