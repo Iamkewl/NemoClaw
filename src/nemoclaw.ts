@@ -1220,8 +1220,11 @@ function cleanupSandboxServices(sandboxName) {
 async function sandboxDestroy(sandboxName, args = []) {
   const skipConfirm = args.includes("--yes") || args.includes("--force");
   if (!skipConfirm) {
+    console.log(`  ${YW}Destroy sandbox '${sandboxName}'?${R}`);
+    console.log("  This will permanently delete the sandbox and all workspace files inside it.");
+    console.log("  This cannot be undone.");
     const answer = await askPrompt(
-      `  ${YW}Destroy sandbox '${sandboxName}'?${R} This cannot be undone. [y/N]: `,
+      "  Type 'y' or 'yes' to confirm, or press Enter to cancel [y/N]: ",
     );
     if (answer.trim().toLowerCase() !== "y" && answer.trim().toLowerCase() !== "yes") {
       console.log("  Cancelled.");
