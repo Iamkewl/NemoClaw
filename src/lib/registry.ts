@@ -15,6 +15,7 @@ export interface SandboxEntry {
   gpuEnabled?: boolean;
   policies?: string[];
   agent?: string | null;
+  dangerouslySkipPermissions?: boolean;
 }
 
 export interface SandboxRegistry {
