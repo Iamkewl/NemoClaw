@@ -168,13 +168,13 @@ const { setupNim } = require(${onboardPath});
     const payload = JSON.parse(result.stdout.trim());
     assert.equal(payload.result.provider, "nvidia-prod");
     assert.equal(payload.result.model, "nvidia/nemotron-3-super-120b-a12b");
-    assert.equal(payload.result.preferredInferenceApi, "openai-responses");
+    assert.equal(payload.result.preferredInferenceApi, "openai-completions");
     assert.equal(payload.promptCalls, 2);
     assert.match(payload.messages[0], /Choose \[/);
     assert.match(payload.messages[1], /Choose model \[1\]/);
     assert.ok(payload.lines.some((line) => line.includes("Detected local inference option")));
     assert.ok(payload.lines.some((line) => line.includes("Cloud models:")));
-    assert.ok(payload.lines.some((line) => line.includes("Responses API available")));
+    assert.ok(payload.lines.some((line) => line.includes("Chat Completions API available")));
   });
 
   it("does not label NVIDIA Endpoints as recommended in the provider list", () => {
@@ -341,7 +341,7 @@ const { setupNim } = require(${onboardPath});
     const payload = JSON.parse(result.stdout.trim());
     assert.equal(payload.result.provider, "nvidia-prod");
     assert.equal(payload.result.model, "custom/provider-model");
-    assert.equal(payload.result.preferredInferenceApi, "openai-responses");
+    assert.equal(payload.result.preferredInferenceApi, "openai-completions");
     assert.match(payload.messages[1], /Choose model \[1\]/);
     assert.match(payload.messages[2], /NVIDIA Endpoints model id:/);
     assert.ok(payload.lines.some((line) => line.includes("Other...")));
@@ -1316,7 +1316,10 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 if echo "$url" | grep -q '/responses$' && echo "$body_arg" | grep -q 'good-model'; then
-  body='{"id":"resp_123"}'
+  body='{"id":"resp_123","output":[{"type":"message","content":[{"type":"output_text","text":"OK"}]}]}'
+  status="200"
+elif echo "$url" | grep -q '/chat/completions$' && echo "$body_arg" | grep -q 'good-model'; then
+  body='{"id":"chatcmpl-123","choices":[{"message":{"content":"OK"}}]}'
   status="200"
 fi
 printf '%s' "$body" > "$outfile"
@@ -1375,7 +1378,7 @@ const { setupNim } = require(${onboardPath});
     const payload = JSON.parse(result.stdout.trim());
     assert.equal(payload.result.provider, "compatible-endpoint");
     assert.equal(payload.result.model, "good-model");
-    assert.equal(payload.result.preferredInferenceApi, "openai-responses");
+    assert.equal(payload.result.preferredInferenceApi, "openai-completions");
     assert.ok(
       payload.lines.some((line) =>
         line.includes("Other OpenAI-compatible endpoint endpoint validation failed"),
@@ -1396,6 +1399,100 @@ const { setupNim } = require(${onboardPath});
       2,
     );
     assert.equal(payload.messages.filter((message) => /Choose \[/.test(message)).length, 1);
+  });
+
+  it("falls back to chat completions for custom OpenAI-compatible endpoints when /responses lacks tool calls", () => {
+    const repoRoot = path.join(import.meta.dirname, "..");
+    const tmpDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "nemoclaw-onboard-custom-openai-responses-fallback-"),
+    );
+    const fakeBin = path.join(tmpDir, "bin");
+    const scriptPath = path.join(tmpDir, "custom-openai-responses-fallback-check.js");
+    const onboardPath = JSON.stringify(path.join(repoRoot, "bin", "lib", "onboard.js"));
+    const credentialsPath = JSON.stringify(path.join(repoRoot, "bin", "lib", "credentials.js"));
+    const runnerPath = JSON.stringify(path.join(repoRoot, "bin", "lib", "runner.js"));
+
+    fs.mkdirSync(fakeBin, { recursive: true });
+    fs.writeFileSync(
+      path.join(fakeBin, "curl"),
+      `#!/usr/bin/env bash
+body='{"error":{"message":"bad request"}}'
+status="400"
+outfile=""
+body_arg=""
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -o) outfile="$2"; shift 2 ;;
+    -d) body_arg="$2"; shift 2 ;;
+    *) url="$1"; shift ;;
+  esac
+done
+if echo "$url" | grep -q '/responses$'; then
+  body='{"id":"resp_123","output":[{"type":"message","content":[{"type":"output_text","text":"OK"}]}]}'
+  status="200"
+elif echo "$url" | grep -q '/chat/completions$'; then
+  body='{"id":"chatcmpl-123","choices":[{"message":{"content":"OK"}}]}'
+  status="200"
+fi
+printf '%s' "$body" > "$outfile"
+printf '%s' "$status"
+`,
+      { mode: 0o755 },
+    );
+
+    const script = String.raw`
+const credentials = require(${credentialsPath});
+const runner = require(${runnerPath});
+
+const answers = ["3", "https://proxy.example.com/v1", "custom-model"];
+const messages = [];
+
+credentials.prompt = async (message) => {
+  messages.push(message);
+  return answers.shift() || "";
+};
+runner.runCapture = () => "";
+
+const { setupNim } = require(${onboardPath});
+
+(async () => {
+  process.env.COMPATIBLE_API_KEY = "proxy-key";
+  const originalLog = console.log;
+  const originalError = console.error;
+  const lines = [];
+  console.log = (...args) => lines.push(args.join(" "));
+  console.error = (...args) => lines.push(args.join(" "));
+  try {
+    const result = await setupNim(null);
+    originalLog(JSON.stringify({ result, messages, lines }));
+  } finally {
+    console.log = originalLog;
+    console.error = originalError;
+  }
+})().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
+`;
+    fs.writeFileSync(scriptPath, script);
+
+    const result = spawnSync(process.execPath, [scriptPath], {
+      cwd: repoRoot,
+      encoding: "utf-8",
+      env: {
+        ...process.env,
+        HOME: tmpDir,
+        PATH: `${fakeBin}:${process.env.PATH || ""}`,
+      },
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    const payload = JSON.parse(result.stdout.trim());
+    assert.equal(payload.result.provider, "compatible-endpoint");
+    assert.equal(payload.result.model, "custom-model");
+    assert.equal(payload.result.preferredInferenceApi, "openai-completions");
+    assert.ok(payload.lines.some((line) => line.includes("Chat Completions API available")));
   });
 
   it("returns to provider selection instead of exiting on blank custom endpoint input", () => {
@@ -1807,6 +1904,15 @@ done
 if echo "$url" | grep -q 'generativelanguage.googleapis.com' && echo "$url" | grep -q '/responses$'; then
   body='{"id":"ok"}'
   status="200"
+elif echo "$url" | grep -q 'generativelanguage.googleapis.com' && echo "$url" | grep -q '/chat/completions$'; then
+  body='{"id":"chatcmpl-123","choices":[{"message":{"content":"OK"}}]}'
+  status="200"
+elif echo "$url" | grep -q 'integrate.api.nvidia.com' && echo "$url" | grep -q '/responses$'; then
+  body='{"id":"resp_123"}'
+  status="200"
+elif echo "$url" | grep -q 'integrate.api.nvidia.com' && echo "$url" | grep -q '/chat/completions$'; then
+  body='{"id":"chatcmpl-123","choices":[{"message":{"content":"OK"}}]}'
+  status="200"
 fi
 printf '%s' "$body" > "$outfile"
 printf '%s' "$status"
@@ -1818,13 +1924,14 @@ printf '%s' "$status"
 const credentials = require(${credentialsPath});
 const runner = require(${runnerPath});
 
-const answers = ["2", "", "6", ""];
+const answers = ["2", "", "back", "1", ""];
 const messages = [];
 
 credentials.prompt = async (message) => {
   messages.push(message);
   return answers.shift() || "";
 };
+credentials.ensureApiKey = async () => { process.env.NVIDIA_API_KEY = "nvapi-good"; };
 runner.runCapture = () => "";
 
 const { setupNim } = require(${onboardPath});
@@ -1863,8 +1970,8 @@ const { setupNim } = require(${onboardPath});
 
     assert.equal(result.status, 0, result.stderr);
     const payload = JSON.parse(result.stdout.trim());
-    assert.equal(payload.result.provider, "gemini-api");
-    assert.equal(payload.result.preferredInferenceApi, "openai-responses");
+    assert.equal(payload.result.provider, "nvidia-prod");
+    assert.equal(payload.result.preferredInferenceApi, "openai-completions");
     assert.ok(payload.lines.some((line) => line.includes("OpenAI endpoint validation failed")));
     assert.ok(payload.lines.some((line) => line.includes("Please choose a provider/model again")));
     assert.equal(payload.messages.filter((message) => /Choose \[/.test(message)).length, 2);
@@ -2064,7 +2171,7 @@ const { setupNim } = require(${onboardPath});
     assert.equal(result.status, 0, result.stderr);
     const payload = JSON.parse(result.stdout.trim());
     assert.equal(payload.result.provider, "nvidia-prod");
-    assert.equal(payload.result.preferredInferenceApi, "openai-responses");
+    assert.equal(payload.result.preferredInferenceApi, "openai-completions");
     assert.equal(payload.key, "nvapi-good");
     assert.ok(payload.lines.some((line) => line.includes("NVIDIA Endpoints authorization failed")));
     assert.equal(payload.messages.filter((message) => /Choose \[/.test(message)).length, 1);
@@ -2305,7 +2412,7 @@ const { setupNim } = require(${onboardPath});
     const payload = JSON.parse(result.stdout.trim());
     assert.equal(payload.result.provider, "gemini-api");
     assert.equal(payload.result.model, "gemini-2.5-flash");
-    assert.equal(payload.result.preferredInferenceApi, "openai-responses");
+    assert.equal(payload.result.preferredInferenceApi, "openai-completions");
     assert.equal(payload.key, "gemini-good");
     assert.ok(payload.lines.some((line) => line.includes("Google Gemini authorization failed")));
     assert.ok(
@@ -2386,7 +2493,7 @@ const { setupNim } = require(${onboardPath});
     assert.equal(payload.result.provider, "compatible-endpoint");
     assert.equal(payload.result.model, "custom-model");
     assert.equal(payload.result.endpointUrl, "https://proxy.example.com/v1");
-    assert.equal(payload.result.preferredInferenceApi, "openai-responses");
+    assert.equal(payload.result.preferredInferenceApi, "openai-completions");
     assert.equal(payload.key, "proxy-good");
     assert.ok(
       payload.lines.some((line) =>

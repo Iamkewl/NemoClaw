@@ -4,6 +4,7 @@
 export interface OnboardCommandOptions {
   nonInteractive: boolean;
   resume: boolean;
+  recreateSandbox: boolean;
   fromDockerfile: string | null;
   acceptThirdPartySoftware: boolean;
 }
@@ -19,15 +20,16 @@ export interface RunOnboardCommandDeps {
   exit?: (code: number) => never;
 }
 
-const ONBOARD_BASE_ARGS = ["--non-interactive", "--resume"];
+const ONBOARD_BASE_ARGS = ["--non-interactive", "--resume", "--recreate-sandbox"];
 
 function onboardUsageLines(noticeAcceptFlag: string): string[] {
   return [
-    `  Usage: nemoclaw onboard [--non-interactive] [--resume] [--from <Dockerfile>] [${noticeAcceptFlag}]`,
+    `  Usage: nemoclaw onboard [--non-interactive] [--resume] [--recreate-sandbox] [--from <Dockerfile>] [${noticeAcceptFlag}]`,
     "",
     "  Options:",
     "    --non-interactive                  Run without prompts",
     "    --resume                           Resume a saved onboarding session",
+    "    --recreate-sandbox                 Destroy and recreate the sandbox",
     "    --from <Dockerfile>                Build the sandbox image from a Dockerfile",
     `    ${noticeAcceptFlag}  Accept the third-party software notice for non-interactive runs`,
   ];
@@ -70,6 +72,7 @@ export function parseOnboardArgs(
   return {
     nonInteractive: args.includes("--non-interactive"),
     resume: args.includes("--resume"),
+    recreateSandbox: args.includes("--recreate-sandbox"),
     fromDockerfile,
     acceptThirdPartySoftware:
       args.includes(noticeAcceptFlag) || String(deps.env[noticeAcceptEnv] || "") === "1",

@@ -1061,13 +1061,27 @@ function sandboxLogs(sandboxName, follow) {
   exitWithSpawnResult(result);
 }
 
-async function sandboxPolicyAdd(sandboxName) {
+async function sandboxPolicyAdd(sandboxName, args = []) {
+  const dryRun = args.includes("--dry-run");
   const allPresets = policies.listPresets();
   const applied = policies.getAppliedPresets(sandboxName);
 
   const { prompt: askPrompt } = require("./lib/credentials");
   const answer = await policies.selectFromList(allPresets, { applied });
   if (!answer) return;
+
+  const presetContent = policies.loadPreset(answer);
+  if (!presetContent) return;
+
+  const endpoints = policies.getPresetEndpoints(presetContent);
+  if (endpoints.length > 0) {
+    console.log(`  Endpoints that would be opened: ${endpoints.join(", ")}`);
+  }
+
+  if (dryRun) {
+    console.log("  --dry-run: no changes applied.");
+    return;
+  }
 
   const confirm = await askPrompt(`  Apply '${answer}' to sandbox '${sandboxName}'? [Y/n]: `);
   if (confirm.toLowerCase() === "n") return;
@@ -1088,6 +1102,22 @@ function sandboxPolicyList(sandboxName) {
   console.log("");
 }
 
+function cleanupSandboxServices(sandboxName) {
+  // Stop host services (cloudflared) and clean up PID directory.
+  const { stopAll } = require("./lib/services");
+  stopAll({ sandboxName });
+  try {
+    fs.rmSync(`/tmp/nemoclaw-services-${sandboxName}`, { recursive: true, force: true });
+  } catch {
+    // PID directory may not exist — ignore.
+  }
+
+  // Delete messaging providers created during onboard.
+  for (const suffix of ["telegram-bridge", "discord-bridge", "slack-bridge"]) {
+    runOpenshell(["provider", "delete", `${sandboxName}-${suffix}`], { ignoreError: true });
+  }
+}
+
 async function sandboxDestroy(sandboxName, args = []) {
   const skipConfirm = args.includes("--yes") || args.includes("--force");
   if (!skipConfirm) {
@@ -1105,6 +1135,8 @@ async function sandboxDestroy(sandboxName, args = []) {
   const sb = registry.getSandbox(sandboxName);
   if (sb && sb.nimContainer) nim.stopNimContainerByName(sb.nimContainer);
   else nim.stopNimContainer(sandboxName);
+
+  cleanupSandboxServices(sandboxName);
 
   console.log(`  Deleting sandbox '${sandboxName}'...`);
   const deleteResult = runOpenshell(["sandbox", "delete", sandboxName], {
@@ -1163,7 +1195,7 @@ function help() {
     nemoclaw <name> destroy          Stop NIM + delete sandbox ${D}(--yes to skip prompt)${R}
 
   ${G}Policy Presets:${R}
-    nemoclaw <name> policy-add       Add a network or filesystem policy preset
+    nemoclaw <name> policy-add       Add a network or filesystem policy preset ${D}(--dry-run to preview)${R}
     nemoclaw <name> policy-list      List presets ${D}(● = applied)${R}
 
   ${G}Compatibility Commands:${R}
@@ -1269,7 +1301,7 @@ const [cmd, ...args] = process.argv.slice(2);
         sandboxLogs(cmd, actionArgs.includes("--follow"));
         break;
       case "policy-add":
-        await sandboxPolicyAdd(cmd);
+        await sandboxPolicyAdd(cmd, actionArgs);
         break;
       case "policy-list":
         sandboxPolicyList(cmd);

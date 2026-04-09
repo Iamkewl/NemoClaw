@@ -43,6 +43,11 @@ describe("credential prompts", () => {
       fs.readFileSync(path.join(home, ".nemoclaw", "credentials.json"), "utf-8"),
     );
     expect(saved).toEqual({ TEST_API_KEY: "nvapi-saved-key" });
+
+    const dirMode = fs.statSync(path.join(home, ".nemoclaw")).mode & 0o777;
+    const fileMode = fs.statSync(path.join(home, ".nemoclaw", "credentials.json")).mode & 0o777;
+    expect(dirMode).toBe(0o700);
+    expect(fileMode).toBe(0o600);
   });
 
   it("prefers environment credentials and ignores malformed credential files", async () => {
