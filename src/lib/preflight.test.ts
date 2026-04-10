@@ -13,18 +13,6 @@ import {
   planHostRemediation,
 } from "../../dist/lib/preflight";
 
-async function canBindLoopback(): Promise<boolean> {
-  const net = require("node:net");
-  const srv = net.createServer();
-
-  return await new Promise((resolve) => {
-    srv.once("error", () => resolve(false));
-    srv.listen(0, "127.0.0.1", () => {
-      srv.close(() => resolve(true));
-    });
-  });
-}
-
 describe("checkPortAvailable", () => {
   it("falls through to the probe when lsof output is empty", async () => {
     let probedPort: number | null = null;
@@ -147,9 +135,6 @@ describe("probePortAvailability", () => {
   });
 
   it("detects EADDRINUSE on an occupied port (real net probe)", async () => {
-    if (!(await canBindLoopback())) {
-      return;
-    }
     // Start a server on a random port, then probe it
     const net = require("node:net");
     const srv = net.createServer();
@@ -186,9 +171,6 @@ describe("checkPortAvailable — real probe fallback", () => {
   });
 
   it("detects a real occupied port", async () => {
-    if (!(await canBindLoopback())) {
-      return;
-    }
     const net = require("node:net");
     const srv = net.createServer();
     await new Promise<void>((resolve) => srv.listen(0, "127.0.0.1", resolve));
