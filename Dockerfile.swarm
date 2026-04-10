@@ -37,3 +37,7 @@ COPY --from=hermes /sandbox/.hermes-data/ /sandbox/.hermes-data/
 
 # Fix ownership after COPY (COPY resets to root)
 RUN chown -R sandbox:sandbox /sandbox/.hermes /sandbox/.hermes-data
+
+# ── Swarm bus sidecar ─────────────────────────────────────────
+COPY scripts/nemoclaw-swarm-bus.py /usr/local/lib/nemoclaw/nemoclaw-swarm-bus.py
+RUN chmod +x /usr/local/lib/nemoclaw/nemoclaw-swarm-bus.py

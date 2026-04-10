@@ -28,6 +28,8 @@ const {
 } = require("./swarm-manifest");
 const { createInstanceMessagingProviders, parseMessagingFlags } = require("./swarm-messaging");
 const { mergeAgentPolicyAdditions } = require("./policies");
+const { SWARM_BUS_LOG } = require("./swarm-manifest");
+const path = require("path");
 
 export interface AddAgentOptions {
   sandboxName: string;
@@ -203,6 +205,63 @@ export async function addAgent(opts: AddAgentOptions): Promise<AgentInstance | n
   // ── Step 9: Merge agent-specific policy additions ──────────────
   mergeAgentPolicyAdditions(sandboxName, agentDef);
 
+  // ── Step 9b: Start swarm bus (first time only) ─────────────────
+  // The bus starts when transitioning from 1→2 agents. It stays running
+  // for subsequent agents. Check by probing the bus health endpoint.
+  const busHealthCheck = sandboxExecCapture(
+    sandboxName,
+    `curl -sf http://127.0.0.1:${SWARM_BUS_PORT}/health 2>/dev/null | head -c 50`,
+  );
+  if (!busHealthCheck || !busHealthCheck.includes("ok")) {
+    // Bus not running — deploy and start it
+    // First, check if the script is baked into the image
+    const busScriptPath = "/usr/local/lib/nemoclaw/nemoclaw-swarm-bus.py";
+    const busScriptCheck = sandboxExecCapture(
+      sandboxName,
+      `test -f ${busScriptPath} && echo found`,
+    );
+    if (!busScriptCheck || !busScriptCheck.includes("found")) {
+      // Script not in image — inject it from the host
+      const hostScript = path.resolve(__dirname, "../../scripts/nemoclaw-swarm-bus.py");
+      if (fs.existsSync(hostScript)) {
+        const scriptContent = fs.readFileSync(hostScript, "utf8");
+        const encoded = Buffer.from(scriptContent).toString("base64");
+        sandboxExec(sandboxName, [
+          `mkdir -p /usr/local/lib/nemoclaw`,
+          `printf '%s' '${encoded}' | base64 -d > ${busScriptPath}`,
+          `chmod +x ${busScriptPath}`,
+        ].join(" && "));
+      }
+    }
+
+    // Start the bus as a background process
+    sandboxExec(sandboxName, [
+      `mkdir -p /sandbox/.nemoclaw/swarm`,
+      `nohup python3 ${busScriptPath} --port ${SWARM_BUS_PORT} --log-file ${SWARM_BUS_LOG} > /tmp/swarm-bus.log 2>&1 &`,
+    ].join(" && "));
+
+    // Wait briefly for the bus to start
+    let busReady = false;
+    for (let i = 0; i < 5; i++) {
+      sandboxExec(sandboxName, "sleep 1", { suppressOutput: true });
+      const check = sandboxExecCapture(
+        sandboxName,
+        `curl -sf http://127.0.0.1:${SWARM_BUS_PORT}/health 2>/dev/null | head -c 50`,
+      );
+      if (check && check.includes("ok")) {
+        busReady = true;
+        break;
+      }
+    }
+    if (busReady) {
+      console.log(`  Swarm bus started on port ${SWARM_BUS_PORT}`);
+    } else {
+      console.log(`  Warning: swarm bus may not have started (check /tmp/swarm-bus.log in sandbox)`);
+    }
+  } else {
+    console.log(`  Swarm bus already running on port ${SWARM_BUS_PORT}`);
+  }
+
   // ── Step 10: Start support processes (Hermes-specific) ─────────
   if (agentType === "hermes") {
     // Hermes needs a decode proxy and socat for port binding
@@ -304,6 +363,7 @@ export async function addAgent(opts: AddAgentOptions): Promise<AgentInstance | n
     console.log(`    Messaging: ${messagingChannels.join(", ")}`);
   }
   console.log(`    Health: ${healthy ? "passing" : "pending"}`);
+  console.log(`    Swarm bus: http://127.0.0.1:${SWARM_BUS_PORT} (inside sandbox)`);
   console.log("");
 
   return instance;
