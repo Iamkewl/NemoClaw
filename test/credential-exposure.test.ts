@@ -10,10 +10,21 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 
-const ONBOARD_JS = path.join(import.meta.dirname, "..", "src", "lib", "onboard.ts");
+const ONBOARD_TS = path.join(import.meta.dirname, "..", "src", "lib", "onboard.ts");
+const ONBOARD_PROVIDER_TS = path.join(
+  import.meta.dirname,
+  "..",
+  "src",
+  "lib",
+  "onboard-provider.ts",
+);
 const RUNNER_TS = path.join(import.meta.dirname, "..", "nemoclaw", "src", "blueprint", "runner.ts");
+
+function readOnboardSources() {
+  return `${fs.readFileSync(ONBOARD_TS, "utf-8")}\n${fs.readFileSync(ONBOARD_PROVIDER_TS, "utf-8")}`;
+}
 
 // Matches --credential followed by a value containing "=" (i.e. KEY=VALUE).
 // Catches quoted KEY=VALUE patterns in JS and Python f-string interpolation.
@@ -26,7 +37,7 @@ const TS_EXPOSURE_RE = /--credential.*=.*\$\{/;
 
 describe("credential exposure in process arguments", () => {
   it("onboard.js must not pass KEY=VALUE to --credential", () => {
-    const src = fs.readFileSync(ONBOARD_JS, "utf-8");
+    const src = readOnboardSources();
     const lines = src.split("\n");
 
     const violations = lines.filter(
@@ -54,7 +65,7 @@ describe("credential exposure in process arguments", () => {
   });
 
   it("onboard.js --credential flags pass env var names only", () => {
-    const src = fs.readFileSync(ONBOARD_JS, "utf-8");
+    const src = readOnboardSources();
 
     expect(src).toMatch(/"--credential", credentialEnv/);
     expect(src).not.toMatch(/"--credential",\s*["'][A-Z_]+=/);
@@ -62,7 +73,7 @@ describe("credential exposure in process arguments", () => {
   });
 
   it("onboard.js does not embed sandbox secrets in the sandbox create command line", () => {
-    const src = fs.readFileSync(ONBOARD_JS, "utf-8");
+    const src = readOnboardSources();
 
     // sandboxEnv must be built with a blocklist that strips all credential env vars.
     // The blocklist derives provider keys from REMOTE_PROVIDER_CONFIG and adds
@@ -84,7 +95,7 @@ describe("credential exposure in process arguments", () => {
   });
 
   it("onboard curl probes use explicit timeouts", () => {
-    const onboardSrc = fs.readFileSync(ONBOARD_JS, "utf-8");
+    const onboardSrc = readOnboardSources();
     const probeSrc = fs.readFileSync(
       path.join(import.meta.dirname, "..", "src", "lib", "http-probe.ts"),
       "utf-8",

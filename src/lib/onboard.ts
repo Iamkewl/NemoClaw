@@ -75,6 +75,8 @@ const validationRecovery = require("./validation-recovery");
 const webSearch = require("./web-search");
 const { createOnboardDashboardHelpers } = require("./onboard-dashboard");
 const { createOnboardPolicyHelpers } = require("./onboard-policies");
+const { createOnboardMessagingHelpers } = require("./onboard-messaging");
+const { createOnboardProviderHelpers } = require("./onboard-provider");
 const { createOnboardProviderValidationHelpers } = require("./onboard-provider-validation");
 const { createOnboardWebSearchHelpers } = require("./onboard-web-search");
 
@@ -622,107 +624,35 @@ async function promptValidationRecovery(label, recovery, credentialEnv = null, h
  * @param {string|null} baseUrl - Optional base URL for API-compatible endpoints.
  * @returns {string[]} Argument array for runOpenshell().
  */
-function buildProviderArgs(action, name, type, credentialEnv, baseUrl) {
-  const args =
-    action === "create"
-      ? ["provider", "create", "--name", name, "--type", type, "--credential", credentialEnv]
-      : ["provider", "update", name, "--credential", credentialEnv];
-  if (baseUrl && type === "openai") {
-    args.push("--config", `OPENAI_BASE_URL=${baseUrl}`);
-  } else if (baseUrl && type === "anthropic") {
-    args.push("--config", `ANTHROPIC_BASE_URL=${baseUrl}`);
-  }
-  return args;
-}
-
-/**
- * Create or update an OpenShell provider in the gateway.
- *
- * Attempts `openshell provider create`; if that fails (provider already exists),
- * falls back to `openshell provider update` with the same credential.
- * @param {string} name - Provider name (e.g. "discord-bridge", "inference").
- * @param {string} type - Provider type ("openai", "anthropic", "generic").
- * @param {string} credentialEnv - Environment variable name for the credential.
- * @param {string|null} baseUrl - Optional base URL for the provider endpoint.
- * @param {Record<string, string>} [env={}] - Environment variables for the openshell command.
- * @returns {{ ok: boolean, status?: number, message?: string }}
- */
-function upsertProvider(name, type, credentialEnv, baseUrl, env = {}) {
-  const createArgs = buildProviderArgs("create", name, type, credentialEnv, baseUrl);
-  const runOpts = { ignoreError: true, env, stdio: ["ignore", "pipe", "pipe"] };
-  const createResult = runOpenshell(createArgs, runOpts);
-  if (createResult.status === 0) {
-    return { ok: true };
-  }
-
-  const updateArgs = buildProviderArgs("update", name, type, credentialEnv, baseUrl);
-  const updateResult = runOpenshell(updateArgs, runOpts);
-  if (updateResult.status !== 0) {
-    const output =
-      compactText(`${createResult.stderr || ""} ${updateResult.stderr || ""}`) ||
-      compactText(`${createResult.stdout || ""} ${updateResult.stdout || ""}`) ||
-      `Failed to create or update provider '${name}'.`;
-    return {
-      ok: false,
-      status: updateResult.status || createResult.status || 1,
-      message: output,
-    };
-  }
-  return { ok: true };
-}
-
-/**
- * Upsert all messaging providers that have tokens configured.
- * Returns the list of provider names that were successfully created/updated.
- * Exits the process if any upsert fails.
- * @param {Array<{name: string, envKey: string, token: string|null}>} tokenDefs
- * @returns {string[]} Provider names that were upserted.
- */
-function upsertMessagingProviders(tokenDefs) {
-  const providers = [];
-  for (const { name, envKey, token } of tokenDefs) {
-    if (!token) continue;
-    const result = upsertProvider(name, "generic", envKey, null, { [envKey]: token });
-    if (!result.ok) {
-      console.error(`\n  ✗ Failed to create messaging provider '${name}': ${result.message}`);
-      process.exit(1);
-    }
-    providers.push(name);
-  }
-  return providers;
-}
-
-/**
- * Check whether an OpenShell provider exists in the gateway.
- *
- * Queries the gateway-level provider registry via `openshell provider get`.
- * Does NOT verify that the provider is attached to a specific sandbox —
- * OpenShell CLI does not currently expose a sandbox-scoped provider query.
- * @param {string} name - Provider name to look up (e.g. "discord-bridge").
- * @returns {boolean} True if the provider exists in the gateway.
- */
-function providerExistsInGateway(name) {
-  const result = runOpenshell(["provider", "get", name], {
-    ignoreError: true,
-    stdio: ["ignore", "ignore", "ignore"],
-  });
-  return result.status === 0;
-}
-
-function verifyInferenceRoute(_provider, _model) {
-  const output = runCaptureOpenshell(["inference", "get"], { ignoreError: true });
-  if (!output || /Gateway inference:\s*[\r\n]+\s*Not configured/i.test(output)) {
-    console.error("  OpenShell inference route was not configured.");
-    process.exit(1);
-  }
-}
-
-function isInferenceRouteReady(provider, model) {
-  const live = parseGatewayInference(
-    runCaptureOpenshell(["inference", "get"], { ignoreError: true }),
-  );
-  return Boolean(live && live.provider === provider && live.model === model);
-}
+const {
+  buildProviderArgs,
+  isInferenceRouteReady,
+  providerExistsInGateway,
+  setupInference,
+  upsertMessagingProviders,
+  upsertProvider,
+  verifyInferenceRoute,
+} = createOnboardProviderHelpers({
+  GATEWAY_NAME,
+  LOCAL_INFERENCE_TIMEOUT_SECS,
+  REMOTE_PROVIDER_CONFIG,
+  classifyApplyFailure,
+  compactText,
+  getLocalProviderBaseUrl,
+  getOllamaWarmupCommand,
+  hydrateCredentialEnv,
+  isNonInteractive,
+  parseGatewayInference,
+  promptValidationRecovery,
+  registry,
+  run,
+  runCapture,
+  runCaptureOpenshell,
+  runOpenshell,
+  step,
+  validateLocalProvider,
+  validateOllamaModel,
+});
 
 function sandboxExistsInGateway(sandboxName) {
   const output = runCaptureOpenshell(["sandbox", "get", sandboxName], { ignoreError: true });
@@ -2868,387 +2798,17 @@ async function setupNim(gpu) {
 
 // ── Step 4: Inference provider ───────────────────────────────────
 
-// eslint-disable-next-line complexity
-async function setupInference(
-  sandboxName,
-  model,
-  provider,
-  endpointUrl = null,
-  credentialEnv = null,
-) {
-  step(4, 8, "Setting up inference provider");
-  runOpenshell(["gateway", "select", GATEWAY_NAME], { ignoreError: true });
-
-  if (
-    provider === "nvidia-prod" ||
-    provider === "nvidia-nim" ||
-    provider === "openai-api" ||
-    provider === "anthropic-prod" ||
-    provider === "compatible-anthropic-endpoint" ||
-    provider === "gemini-api" ||
-    provider === "compatible-endpoint"
-  ) {
-    const config =
-      provider === "nvidia-nim"
-        ? REMOTE_PROVIDER_CONFIG.build
-        : Object.values(REMOTE_PROVIDER_CONFIG).find((entry) => entry.providerName === provider);
-    while (true) {
-      const resolvedCredentialEnv = credentialEnv || (config && config.credentialEnv);
-      const resolvedEndpointUrl = endpointUrl || (config && config.endpointUrl);
-      const credentialValue = hydrateCredentialEnv(resolvedCredentialEnv);
-      const env =
-        resolvedCredentialEnv && credentialValue
-          ? { [resolvedCredentialEnv]: credentialValue }
-          : {};
-      const providerResult = upsertProvider(
-        provider,
-        config.providerType,
-        resolvedCredentialEnv,
-        resolvedEndpointUrl,
-        env,
-      );
-      if (!providerResult.ok) {
-        console.error(`  ${providerResult.message}`);
-        if (isNonInteractive()) {
-          process.exit(providerResult.status || 1);
-        }
-        const retry = await promptValidationRecovery(
-          config.label,
-          classifyApplyFailure(providerResult.message),
-          resolvedCredentialEnv,
-          config.helpUrl,
-        );
-        if (retry === "credential" || retry === "retry") {
-          continue;
-        }
-        if (retry === "selection" || retry === "model") {
-          return { retry: "selection" };
-        }
-        process.exit(providerResult.status || 1);
-      }
-      const args = ["inference", "set"];
-      if (config.skipVerify) {
-        args.push("--no-verify");
-      }
-      args.push("--provider", provider, "--model", model);
-      const applyResult = runOpenshell(args, { ignoreError: true });
-      if (applyResult.status === 0) {
-        break;
-      }
-      const message =
-        compactText(`${applyResult.stderr || ""} ${applyResult.stdout || ""}`) ||
-        `Failed to configure inference provider '${provider}'.`;
-      console.error(`  ${message}`);
-      if (isNonInteractive()) {
-        process.exit(applyResult.status || 1);
-      }
-      const retry = await promptValidationRecovery(
-        config.label,
-        classifyApplyFailure(message),
-        resolvedCredentialEnv,
-        config.helpUrl,
-      );
-      if (retry === "credential" || retry === "retry") {
-        continue;
-      }
-      if (retry === "selection" || retry === "model") {
-        return { retry: "selection" };
-      }
-      process.exit(applyResult.status || 1);
-    }
-  } else if (provider === "vllm-local") {
-    const validation = validateLocalProvider(provider, runCapture);
-    if (!validation.ok) {
-      console.error(`  ${validation.message}`);
-      process.exit(1);
-    }
-    const baseUrl = getLocalProviderBaseUrl(provider);
-    const providerResult = upsertProvider("vllm-local", "openai", "OPENAI_API_KEY", baseUrl, {
-      OPENAI_API_KEY: "dummy",
-    });
-    if (!providerResult.ok) {
-      console.error(`  ${providerResult.message}`);
-      process.exit(providerResult.status || 1);
-    }
-    runOpenshell([
-      "inference",
-      "set",
-      "--no-verify",
-      "--provider",
-      "vllm-local",
-      "--model",
-      model,
-      "--timeout",
-      String(LOCAL_INFERENCE_TIMEOUT_SECS),
-    ]);
-  } else if (provider === "ollama-local") {
-    const validation = validateLocalProvider(provider, runCapture);
-    if (!validation.ok) {
-      console.error(`  ${validation.message}`);
-      console.error("  On macOS, local inference also depends on OpenShell host routing support.");
-      process.exit(1);
-    }
-    const baseUrl = getLocalProviderBaseUrl(provider);
-    const providerResult = upsertProvider("ollama-local", "openai", "OPENAI_API_KEY", baseUrl, {
-      OPENAI_API_KEY: "ollama",
-    });
-    if (!providerResult.ok) {
-      console.error(`  ${providerResult.message}`);
-      process.exit(providerResult.status || 1);
-    }
-    runOpenshell([
-      "inference",
-      "set",
-      "--no-verify",
-      "--provider",
-      "ollama-local",
-      "--model",
-      model,
-      "--timeout",
-      String(LOCAL_INFERENCE_TIMEOUT_SECS),
-    ]);
-    console.log(`  Priming Ollama model: ${model}`);
-    run(getOllamaWarmupCommand(model), { ignoreError: true });
-    const probe = validateOllamaModel(model, runCapture);
-    if (!probe.ok) {
-      console.error(`  ${probe.message}`);
-      process.exit(1);
-    }
-  }
-
-  verifyInferenceRoute(provider, model);
-  registry.updateSandbox(sandboxName, { model, provider });
-  console.log(`  ✓ Inference route set: ${provider} / ${model}`);
-  return { ok: true };
-}
-
 // ── Step 6: Messaging channels ───────────────────────────────────
 
-const MESSAGING_CHANNELS = [
-  {
-    name: "telegram",
-    envKey: "TELEGRAM_BOT_TOKEN",
-    description: "Telegram bot messaging",
-    help: "Create a bot via @BotFather on Telegram, then copy the token.",
-    label: "Telegram Bot Token",
-    userIdEnvKey: "TELEGRAM_ALLOWED_IDS",
-    userIdHelp: "Send /start to @userinfobot on Telegram to get your numeric user ID.",
-    userIdLabel: "Telegram User ID (for DM access)",
-    allowIdsMode: "dm",
-  },
-  {
-    name: "discord",
-    envKey: "DISCORD_BOT_TOKEN",
-    description: "Discord bot messaging",
-    help: "Discord Developer Portal → Applications → Bot → Reset/Copy Token.",
-    label: "Discord Bot Token",
-    serverIdEnvKey: "DISCORD_SERVER_ID",
-    serverIdHelp:
-      "Enable Developer Mode in Discord, then right-click your server and copy the Server ID.",
-    serverIdLabel: "Discord Server ID (for guild workspace access)",
-    requireMentionEnvKey: "DISCORD_REQUIRE_MENTION",
-    requireMentionHelp:
-      "Choose whether the bot should reply only when @mentioned or to all messages in this server.",
-    userIdEnvKey: "DISCORD_USER_ID",
-    userIdHelp:
-      "Optional: enable Developer Mode in Discord, then right-click your user/avatar and copy the User ID. Leave blank to allow any member of the configured server to message the bot.",
-    userIdLabel: "Discord User ID (optional guild allowlist)",
-    allowIdsMode: "guild",
-  },
-  {
-    name: "slack",
-    envKey: "SLACK_BOT_TOKEN",
-    description: "Slack bot messaging",
-    help: "Slack API → Your Apps → OAuth & Permissions → Bot User OAuth Token (xoxb-...).",
-    label: "Slack Bot Token",
-  },
-];
-
-async function setupMessagingChannels() {
-  step(5, 8, "Messaging channels");
-
-  const getMessagingToken = (envKey) =>
-    getCredential(envKey) || normalizeCredentialValue(process.env[envKey]) || null;
-
-  // Non-interactive: skip prompt, tokens come from env/credentials
-  if (isNonInteractive() || process.env.NEMOCLAW_NON_INTERACTIVE === "1") {
-    const found = MESSAGING_CHANNELS.filter((c) => getMessagingToken(c.envKey)).map((c) => c.name);
-    if (found.length > 0) {
-      note(`  [non-interactive] Messaging tokens detected: ${found.join(", ")}`);
-    } else {
-      note("  [non-interactive] No messaging tokens configured. Skipping.");
-    }
-    return found;
-  }
-
-  // Single-keypress toggle selector — pre-select channels that already have tokens.
-  // Press 1/2/3 to instantly toggle a channel; press Enter to continue.
-  const enabled = new Set(
-    MESSAGING_CHANNELS.filter((c) => getMessagingToken(c.envKey)).map((c) => c.name),
-  );
-
-  const output = process.stderr;
-  // Lines above the prompt: 1 blank + 1 header + N channels + 1 blank = N + 3
-  const linesAbovePrompt = MESSAGING_CHANNELS.length + 3;
-  let firstDraw = true;
-  const showList = () => {
-    if (!firstDraw) {
-      // Cursor is at end of prompt line. Move to column 0, go up, clear to end of screen.
-      output.write(`\r\x1b[${linesAbovePrompt}A\x1b[J`);
-    }
-    firstDraw = false;
-    output.write("\n");
-    output.write("  Available messaging channels:\n");
-    MESSAGING_CHANNELS.forEach((ch, i) => {
-      const marker = enabled.has(ch.name) ? "●" : "○";
-      const status = getMessagingToken(ch.envKey) ? " (configured)" : "";
-      output.write(`    [${i + 1}] ${marker} ${ch.name} — ${ch.description}${status}\n`);
-    });
-    output.write("\n");
-    output.write("  Press 1-3 to toggle, Enter when done: ");
-  };
-
-  showList();
-
-  await new Promise((resolve, reject) => {
-    const input = process.stdin;
-    let rawModeEnabled = false;
-    let finished = false;
-
-    function cleanup() {
-      input.removeListener("data", onData);
-      if (rawModeEnabled && typeof input.setRawMode === "function") {
-        input.setRawMode(false);
-      }
-    }
-
-    function finish() {
-      if (finished) return;
-      finished = true;
-      cleanup();
-      output.write("\n");
-      resolve();
-    }
-
-    function onData(chunk) {
-      const text = chunk.toString("utf8");
-      for (let i = 0; i < text.length; i += 1) {
-        const ch = text[i];
-        if (ch === "\u0003") {
-          cleanup();
-          reject(Object.assign(new Error("Prompt interrupted"), { code: "SIGINT" }));
-          process.kill(process.pid, "SIGINT");
-          return;
-        }
-        if (ch === "\r" || ch === "\n") {
-          finish();
-          return;
-        }
-        const num = parseInt(ch, 10);
-        if (num >= 1 && num <= MESSAGING_CHANNELS.length) {
-          const channel = MESSAGING_CHANNELS[num - 1];
-          if (enabled.has(channel.name)) {
-            enabled.delete(channel.name);
-          } else {
-            enabled.add(channel.name);
-          }
-          showList();
-        }
-      }
-    }
-
-    input.setEncoding("utf8");
-    if (typeof input.resume === "function") {
-      input.resume();
-    }
-    if (typeof input.setRawMode === "function") {
-      input.setRawMode(true);
-      rawModeEnabled = true;
-    }
-    input.on("data", onData);
-  });
-
-  const selected = Array.from(enabled);
-  if (selected.length === 0) {
-    console.log("  Skipping messaging channels.");
-    return [];
-  }
-
-  // For each selected channel, prompt for token if not already set
-  for (const name of selected) {
-    const ch = MESSAGING_CHANNELS.find((c) => c.name === name);
-    if (!ch) {
-      console.log(`  Unknown channel: ${name}`);
-      continue;
-    }
-    if (getMessagingToken(ch.envKey)) {
-      console.log(`  ✓ ${ch.name} — already configured`);
-    } else {
-      console.log("");
-      console.log(`  ${ch.help}`);
-      const token = normalizeCredentialValue(await prompt(`  ${ch.label}: `, { secret: true }));
-      if (token) {
-        saveCredential(ch.envKey, token);
-        process.env[ch.envKey] = token;
-        console.log(`  ✓ ${ch.name} token saved`);
-      } else {
-        console.log(`  Skipped ${ch.name} (no token entered)`);
-        continue;
-      }
-    }
-    if (ch.serverIdEnvKey) {
-      const existingServerIds = process.env[ch.serverIdEnvKey] || "";
-      if (existingServerIds) {
-        console.log(`  ✓ ${ch.name} — server ID already set: ${existingServerIds}`);
-      } else {
-        console.log(`  ${ch.serverIdHelp}`);
-        const serverId = (await prompt(`  ${ch.serverIdLabel}: `)).trim();
-        if (serverId) {
-          process.env[ch.serverIdEnvKey] = serverId;
-          console.log(`  ✓ ${ch.name} server ID saved`);
-        } else {
-          console.log(`  Skipped ${ch.name} server ID (guild channels stay disabled)`);
-        }
-      }
-    }
-    if (ch.requireMentionEnvKey && ch.serverIdEnvKey && process.env[ch.serverIdEnvKey]) {
-      const existingRequireMention = process.env[ch.requireMentionEnvKey];
-      if (existingRequireMention === "0" || existingRequireMention === "1") {
-        const mode = existingRequireMention === "0" ? "all messages" : "@mentions only";
-        console.log(`  ✓ ${ch.name} — reply mode already set: ${mode}`);
-      } else {
-        console.log(`  ${ch.requireMentionHelp}`);
-        const answer = (await prompt("  Reply only when @mentioned? [Y/n]: ")).trim().toLowerCase();
-        process.env[ch.requireMentionEnvKey] = answer === "n" || answer === "no" ? "0" : "1";
-        const mode =
-          process.env[ch.requireMentionEnvKey] === "0" ? "all messages" : "@mentions only";
-        console.log(`  ✓ ${ch.name} reply mode saved: ${mode}`);
-      }
-    }
-    // Prompt for user/sender ID when the channel supports allowlisting
-    if (ch.userIdEnvKey && (!ch.serverIdEnvKey || process.env[ch.serverIdEnvKey])) {
-      const existingIds = process.env[ch.userIdEnvKey] || "";
-      if (existingIds) {
-        console.log(`  ✓ ${ch.name} — allowed IDs already set: ${existingIds}`);
-      } else {
-        console.log(`  ${ch.userIdHelp}`);
-        const userId = (await prompt(`  ${ch.userIdLabel}: `)).trim();
-        if (userId) {
-          process.env[ch.userIdEnvKey] = userId;
-          console.log(`  ✓ ${ch.name} user ID saved`);
-        } else {
-          const skippedReason =
-            ch.allowIdsMode === "guild"
-              ? "any member in the configured server can message the bot"
-              : "bot will require manual pairing";
-          console.log(`  Skipped ${ch.name} user ID (${skippedReason})`);
-        }
-      }
-    }
-  }
-  console.log("");
-  return selected;
-}
+const { MESSAGING_CHANNELS, setupMessagingChannels } = createOnboardMessagingHelpers({
+  getCredential,
+  isNonInteractive,
+  normalizeCredentialValue,
+  note,
+  prompt,
+  saveCredential,
+  step,
+});
 
 const {
   _setupPolicies,
