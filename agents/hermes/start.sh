@@ -294,6 +294,7 @@ export NO_PROXY=\"$_NO_PROXY_VAL\"
 export http_proxy=\"$_PROXY_URL\"
 export https_proxy=\"$_PROXY_URL\"
 export no_proxy=\"$_NO_PROXY_VAL\"
+export HERMES_HOME=\"${HERMES_WRITABLE}\"
 ${_PROXY_MARKER_END}"
 
 if [ "$(id -u)" -eq 0 ]; then
