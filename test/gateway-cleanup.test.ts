@@ -8,20 +8,21 @@
 //
 // See: https://github.com/NVIDIA/NemoClaw/issues/17
 
-import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
+import { describe, expect, it } from "vitest";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
+const ONBOARD_GATEWAY = path.join(ROOT, "src/lib/onboard-gateway.ts");
 
 describe("gateway cleanup: Docker volumes removed on failure (#17)", () => {
   it("onboard.js: destroyGateway() removes Docker volumes", () => {
-    const content = fs.readFileSync(path.join(ROOT, "src/lib/onboard.ts"), "utf-8");
+    const content = fs.readFileSync(ONBOARD_GATEWAY, "utf-8");
     expect(content.includes("docker volume") && content.includes("openshell-cluster")).toBe(true);
   });
 
   it("onboard.js: volume cleanup runs on gateway start failure", () => {
-    const content = fs.readFileSync(path.join(ROOT, "src/lib/onboard.ts"), "utf-8");
+    const content = fs.readFileSync(ONBOARD_GATEWAY, "utf-8");
     const startGwBlock = content.match(/async function startGatewayWithOptions[\s\S]*?^}/m);
     expect(startGwBlock).toBeTruthy();
 

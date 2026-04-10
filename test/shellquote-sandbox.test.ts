@@ -5,11 +5,11 @@
 // Verify shellQuote is applied to sandboxName in shell commands
 import fs from "fs";
 import path from "path";
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 
 describe("sandboxName shell quoting in onboard.js", () => {
   const src = fs.readFileSync(
-    path.join(import.meta.dirname, "..", "src", "lib", "onboard.ts"),
+    path.join(import.meta.dirname, "..", "src", "lib", "onboard-sandbox.ts"),
     "utf-8",
   );
 
@@ -24,8 +24,6 @@ describe("sandboxName shell quoting in onboard.js", () => {
   });
 
   it("does not have unquoted sandboxName in runCapture or run calls", () => {
-    // Match run()/runCapture() calls that span multiple lines and contain
-    // template literals, so multiline invocations are not missed.
     const callPattern = /\b(run|runCapture)\s*\(\s*`([^`]*)`/g;
     const violations = [];
     let match;

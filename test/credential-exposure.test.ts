@@ -20,10 +20,13 @@ const ONBOARD_PROVIDER_TS = path.join(
   "lib",
   "onboard-provider.ts",
 );
+const ONBOARD_SANDBOX_TS = path.join(import.meta.dirname, "..", "src", "lib", "onboard-sandbox.ts");
 const RUNNER_TS = path.join(import.meta.dirname, "..", "nemoclaw", "src", "blueprint", "runner.ts");
 
 function readOnboardSources() {
-  return `${fs.readFileSync(ONBOARD_TS, "utf-8")}\n${fs.readFileSync(ONBOARD_PROVIDER_TS, "utf-8")}`;
+  return [ONBOARD_TS, ONBOARD_PROVIDER_TS, ONBOARD_SANDBOX_TS]
+    .map((filePath) => fs.readFileSync(filePath, "utf-8"))
+    .join("\n");
 }
 
 // Matches --credential followed by a value containing "=" (i.e. KEY=VALUE).

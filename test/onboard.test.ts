@@ -4205,7 +4205,7 @@ const { createSandbox } = require(${onboardPath});
 
   it("re-prompts on invalid sandbox names instead of exiting in interactive mode", () => {
     const source = fs.readFileSync(
-      path.join(import.meta.dirname, "..", "src", "lib", "onboard.ts"),
+      path.join(import.meta.dirname, "..", "src", "lib", "onboard-sandbox.ts"),
       "utf-8",
     );
     // Extract the promptValidatedSandboxName function body
