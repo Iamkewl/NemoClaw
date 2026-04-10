@@ -10,7 +10,7 @@ import os from "os";
 import path from "path";
 import { spawnSync } from "child_process";
 
-import { ROOT, run, shellQuote } from "./runner";
+import { ROOT, run, runCapture, shellQuote } from "./runner";
 import { loadAgent, resolveAgentName, type AgentDefinition } from "./agent-defs";
 import { getProviderSelectionConfig } from "./inference-config";
 import * as onboardSession from "./onboard-session";
@@ -58,10 +58,39 @@ export function createAgentSandbox(agent: AgentDefinition): {
     const inspectResult = run(`docker image inspect ${shellQuote(baseImageTag)} >/dev/null 2>&1`, {
       ignoreError: true,
     });
-    if (inspectResult.status !== 0) {
-      console.log(`  Building ${agent.displayName} base image (first time only)...`);
+    let needsBuild = inspectResult.status !== 0;
+
+    // Detect stale cached base image by comparing the Dockerfile.base content
+    // hash against a label baked into the image at build time.
+    if (!needsBuild) {
+      const crypto = require("crypto");
+      const currentHash = crypto
+        .createHash("sha256")
+        .update(fs.readFileSync(baseDockerfile, "utf8"))
+        .digest("hex")
+        .slice(0, 16);
+      const cachedHash = runCapture(
+        `docker inspect --format '{{index .Config.Labels "nemoclaw.dockerfile.hash"}}' ${shellQuote(baseImageTag)}`,
+        { ignoreError: true },
+      );
+      if (cachedHash !== currentHash) {
+        console.log(`  Base image is stale (dockerfile changed) — rebuilding...`);
+        needsBuild = true;
+      }
+    }
+
+    if (needsBuild) {
+      const crypto = require("crypto");
+      const buildHash = crypto
+        .createHash("sha256")
+        .update(fs.readFileSync(baseDockerfile, "utf8"))
+        .digest("hex")
+        .slice(0, 16);
+      console.log(`  Building ${agent.displayName} base image...`);
       run(
-        `docker build -f ${shellQuote(baseDockerfile)} -t ${shellQuote(baseImageTag)} ${shellQuote(ROOT)}`,
+        `docker build -f ${shellQuote(baseDockerfile)} ` +
+          `--label nemoclaw.dockerfile.hash=${buildHash} ` +
+          `-t ${shellQuote(baseImageTag)} ${shellQuote(ROOT)}`,
         { stdio: ["ignore", "inherit", "inherit"] },
       );
       console.log(`  \u2713 Base image built: ${baseImageTag}`);
