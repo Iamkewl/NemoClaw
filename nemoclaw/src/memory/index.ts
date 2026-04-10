@@ -246,3 +246,10 @@ export function getMemoryStats(
     oversizedTopics,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Re-exports for provider API
+// ---------------------------------------------------------------------------
+
+export type { MemoryProvider } from "./provider.js";
+export { TypedMemoryProvider } from "./typed-provider.js";
