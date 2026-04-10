@@ -227,12 +227,6 @@ This software automatically retrieves, accesses or interacts with external mater
 ```
 
 ```{toctree}
-:hidden:
-
-Home <self>
-```
-
-```{toctree}
 :caption: About NemoClaw
 :hidden:
 
