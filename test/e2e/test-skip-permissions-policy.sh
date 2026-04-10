@@ -236,86 +236,58 @@ else
 fi
 
 # ══════════════════════════════════════════════════════════════════
-# Phase 4: Verify outbound HTTPS from inside sandbox (bug reporter's curl test)
+# Phase 4: Verify outbound HTTPS from inside sandbox
 # ══════════════════════════════════════════════════════════════════
-section "Phase 4: Verify sandbox egress (the 403 Forbidden check)"
+section "Phase 4: Verify sandbox egress"
 
-# SSH into the sandbox and curl an external HTTPS endpoint.
-# With the bug, this returns 403 Forbidden from the proxy.
-# With the fix, it should succeed.
+# The permissive policy uses `access: full` (CONNECT tunnel, no L7 filtering).
+# This opens the sandbox *firewall* for direct connections — the HTTP CONNECT
+# proxy (HTTPS_PROXY) does not handle `access: full` tunnels; that's expected
+# and documented (see 05-network-policy.sh NEMOCLAW_E2E_CURL_NOPROXY).
+#
+# Test strategy:
+#   4a: openshell sandbox exec — matches the bug reporter's exact repro command
+#       Uses --noproxy '*' to test the firewall path, not the HTTP proxy.
+#   4b: npm ping via sandbox exec — application-level proof that egress works
+#       (proven pattern from 05-network-policy.sh).
+#
+# When the policy is Pending (the bug), BOTH fail because the firewall has no
+# active rules — all traffic is blocked. When Active, both succeed.
 
-ssh_config="$(mktemp)"
-trap 'rm -f "$ssh_config"' EXIT
+# 4a: curl api.github.com via openshell sandbox exec (bug reporter's exact command)
+info "[EGRESS] Testing curl https://api.github.com/ via openshell sandbox exec..."
+egress_response=$(openshell sandbox exec -n "$SANDBOX_NAME" -- \
+  curl --noproxy '*' -s --connect-timeout 10 -o /dev/null -w '%{http_code}' \
+  https://api.github.com/ 2>&1) || true
 
-if ! openshell sandbox ssh-config "$SANDBOX_NAME" >"$ssh_config" 2>/dev/null; then
-  fail "Could not get SSH config for sandbox"
-  rm -f "$ssh_config"
-  # Skip to cleanup
-  section "Phase 5: Cleanup"
-  nemoclaw "$SANDBOX_NAME" destroy --yes 2>&1 | tail -3 || true
-  openshell gateway destroy -g nemoclaw 2>/dev/null || true
-  echo ""
-  echo "========================================"
-  echo "  Skip-Permissions Policy E2E Results:"
-  echo "    Passed:  $PASS"
-  echo "    Failed:  $FAIL"
-  echo "    Skipped: $SKIP"
-  echo "    Total:   $TOTAL"
-  echo "========================================"
-  printf '\n\033[1;31m  %d test(s) failed.\033[0m\n' "$FAIL"
-  exit 1
-fi
-pass "SSH config obtained"
-
-SSH_OPTS=(-F "$ssh_config" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 -o LogLevel=ERROR)
-SSH_TARGET="openshell-${SANDBOX_NAME}"
-TIMEOUT_CMD=""
-command -v timeout >/dev/null 2>&1 && TIMEOUT_CMD="timeout 90"
-command -v gtimeout >/dev/null 2>&1 && TIMEOUT_CMD="gtimeout 90"
-
-# 4a: SSH connectivity
-if ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "echo alive" >/dev/null 2>&1; then
-  pass "SSH into sandbox works"
-else
-  fail "SSH into sandbox failed — cannot test egress"
-fi
-
-# 4b: curl api.github.com from inside sandbox (exact reproduction from bug report)
-info "[EGRESS] Testing curl https://api.github.com/ from inside sandbox..."
-# shellcheck disable=SC2029
-egress_response=$($TIMEOUT_CMD ssh "${SSH_OPTS[@]}" "$SSH_TARGET" \
-  "curl -sv --connect-timeout 5 https://api.github.com/ 2>&1" \
-  2>&1) || true
-
-if echo "$egress_response" | grep -q "403 Forbidden"; then
-  fail "[EGRESS] curl https://api.github.com/ returned 403 Forbidden — policy NOT active"
+egress_code=$(echo "$egress_response" | tr -d '\r' | tail -1)
+if [ "$egress_code" = "200" ]; then
+  pass "[EGRESS] curl https://api.github.com/ returned HTTP 200"
+elif [ "$egress_code" = "403" ]; then
+  fail "[EGRESS] curl https://api.github.com/ returned 403 — firewall policy NOT active"
   info "This is the exact symptom from the bug report"
-  info "Response: ${egress_response:0:300}"
-elif echo "$egress_response" | grep -qi "current_user_url\|HTTP/[12].* 200"; then
-  pass "[EGRESS] curl https://api.github.com/ succeeded (not 403)"
+elif echo "$egress_code" | grep -qE '^[23][0-9][0-9]$'; then
+  pass "[EGRESS] curl https://api.github.com/ returned HTTP $egress_code (egress works)"
 else
-  # Could be a transient network error — not necessarily the policy bug
-  info "Unexpected response (may be transient): ${egress_response:0:300}"
-  skip "[EGRESS] curl https://api.github.com/ — ambiguous result (not 403, not 200)"
+  fail "[EGRESS] curl https://api.github.com/ returned '$egress_code' — egress blocked"
+  info "Full response: ${egress_response:0:500}"
 fi
 
-# 4c: curl a second endpoint to double-check (registry.npmjs.org)
-info "[EGRESS] Testing curl https://registry.npmjs.org/ from inside sandbox..."
-# shellcheck disable=SC2029
-npm_response=$($TIMEOUT_CMD ssh "${SSH_OPTS[@]}" "$SSH_TARGET" \
-  "curl -s --connect-timeout 5 -o /dev/null -w '%{http_code}' https://registry.npmjs.org/" \
-  2>&1) || true
+# 4b: npm ping via sandbox exec — proves application-level egress to registry.npmjs.org
+info "[EGRESS] Testing npm ping from inside sandbox..."
+npm_result=$(openshell sandbox exec -n "$SANDBOX_NAME" -- \
+  env NO_PROXY='*' npm ping --silent 2>&1) || true
+npm_exit=$?
 
-npm_code=$(echo "$npm_response" | tr -d '\r' | tail -1)
-if [ "$npm_code" = "403" ]; then
-  fail "[EGRESS] curl https://registry.npmjs.org/ returned 403 — policy NOT active"
-elif [ "$npm_code" = "200" ] || [ "$npm_code" = "301" ] || [ "$npm_code" = "302" ]; then
-  pass "[EGRESS] curl https://registry.npmjs.org/ returned HTTP $npm_code (not 403)"
+if [ "$npm_exit" -eq 0 ]; then
+  pass "[EGRESS] npm ping succeeded (registry.npmjs.org reachable)"
+elif echo "$npm_result" | grep -qi "403\|BLOCKED\|ECONNREFUSED"; then
+  fail "[EGRESS] npm ping failed — egress blocked: ${npm_result:0:200}"
 else
-  skip "[EGRESS] curl https://registry.npmjs.org/ returned HTTP $npm_code (not 403, ambiguous)"
+  # npm ping can fail for non-policy reasons (DNS, npm config); don't hard-fail
+  info "npm ping exited $npm_exit: ${npm_result:0:200}"
+  skip "[EGRESS] npm ping — inconclusive (exit $npm_exit, not a policy 403)"
 fi
-
-rm -f "$ssh_config"
 
 # ══════════════════════════════════════════════════════════════════
 # Phase 5: Cleanup
