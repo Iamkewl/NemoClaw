@@ -113,6 +113,12 @@ wait_for_apt_lock() {
 # ══════════════════════════════════════════════════════════════════════
 # 1. System packages
 # ══════════════════════════════════════════════════════════════════════
+# Kill unattended-upgrades immediately — it grabs the apt lock on boot
+# and can block for 60-120s. Irrelevant on an ephemeral CI VM.
+sudo systemctl stop unattended-upgrades 2>/dev/null || true
+sudo systemctl disable unattended-upgrades 2>/dev/null || true
+sudo killall -9 unattended-upgr 2>/dev/null || true
+
 info "Installing system packages..."
 wait_for_apt_lock
 retry 3 10 "apt-get update" sudo apt-get update -qq
