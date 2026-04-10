@@ -560,6 +560,58 @@ function parseLsofLines(output: string): PortProbeResult | null {
   return { ok: false, process: proc, pid, reason: "" };
 }
 
+function formatLsofConflictReason(prefix: string, conflict: PortProbeResult, port: number): string {
+  return `${prefix} reports ${conflict.process} (PID ${conflict.pid}) listening on port ${port}`;
+}
+
+function getInjectedOrPrimaryLsofOutput(port: number, opts: CheckPortOpts): string | undefined {
+  if (typeof opts.lsofOutput === "string") {
+    return opts.lsofOutput;
+  }
+  const hasLsof = runCapture("command -v lsof", { ignoreError: true });
+  if (!hasLsof) {
+    return undefined;
+  }
+  return runCapture(`lsof -i :${port} -sTCP:LISTEN -P -n 2>/dev/null`, {
+    ignoreError: true,
+  });
+}
+
+function getSudoLsofOutput(port: number, opts: CheckPortOpts): string | undefined {
+  if (opts.lsofOutput) {
+    return undefined;
+  }
+  return runCapture(`sudo -n lsof -i :${port} -sTCP:LISTEN -P -n 2>/dev/null`, {
+    ignoreError: true,
+  });
+}
+
+function resolveLsofConflict(port: number, opts: CheckPortOpts): PortProbeResult | null {
+  const lsofOut = getInjectedOrPrimaryLsofOutput(port, opts);
+  if (typeof lsofOut === "string") {
+    const conflict = parseLsofLines(lsofOut);
+    if (conflict) {
+      return {
+        ...conflict,
+        reason: formatLsofConflictReason("lsof", conflict, port),
+      };
+    }
+  }
+
+  const sudoOut = getSudoLsofOutput(port, opts);
+  if (typeof sudoOut === "string") {
+    const sudoConflict = parseLsofLines(sudoOut);
+    if (sudoConflict) {
+      return {
+        ...sudoConflict,
+        reason: formatLsofConflictReason("sudo lsof", sudoConflict, port),
+      };
+    }
+  }
+
+  return null;
+}
+
 /**
  * Check whether a TCP port is available for listening.
  *
@@ -574,53 +626,13 @@ export async function checkPortAvailable(
   const p = port ?? 18789;
   const o = opts || {};
 
-  // ── lsof path ──────────────────────────────────────────────────
   if (!o.skipLsof) {
-    let lsofOut: string | undefined;
-    if (typeof o.lsofOutput === "string") {
-      lsofOut = o.lsofOutput;
-    } else {
-      const hasLsof = runCapture("command -v lsof", { ignoreError: true });
-      if (hasLsof) {
-        lsofOut = runCapture(`lsof -i :${p} -sTCP:LISTEN -P -n 2>/dev/null`, {
-          ignoreError: true,
-        });
-      }
-    }
-
-    if (typeof lsofOut === "string") {
-      const conflict = parseLsofLines(lsofOut);
-      if (conflict) {
-        return {
-          ...conflict,
-          reason: `lsof reports ${conflict.process} (PID ${conflict.pid}) listening on port ${p}`,
-        };
-      }
-
-      // Empty lsof output is not authoritative — non-root users cannot
-      // see listeners owned by root (e.g., docker-proxy, leftover gateway).
-      // Retry with sudo -n to identify root-owned listeners before falling
-      // through to the net probe (which can only detect EADDRINUSE but not
-      // the owning process).
-      if (!o.lsofOutput) {
-        const sudoOut: string | undefined = runCapture(
-          `sudo -n lsof -i :${p} -sTCP:LISTEN -P -n 2>/dev/null`,
-          { ignoreError: true },
-        );
-        if (typeof sudoOut === "string") {
-          const sudoConflict = parseLsofLines(sudoOut);
-          if (sudoConflict) {
-            return {
-              ...sudoConflict,
-              reason: `sudo lsof reports ${sudoConflict.process} (PID ${sudoConflict.pid}) listening on port ${p}`,
-            };
-          }
-        }
-      }
+    const conflict = resolveLsofConflict(p, o);
+    if (conflict) {
+      return conflict;
     }
   }
 
-  // ── net probe fallback ─────────────────────────────────────────
   return probePortAvailability(p, o);
 }
 
@@ -680,28 +692,24 @@ function hasSwapfile(): boolean {
   }
 }
 
-function getExistingSwapResult(mem: MemoryInfo): SwapResult | null {
-  if (!hasSwapfile()) {
-    return null;
+function readProcSwaps(): string {
+  try {
+    return fs.readFileSync("/proc/swaps", "utf-8");
+  } catch {
+    return "";
   }
+}
 
-  const swaps = (() => {
-    try {
-      return fs.readFileSync("/proc/swaps", "utf-8");
-    } catch {
-      return "";
-    }
-  })();
+function buildExistingSwapfileResult(mem: MemoryInfo): SwapResult {
+  return {
+    ok: true,
+    totalMB: mem.totalMB,
+    swapCreated: false,
+    reason: "/swapfile already exists",
+  };
+}
 
-  if (swaps.includes("/swapfile")) {
-    return {
-      ok: true,
-      totalMB: mem.totalMB,
-      swapCreated: false,
-      reason: "/swapfile already exists",
-    };
-  }
-
+function activateExistingSwapfile(mem: MemoryInfo): SwapResult {
   try {
     runCapture("sudo swapon /swapfile", { ignoreError: false });
     return { ok: true, totalMB: mem.totalMB + 4096, swapCreated: true };
@@ -712,6 +720,18 @@ function getExistingSwapResult(mem: MemoryInfo): SwapResult | null {
       reason: `found orphaned /swapfile but could not activate it: ${message}`,
     };
   }
+}
+
+function getExistingSwapResult(mem: MemoryInfo): SwapResult | null {
+  if (!hasSwapfile()) {
+    return null;
+  }
+
+  const swaps = readProcSwaps();
+  if (swaps.includes("/swapfile")) {
+    return buildExistingSwapfileResult(mem);
+  }
+  return activateExistingSwapfile(mem);
 }
 
 function checkSwapDiskSpace(): SwapResult | null {
@@ -790,8 +810,8 @@ function createSwapfile(mem: MemoryInfo): SwapResult {
  * create a 4 GB swap file via sudo to prevent OOM kills during sandbox
  * image push.
  */
-export function ensureSwap(minTotalMB?: number, opts: EnsureSwapOpts = {}): SwapResult {
-  const o = {
+function resolveEnsureSwapOptions(opts: EnsureSwapOpts = {}) {
+  return {
     platform: process.platform as NodeJS.Platform,
     memoryInfo: null as MemoryInfo | null,
     swapfileExists: fs.existsSync("/swapfile"),
@@ -800,6 +820,36 @@ export function ensureSwap(minTotalMB?: number, opts: EnsureSwapOpts = {}): Swap
     getMemoryInfoImpl: getMemoryInfo,
     ...opts,
   };
+}
+
+function handleDryRunSwapDecision(mem: MemoryInfo, swapfileExists: boolean): SwapResult {
+  if (swapfileExists) {
+    return {
+      ok: true,
+      totalMB: mem.totalMB,
+      swapCreated: false,
+      reason: "/swapfile already exists",
+    };
+  }
+  return { ok: true, totalMB: mem.totalMB, swapCreated: true };
+}
+
+function maybeCreateSwapfile(mem: MemoryInfo): SwapResult {
+  const existingSwapResult = getExistingSwapResult(mem);
+  if (existingSwapResult) {
+    return existingSwapResult;
+  }
+
+  const diskSpaceResult = checkSwapDiskSpace();
+  if (diskSpaceResult) {
+    return diskSpaceResult;
+  }
+
+  return createSwapfile(mem);
+}
+
+export function ensureSwap(minTotalMB?: number, opts: EnsureSwapOpts = {}): SwapResult {
+  const o = resolveEnsureSwapOptions(opts);
   const threshold = minTotalMB ?? 12000;
 
   if (o.platform !== "linux") {
@@ -816,26 +866,8 @@ export function ensureSwap(minTotalMB?: number, opts: EnsureSwapOpts = {}): Swap
   }
 
   if (o.dryRun) {
-    if (o.swapfileExists) {
-      return {
-        ok: true,
-        totalMB: mem.totalMB,
-        swapCreated: false,
-        reason: "/swapfile already exists",
-      };
-    }
-    return { ok: true, totalMB: mem.totalMB, swapCreated: true };
+    return handleDryRunSwapDecision(mem, o.swapfileExists);
   }
 
-  const existingSwapResult = getExistingSwapResult(mem);
-  if (existingSwapResult) {
-    return existingSwapResult;
-  }
-
-  const diskSpaceResult = checkSwapDiskSpace();
-  if (diskSpaceResult) {
-    return diskSpaceResult;
-  }
-
-  return createSwapfile(mem);
+  return maybeCreateSwapfile(mem);
 }
