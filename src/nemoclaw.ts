@@ -792,7 +792,7 @@ async function onboard(args) {
     if (!fromDockerfile || fromDockerfile.startsWith("--")) {
       console.error("  --from requires a path to a Dockerfile");
       console.error(
-        `  Usage: nemoclaw onboard [--non-interactive] [--resume] [--recreate-sandbox] [--from <Dockerfile>] [--agent <name>] [--dangerously-skip-permissions] [${NOTICE_ACCEPT_FLAG}]`,
+        `  Usage: nemoclaw onboard [--non-interactive] [--resume] [--recreate-sandbox] [--from <Dockerfile>] [${NOTICE_ACCEPT_FLAG}]`,
       );
       process.exit(1);
     }
@@ -804,7 +804,7 @@ async function onboard(args) {
   if (agentIdx !== -1) {
     agentFlag = args[agentIdx + 1];
     if (!agentFlag || agentFlag.startsWith("--")) {
-      console.error("  --agent requires a name (e.g. openclaw, hermes)");
+      console.error("  --agent requires a name");
       process.exit(1);
     }
     const { listAgents } = require("../bin/lib/agent-defs");
@@ -1335,7 +1335,6 @@ function help() {
   ${G}Getting Started:${R}
     ${B}nemoclaw onboard${R}                 Configure inference endpoint and credentials
     nemoclaw onboard ${D}--from <Dockerfile>${R}  Use a custom Dockerfile for the sandbox image
-    nemoclaw onboard ${D}--dangerously-skip-permissions${R}  Apply maximally permissive sandbox policy
                                     ${D}(non-interactive: ${NOTICE_ACCEPT_FLAG} or ${NOTICE_ACCEPT_ENV}=1)${R}
 
   ${G}Sandbox Management:${R}
