@@ -1220,13 +1220,8 @@ function sandboxPolicyList(sandboxName) {
   console.log("");
 }
 
-function cleanupSandboxServices(sandboxName) {
-  const { defaultSandbox } = registry.listSandboxes();
-  const shouldStopHostServices = !defaultSandbox || defaultSandbox === sandboxName;
-
-  // Host-side services/forwards are effectively singleton state. Only stop
-  // them when destroying the default sandbox (or when no default remains).
-  if (shouldStopHostServices) {
+function cleanupSandboxServices(sandboxName, { stopHostServices = false } = {}) {
+  if (stopHostServices) {
     const { stopAll } = require("./lib/services");
     stopAll({ sandboxName });
   }
@@ -1259,8 +1254,6 @@ async function sandboxDestroy(sandboxName, args = []) {
   if (sb && sb.nimContainer) nim.stopNimContainerByName(sb.nimContainer);
   else nim.stopNimContainer(sandboxName);
 
-  cleanupSandboxServices(sandboxName);
-
   console.log(`  Deleting sandbox '${sandboxName}'...`);
   const deleteResult = runOpenshell(["sandbox", "delete", sandboxName], {
     ignoreError: true,
@@ -1275,6 +1268,13 @@ async function sandboxDestroy(sandboxName, args = []) {
     console.error(`  Failed to destroy sandbox '${sandboxName}'.`);
     process.exit(deleteResult.status || 1);
   }
+
+  const shouldStopHostServices =
+    (deleteResult.status === 0 || alreadyGone) &&
+    registry.listSandboxes().sandboxes.length === 1 &&
+    !!registry.getSandbox(sandboxName);
+
+  cleanupSandboxServices(sandboxName, { stopHostServices: shouldStopHostServices });
 
   const removed = registry.removeSandbox(sandboxName);
   const session = onboardSession.loadSession();
