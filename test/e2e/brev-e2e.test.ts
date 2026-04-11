@@ -21,7 +21,7 @@
  *
  * Optional env vars:
  *   TEST_SUITE             — which test to run: full (default), deploy-cli, credential-sanitization,
- *                             telegram-injection, messaging-providers, all
+ *                             telegram-injection, messaging-providers, vm-backend, all
  *   LAUNCHABLE_SETUP_SCRIPT — URL to setup script for launchable path (default: brev-launchable-ci-cpu.sh on main)
  *   BREV_MIN_VCPU          — Minimum vCPUs for CPU instance (default: 4)
  *   BREV_MIN_RAM           — Minimum RAM in GB for CPU instance (default: 16)
@@ -712,5 +712,19 @@ describe.runIf(hasRequiredVars && hasAuthenticatedBrev)("Brev E2E", () => {
       expect(output).not.toMatch(/FAIL:/);
     },
     900_000, // 15 min — creates a new sandbox with messaging providers
+  );
+
+  // NOTE: The vm-backend test requires a Linux host with /dev/kvm support.
+  // It installs openshell-vm from release assets and runs the full VM backend
+  // E2E journey: onboard, inference, resume, reset. No Docker required.
+  // Creates its own sandbox (e2e-vm) with NEMOCLAW_GATEWAY_BACKEND=vm.
+  it.runIf(TEST_SUITE === "vm-backend" || TEST_SUITE === "all")(
+    "VM backend (openshell-vm) suite passes on remote VM",
+    () => {
+      const output = runRemoteTest("test/e2e/test-vm-backend-e2e.sh");
+      expect(output).toContain("PASS");
+      expect(output).not.toMatch(/FAIL:/);
+    },
+    900_000, // 15 min — installs openshell-vm, creates VM-backed sandbox
   );
 });
