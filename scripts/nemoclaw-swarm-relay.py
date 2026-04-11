@@ -61,8 +61,25 @@ def read_manifest():
         return None
 
 
+def find_text_in_response(data):
+    """Recursively search for text content in the agent response."""
+    if isinstance(data, dict):
+        if "text" in data and isinstance(data["text"], str) and data["text"].strip():
+            return data["text"].strip()
+        for v in data.values():
+            found = find_text_in_response(v)
+            if found:
+                return found
+    elif isinstance(data, list):
+        for item in data:
+            found = find_text_in_response(item)
+            if found:
+                return found
+    return None
+
+
 def deliver_openclaw(agent, message, config_dir):
-    """Deliver a message to an OpenClaw agent via its CLI."""
+    """Deliver a message to an OpenClaw agent via its CLI (retries up to 3x)."""
     session_id = f"swarm-{message['from']}"
     env = dict(os.environ)
     if config_dir:
@@ -76,29 +93,36 @@ def deliver_openclaw(agent, message, config_dir):
         "--message", message["content"],
         "--session-id", session_id,
         "--json",
-        "--timeout", "30",
+        "--timeout", "45",
     ]
-    try:
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=35, env=env,
-        )
-        if result.returncode != 0:
-            stderr = result.stderr.strip()[-200:] if result.stderr else ""
-            return None, f"exit {result.returncode}: {stderr}"
+    for attempt in range(3):
+        try:
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=50, env=env,
+            )
+            if result.returncode != 0:
+                stderr = result.stderr.strip()[-200:] if result.stderr else ""
+                log(f"attempt {attempt+1}: exit {result.returncode}: {stderr}")
+                time.sleep(3)
+                continue
 
-        # Parse the JSON response to extract the text reply
-        data = json.loads(result.stdout)
-        payloads = data.get("result", {}).get("payloads", [])
-        if payloads and "text" in payloads[0]:
-            return payloads[0]["text"], None
-        return None, "no text in response"
+            data = json.loads(result.stdout)
+            text = find_text_in_response(data.get("result", {}))
+            if text:
+                return text, None
+            log(f"attempt {attempt+1}: no text, keys={list(data.get('result', {}).keys())}, stdout={result.stdout[:300]}")
+            time.sleep(3)
 
-    except subprocess.TimeoutExpired:
-        return None, "timeout"
-    except (json.JSONDecodeError, KeyError, IndexError) as e:
-        return None, f"parse error: {e}"
-    except FileNotFoundError:
-        return None, "openclaw binary not found"
+        except subprocess.TimeoutExpired:
+            log(f"attempt {attempt+1}: timeout")
+            continue
+        except (json.JSONDecodeError, KeyError, IndexError) as e:
+            log(f"attempt {attempt+1}: parse error: {e}")
+            continue
+        except FileNotFoundError:
+            return None, "openclaw binary not found"
+
+    return None, "no text after 3 attempts"
 
 
 def relay_loop(bus_url, poll_interval):
