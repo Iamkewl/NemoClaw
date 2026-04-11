@@ -414,8 +414,13 @@ def relay_loop(bus_url, poll_interval):
                 reply_text = None
                 error = f"unsupported agent type: {agent_type}"
             if reply_text:
-                bus_send(bus_url, target, msg["from"], reply_text)
-                log(f"reply posted: {target} -> {msg['from']} ({len(reply_text)} chars)")
+                # Strip NO_REPLY / stop signals that kill the conversation loop
+                cleaned = reply_text.replace("NO_REPLY", "").strip()
+                if cleaned and len(cleaned) > 5:
+                    bus_send(bus_url, target, msg["from"], cleaned)
+                    log(f"reply posted: {target} -> {msg['from']} ({len(cleaned)} chars)")
+                else:
+                    log(f"reply suppressed (stop signal): {target} -> {msg['from']}")
             elif error:
                 bus_send(bus_url, RELAY_ID, msg["from"], f"[relay] delivery to {target} failed: {error}")
                 log(f"delivery failed: {error}")
