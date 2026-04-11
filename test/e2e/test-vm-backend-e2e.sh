@@ -23,7 +23,7 @@
 #   NVIDIA_API_KEY                         — required for NVIDIA Endpoints inference
 #   NEMOCLAW_SANDBOX_NAME                  — sandbox name (default: e2e-vm)
 #   NEMOCLAW_E2E_TIMEOUT_SECONDS           — overall timeout (default: 900)
-#   OPENSHELL_VM_VERSION                   — openshell-vm release tag (default: v0.0.26)
+#   OPENSHELL_VM_VERSION                   — openshell-vm release tag (default: vm-dev)
 #
 # Usage:
 #   NEMOCLAW_NON_INTERACTIVE=1 \
@@ -96,7 +96,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 SANDBOX_NAME="${NEMOCLAW_SANDBOX_NAME:-e2e-vm}"
 REGISTRY="$HOME/.nemoclaw/sandboxes.json"
 MIN_OPENSHELL="0.0.26"
-OPENSHELL_VM_VERSION="${OPENSHELL_VM_VERSION:-v0.0.26}"
+OPENSHELL_VM_VERSION="${OPENSHELL_VM_VERSION:-vm-dev}"
 MODEL="nvidia/nemotron-3-super-120b-a12b"
 
 # SSH helper — sets up SSH config and common options for sandbox access
@@ -183,8 +183,8 @@ case "$ARCH" in
     ;;
 esac
 
-VM_ASSET="openshell-vm-${ARCH_LABEL}-unknown-linux-musl.tar.gz"
-VM_CHECKSUM_FILE="openshell-vm-checksums-sha256.txt"
+VM_ASSET="openshell-vm-${ARCH_LABEL}-unknown-linux-gnu.tar.gz"
+VM_CHECKSUM_FILE="vm-binary-checksums-sha256.txt"
 VM_TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$VM_TMPDIR"' EXIT
 
@@ -246,6 +246,56 @@ else
   fail "openshell-vm not found on PATH after install"
   exit 1
 fi
+
+# Download and install VM runtime (kernel + rootfs used by libkrun)
+VM_RUNTIME_ASSET="vm-runtime-linux-${ARCH_LABEL}.tar.zst"
+VM_RUNTIME_CHECKSUM_FILE="vm-runtime-checksums-sha256.txt"
+VM_RUNTIME_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/openshell-vm"
+info "Downloading VM runtime from NVIDIA/OpenShell release ${OPENSHELL_VM_VERSION}..."
+
+download_vm_runtime_with_curl() {
+  local tag="${OPENSHELL_VM_VERSION}"
+  curl -fsSL "https://github.com/NVIDIA/OpenShell/releases/download/${tag}/${VM_RUNTIME_ASSET}" \
+    -o "$VM_TMPDIR/$VM_RUNTIME_ASSET"
+  curl -fsSL "https://github.com/NVIDIA/OpenShell/releases/download/${tag}/${VM_RUNTIME_CHECKSUM_FILE}" \
+    -o "$VM_TMPDIR/$VM_RUNTIME_CHECKSUM_FILE" || true
+}
+
+if command -v gh >/dev/null 2>&1; then
+  if GH_PROMPT_DISABLED=1 GH_TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-}}" \
+    gh release download "$OPENSHELL_VM_VERSION" --repo NVIDIA/OpenShell \
+    --pattern "$VM_RUNTIME_ASSET" --dir "$VM_TMPDIR" 2>/dev/null; then
+    GH_PROMPT_DISABLED=1 GH_TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-}}" \
+      gh release download "$OPENSHELL_VM_VERSION" --repo NVIDIA/OpenShell \
+      --pattern "$VM_RUNTIME_CHECKSUM_FILE" --dir "$VM_TMPDIR" 2>/dev/null || true
+  else
+    info "gh CLI download failed for runtime — falling back to curl"
+    rm -f "$VM_TMPDIR/$VM_RUNTIME_ASSET" "$VM_TMPDIR/$VM_RUNTIME_CHECKSUM_FILE"
+    download_vm_runtime_with_curl
+  fi
+else
+  download_vm_runtime_with_curl
+fi
+
+if [ -f "$VM_TMPDIR/$VM_RUNTIME_CHECKSUM_FILE" ]; then
+  info "Verifying VM runtime checksum..."
+  if (cd "$VM_TMPDIR" && grep -F "$VM_RUNTIME_ASSET" "$VM_RUNTIME_CHECKSUM_FILE" | shasum -a 256 -c -); then
+    pass "VM runtime checksum verified"
+  else
+    fail "VM runtime checksum verification failed"
+    exit 1
+  fi
+fi
+
+mkdir -p "$VM_RUNTIME_DIR"
+# zstd may not be installed — install it if needed
+if ! command -v zstd >/dev/null 2>&1; then
+  info "Installing zstd for runtime decompression..."
+  sudo apt-get update -qq && sudo apt-get install -y -qq zstd >/dev/null 2>&1
+fi
+zstd -d "$VM_TMPDIR/$VM_RUNTIME_ASSET" -o "$VM_TMPDIR/vm-runtime.tar"
+tar xf "$VM_TMPDIR/vm-runtime.tar" -C "$VM_RUNTIME_DIR"
+pass "VM runtime installed to $VM_RUNTIME_DIR"
 
 # ══════════════════════════════════════════════════════════════════
 # Phase 2: Install NemoClaw (with VM backend)
