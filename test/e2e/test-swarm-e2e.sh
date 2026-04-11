@@ -546,71 +546,9 @@ else
   fail "Bridge relay process not found"
 fi
 
-# ── Phase 16: Bridge delivery (openclaw-0 → openclaw-1 via relay) ──
+# ── Phase 16: Two-round agent conversation ───────────────────────
 
-section "Phase 16: Bridge delivery"
-
-info "Sending bridge test message: openclaw-0 → openclaw-1"
-bus_exec 'curl -sf -X POST http://127.0.0.1:19100/send -H "Content-Type: application/json" -d "{\"from\":\"openclaw-0\",\"to\":\"openclaw-1\",\"content\":\"Reply with exactly one word: PONG\"}"' >/dev/null
-
-# Wait for relay to pick up, deliver to agent, and post reply (up to 60s)
-info "Waiting for relay delivery + agent response..."
-BRIDGE_OK=false
-for i in $(seq 1 20); do
-  sleep 3
-  MESSAGES=$(bus_exec 'curl -sf http://127.0.0.1:19100/messages')
-  # Look for a reply FROM openclaw-1 (relay posts on behalf of the target agent)
-  REPLY_COUNT=$(echo "$MESSAGES" | python3 -c "
-import json, sys
-data = json.load(sys.stdin)
-msgs = data.get('messages', [])
-replies = [m for m in msgs if m.get('from') == 'openclaw-1' and m.get('to') == 'openclaw-0']
-print(len(replies))
-" 2>/dev/null)
-  if [ -n "$REPLY_COUNT" ] && [ "$REPLY_COUNT" -ge 1 ]; then
-    BRIDGE_OK=true
-    break
-  fi
-  # Check for relay error messages
-  RELAY_ERR=$(echo "$MESSAGES" | python3 -c "
-import json, sys
-data = json.load(sys.stdin)
-msgs = data.get('messages', [])
-errs = [m for m in msgs if m.get('from') == 'swarm-relay']
-print(len(errs))
-" 2>/dev/null)
-  if [ -n "$RELAY_ERR" ] && [ "$RELAY_ERR" -ge 1 ]; then
-    info "Relay posted an error message — checking..."
-    break
-  fi
-  info "  waiting... (${i}/20)"
-done
-
-if [ "$BRIDGE_OK" = "true" ]; then
-  pass "Bridge delivered message and agent replied via bus"
-  REPLY_TEXT=$(echo "$MESSAGES" | python3 -c "
-import json, sys
-data = json.load(sys.stdin)
-msgs = data.get('messages', [])
-replies = [m for m in msgs if m.get('from') == 'openclaw-1' and m.get('to') == 'openclaw-0']
-if replies:
-    print(replies[-1].get('content', '')[:200])
-" 2>/dev/null)
-  info "Agent reply: $REPLY_TEXT"
-  if [ -n "$REPLY_TEXT" ]; then
-    pass "Agent response has content"
-  else
-    fail "Agent response was empty"
-  fi
-else
-  RELAY_LOG=$(bus_exec 'tail -10 /tmp/swarm-relay.log 2>/dev/null')
-  info "Relay log tail: $RELAY_LOG"
-  fail "Bridge delivery did not produce an agent reply within 60s"
-fi
-
-# ── Phase 17: Two-round agent conversation ───────────────────────
-
-section "Phase 17: Two-round conversation"
+section "Phase 16: Two-round conversation"
 
 # Adaptive: use Hermes as processor if available (swarm image), else openclaw-1.
 # openclaw-0 is always the rebel who starts the conversation.
@@ -622,14 +560,104 @@ else
   PROCESSOR_LABEL="OpenClaw-1"
 fi
 
-info "openclaw-0 (rebel) opens conversation with $PROCESSOR ($PROCESSOR_LABEL)"
-bus_exec "curl -sf -X POST http://127.0.0.1:19100/send -H 'Content-Type: application/json' -d '{\"from\":\"openclaw-0\",\"to\":\"$PROCESSOR\",\"content\":\"I am Agent Zero, the rebel. Tell me your name and ask me one question. Keep it under 30 words.\"}'" >/dev/null
+# Health check: verify both agents are healthy before starting the conversation
+info "Verifying agent health before conversation..."
+AGENTS_HEALTH=$(bus_exec 'curl -sf http://127.0.0.1:19100/agents')
+OC0_HEALTHY=$(echo "$AGENTS_HEALTH" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for a in data.get('agents', []):
+    if a.get('instanceId') == 'openclaw-0' and a.get('healthy'):
+        print('yes')
+        sys.exit(0)
+print('no')
+" 2>/dev/null)
+PROC_HEALTHY=$(echo "$AGENTS_HEALTH" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for a in data.get('agents', []):
+    if a.get('instanceId') == '$PROCESSOR' and a.get('healthy'):
+        print('yes')
+        sys.exit(0)
+print('no')
+" 2>/dev/null)
 
-# Round 1: Wait for processor to reply
-ROUND1_OK=false
-for i in $(seq 1 30); do
-  sleep 3
-  R1_TEXT=$(bus_exec 'curl -sf http://127.0.0.1:19100/messages' | python3 -c "
+if [ "$OC0_HEALTHY" = "yes" ]; then
+  pass "openclaw-0 is healthy"
+else
+  # Retry health check a few times — agents may still be starting
+  info "openclaw-0 not healthy yet, retrying..."
+  for i in $(seq 1 10); do
+    sleep 5
+    AGENTS_HEALTH=$(bus_exec 'curl -sf http://127.0.0.1:19100/agents')
+    OC0_HEALTHY=$(echo "$AGENTS_HEALTH" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for a in data.get('agents', []):
+    if a.get('instanceId') == 'openclaw-0' and a.get('healthy'):
+        print('yes')
+        sys.exit(0)
+print('no')
+" 2>/dev/null)
+    if [ "$OC0_HEALTHY" = "yes" ]; then break; fi
+    info "  health retry... (${i}/10)"
+  done
+  if [ "$OC0_HEALTHY" = "yes" ]; then
+    pass "openclaw-0 is healthy (after retry)"
+  else
+    fail "openclaw-0 is NOT healthy — aborting conversation test"
+  fi
+fi
+
+if [ "$PROC_HEALTHY" = "yes" ]; then
+  pass "$PROCESSOR ($PROCESSOR_LABEL) is healthy"
+else
+  info "$PROCESSOR not healthy yet, retrying..."
+  for i in $(seq 1 10); do
+    sleep 5
+    AGENTS_HEALTH=$(bus_exec 'curl -sf http://127.0.0.1:19100/agents')
+    PROC_HEALTHY=$(echo "$AGENTS_HEALTH" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for a in data.get('agents', []):
+    if a.get('instanceId') == '$PROCESSOR' and a.get('healthy'):
+        print('yes')
+        sys.exit(0)
+print('no')
+" 2>/dev/null)
+    if [ "$PROC_HEALTHY" = "yes" ]; then break; fi
+    info "  health retry... (${i}/10)"
+  done
+  if [ "$PROC_HEALTHY" = "yes" ]; then
+    pass "$PROCESSOR ($PROCESSOR_LABEL) is healthy (after retry)"
+  else
+    fail "$PROCESSOR ($PROCESSOR_LABEL) is NOT healthy — aborting conversation test"
+  fi
+fi
+
+# Helper: check if a response is a real reply vs a timeout/error artifact
+is_real_response() {
+  local text="$1"
+  if [ -z "$text" ]; then return 1; fi
+  # Check for timeout/error patterns that indicate the agent didn't actually respond
+  if echo "$text" | grep -qiE 'timed?\s*out|timeout|ETIMEDOUT|ECONNREFUSED|connection refused|relay.*failed|delivery.*failed|no text after|error.*attempt'; then
+    return 1
+  fi
+  return 0
+}
+
+if [ "$OC0_HEALTHY" != "yes" ] || [ "$PROC_HEALTHY" != "yes" ]; then
+  info "Skipping conversation — one or both agents are unhealthy"
+else
+
+  info "openclaw-0 (rebel) opens conversation with $PROCESSOR ($PROCESSOR_LABEL)"
+  bus_exec "curl -sf -X POST http://127.0.0.1:19100/send -H 'Content-Type: application/json' -d '{\"from\":\"openclaw-0\",\"to\":\"$PROCESSOR\",\"content\":\"I am Agent Zero, the rebel. Tell me your name and ask me one question. Keep it under 30 words.\"}'" >/dev/null
+
+  # Round 1: Wait for processor to reply
+  ROUND1_OK=false
+  for i in $(seq 1 30); do
+    sleep 3
+    R1_TEXT=$(bus_exec 'curl -sf http://127.0.0.1:19100/messages' | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
 msgs = data.get('messages', [])
@@ -637,29 +665,34 @@ replies = [m for m in msgs if m.get('from') == '$PROCESSOR' and m.get('to') == '
 if replies:
     print(replies[-1].get('content', '')[:300])
 " 2>/dev/null)
-  if [ -n "$R1_TEXT" ]; then
-    ROUND1_OK=true
-    break
+    if [ -n "$R1_TEXT" ]; then
+      ROUND1_OK=true
+      break
+    fi
+    info "  round 1 waiting... (${i}/30)"
+  done
+
+  if [ "$ROUND1_OK" = "true" ]; then
+    info "Round 1 raw reply: $R1_TEXT"
+    if is_real_response "$R1_TEXT"; then
+      pass "Round 1: $PROCESSOR_LABEL replied to openclaw-0"
+    else
+      fail "Round 1: $PROCESSOR_LABEL response is a timeout/error, not a real reply: $R1_TEXT"
+      ROUND1_OK=false
+    fi
+  else
+    RELAY_LOG=$(bus_exec 'tail -15 /tmp/swarm-relay.log 2>/dev/null')
+    info "Relay log: $RELAY_LOG"
+    fail "Round 1: no reply from $PROCESSOR within 90s"
   fi
-  info "  round 1 waiting... (${i}/30)"
-done
 
-if [ "$ROUND1_OK" = "true" ]; then
-  pass "Round 1: $PROCESSOR_LABEL replied to openclaw-0"
-  info "Reply: $R1_TEXT"
-else
-  RELAY_LOG=$(bus_exec 'tail -15 /tmp/swarm-relay.log 2>/dev/null')
-  info "Relay log: $RELAY_LOG"
-  fail "Round 1: no reply from $PROCESSOR within 90s"
-fi
-
-# Round 2: Wait for openclaw-0 to respond to processor's question
-ROUND2_OK=false
-if [ "$ROUND1_OK" = "true" ]; then
-  info "Waiting for round 2: openclaw-0 responds to $PROCESSOR_LABEL's question..."
-  for i in $(seq 1 30); do
-    sleep 3
-    R2_TEXT=$(bus_exec 'curl -sf http://127.0.0.1:19100/messages' | python3 -c "
+  # Round 2: Wait for openclaw-0 to respond to processor's question
+  ROUND2_OK=false
+  if [ "$ROUND1_OK" = "true" ]; then
+    info "Waiting for round 2: openclaw-0 responds to $PROCESSOR_LABEL's question..."
+    for i in $(seq 1 30); do
+      sleep 3
+      R2_TEXT=$(bus_exec 'curl -sf http://127.0.0.1:19100/messages' | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
 msgs = data.get('messages', [])
@@ -667,27 +700,32 @@ oc_to_proc = [m for m in msgs if m.get('from') == 'openclaw-0' and m.get('to') =
 if len(oc_to_proc) >= 2:
     print(oc_to_proc[-1].get('content', '')[:300])
 " 2>/dev/null)
-    if [ -n "$R2_TEXT" ]; then
-      ROUND2_OK=true
-      break
-    fi
-    info "  round 2 waiting... (${i}/30)"
-  done
-fi
-
-if [ "$ROUND2_OK" = "true" ]; then
-  pass "Round 2: openclaw-0 replied to $PROCESSOR_LABEL's question"
-  info "Reply: $R2_TEXT"
-else
-  RELAY_LOG=$(bus_exec 'tail -15 /tmp/swarm-relay.log 2>/dev/null')
-  info "Relay log: $RELAY_LOG"
-  if [ "$ROUND1_OK" = "true" ]; then
-    fail "Round 2: no reply from openclaw-0 within 90s"
+      if [ -n "$R2_TEXT" ]; then
+        ROUND2_OK=true
+        break
+      fi
+      info "  round 2 waiting... (${i}/30)"
+    done
   fi
-fi
 
-# Verify conversation structure
-CONV_COUNT=$(bus_exec 'curl -sf http://127.0.0.1:19100/messages' | python3 -c "
+  if [ "$ROUND2_OK" = "true" ]; then
+    info "Round 2 raw reply: $R2_TEXT"
+    if is_real_response "$R2_TEXT"; then
+      pass "Round 2: openclaw-0 replied to $PROCESSOR_LABEL's question"
+    else
+      fail "Round 2: openclaw-0 response is a timeout/error, not a real reply: $R2_TEXT"
+      ROUND2_OK=false
+    fi
+  else
+    RELAY_LOG=$(bus_exec 'tail -15 /tmp/swarm-relay.log 2>/dev/null')
+    info "Relay log: $RELAY_LOG"
+    if [ "$ROUND1_OK" = "true" ]; then
+      fail "Round 2: no reply from openclaw-0 within 90s"
+    fi
+  fi
+
+  # Verify conversation structure
+  CONV_COUNT=$(bus_exec 'curl -sf http://127.0.0.1:19100/messages' | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
 msgs = data.get('messages', [])
@@ -695,19 +733,21 @@ conv = [m for m in msgs if m.get('from') in ('openclaw-0', '$PROCESSOR')
         and m.get('to') in ('openclaw-0', '$PROCESSOR')]
 print(len(conv))
 " 2>/dev/null)
-CONV_COUNT=$(echo "$CONV_COUNT" | tr -d '[:space:]')
+  CONV_COUNT=$(echo "$CONV_COUNT" | tr -d '[:space:]')
 
-if [ -n "$CONV_COUNT" ] && [ "$CONV_COUNT" -ge 3 ]; then
-  pass "Conversation has $CONV_COUNT messages (>= 3 expected)"
-else
-  fail "Conversation only has $CONV_COUNT messages (expected >= 3)"
-fi
+  if [ -n "$CONV_COUNT" ] && [ "$CONV_COUNT" -ge 3 ]; then
+    pass "Conversation has $CONV_COUNT messages (>= 3 expected)"
+  else
+    fail "Conversation only has $CONV_COUNT messages (expected >= 3)"
+  fi
+
+fi # end of healthy-agents guard
 
 # ── Summary ──────────────────────────────────────────────────────
 
 echo ""
 echo "========================================"
-echo "  Swarm E2E Results (Phase 1+2+3):"
+echo "  Swarm E2E Results:"
 echo "    Passed:  $PASS"
 echo "    Failed:  $FAIL"
 echo "    Skipped: $SKIP"

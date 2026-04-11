@@ -93,12 +93,12 @@ def deliver_openclaw(agent, message, config_dir):
         "--message", message["content"],
         "--session-id", session_id,
         "--json",
-        "--timeout", "45",
+        "--timeout", "90",
     ]
     for attempt in range(3):
         try:
             result = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=50, env=env,
+                cmd, capture_output=True, text=True, timeout=95, env=env,
             )
             if result.returncode != 0:
                 stderr = result.stderr.strip()[-200:] if result.stderr else ""
@@ -159,7 +159,7 @@ def deliver_hermes(agent, message):
     )
     for attempt in range(3):
         try:
-            resp = urlopen(req, timeout=45)
+            resp = urlopen(req, timeout=90)
             data = json.loads(resp.read())
             text = find_text_in_response(data)
             if not text:
