@@ -15,7 +15,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPORT_DIR="$REPO_ROOT/docs/benchmarks"
-REPORT_PATH="$REPORT_DIR/memory-benchmark-report.md"
+REPORT_PATH="$REPORT_DIR/typed-memory-index-benchmark.md"
 
 CONTAINER_CMD="${CONTAINER_CMD:-$(command -v podman || command -v docker || echo "")}"
 if [[ -z "$CONTAINER_CMD" ]]; then

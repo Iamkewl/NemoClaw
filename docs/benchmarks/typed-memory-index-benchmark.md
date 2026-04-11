@@ -1,6 +1,5 @@
 # Memory Benchmark Report
 
-**Generated:** 2026-04-11
 **Environment:** NemoClaw sandbox container
 **Tokenizer:** tiktoken cl100k_base (GPT-4 / Claude-class models)
 **Branch:** `aniket/feat-typed-memory-index`

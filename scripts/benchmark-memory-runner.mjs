@@ -210,7 +210,6 @@ const lines = [];
 
 lines.push("# Memory Benchmark Report");
 lines.push("");
-lines.push(`**Generated:** ${new Date().toISOString().slice(0, 10)}`);
 lines.push(`**Environment:** NemoClaw sandbox container`);
 lines.push(`**Tokenizer:** tiktoken cl100k_base (GPT-4 / Claude-class models)`);
 lines.push("");
