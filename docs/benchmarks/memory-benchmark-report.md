@@ -79,9 +79,9 @@ Average topic content: ~67 tokens.
 
 ## Key Takeaways
 
-1. **Context window savings:** At 1,000+ entries, the typed index saves ~65% of context tokens.
+1. **Context window savings:** At 1,000+ entries, the typed index saves ~59.1% of context tokens.
 2. **Crossover:** Below ~10 entries, the flat format is more compact.
-3. **Tool call cost:** Even reading 10 topics per session, the typed index uses fewer total tokens at 100+ entries.
+3. **Tool call cost:** Even reading 10 topics per session, the typed index uses fewer total tokens at 50+ entries.
 4. **Scalability:** At 10,000 entries, the flat format consumes 668,504 tokens — the typed index uses 272,564 (59.2% less).
 
 ## Methodology

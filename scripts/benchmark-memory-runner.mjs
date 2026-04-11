@@ -264,10 +264,15 @@ for (const k of SESSION_K_VALUES) {
 // Key takeaway
 lines.push("## Key Takeaways");
 lines.push("");
-lines.push(`1. **Context window savings:** At 1,000+ entries, the typed index saves ~59% of context tokens.`);
+const r1k = results.find((r) => r.n === 1000);
+const r10k = results[results.length - 1];
+const savingsAt1k = r1k ? r1k.savings : r10k.savings;
+lines.push(`1. **Context window savings:** At 1,000+ entries, the typed index saves ~${savingsAt1k}% of context tokens.`);
 lines.push(`2. **Crossover:** Below ~${preciseCrossover ?? "N/A"} entries, the flat format is more compact.`);
-lines.push(`3. **Tool call cost:** Even reading 10 topics per session, the typed index uses fewer total tokens at 100+ entries.`);
-lines.push(`4. **Scalability:** At 10,000 entries, the flat format consumes ${results[results.length - 1].flatTokens.toLocaleString()} tokens — the typed index uses ${results[results.length - 1].indexTokens.toLocaleString()} (${results[results.length - 1].savings}% less).`);
+const worstK = SESSION_K_VALUES[SESSION_K_VALUES.length - 1];
+const worstCrossover = results.find((r) => r.sessionResults[worstK].typed < r.sessionResults[worstK].flat);
+lines.push(`3. **Tool call cost:** Even reading ${worstK} topics per session, the typed index uses fewer total tokens at ${worstCrossover ? worstCrossover.n + "+" : "100+"} entries.`);
+lines.push(`4. **Scalability:** At ${r10k.n.toLocaleString()} entries, the flat format consumes ${r10k.flatTokens.toLocaleString()} tokens — the typed index uses ${r10k.indexTokens.toLocaleString()} (${r10k.savings}% less).`);
 lines.push("");
 
 // Methodology
