@@ -14,6 +14,7 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { TypedMemoryProvider } from "../nemoclaw/dist/memory/typed-provider.js";
+import { encodingForModel } from "js-tiktoken";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -35,9 +36,11 @@ const MEMORY_TYPES = ["user", "project", "feedback", "reference"];
 // Helpers
 // ---------------------------------------------------------------------------
 
+// Use cl100k_base encoding (GPT-4 / Claude-class models)
+const enc = encodingForModel("gpt-4o");
+
 function countTokens(text) {
-  // Approximate: 1 token ≈ 4 characters
-  return Math.ceil(text.length / 4);
+  return enc.encode(text).length;
 }
 
 function generateTitle(i) {
@@ -209,7 +212,7 @@ lines.push("# Memory Benchmark Report");
 lines.push("");
 lines.push(`**Generated:** ${new Date().toISOString().slice(0, 10)}`);
 lines.push(`**Environment:** NemoClaw sandbox container`);
-lines.push(`**Token approximation:** 1 token ≈ 4 characters`);
+lines.push(`**Tokenizer:** tiktoken cl100k_base (GPT-4 / Claude-class models)`);
 lines.push("");
 
 // Context window table
@@ -261,7 +264,7 @@ for (const k of SESSION_K_VALUES) {
 // Key takeaway
 lines.push("## Key Takeaways");
 lines.push("");
-lines.push(`1. **Context window savings:** At 1,000+ entries, the typed index saves ~65% of context tokens.`);
+lines.push(`1. **Context window savings:** At 1,000+ entries, the typed index saves ~59% of context tokens.`);
 lines.push(`2. **Crossover:** Below ~${preciseCrossover ?? "N/A"} entries, the flat format is more compact.`);
 lines.push(`3. **Tool call cost:** Even reading 10 topics per session, the typed index uses fewer total tokens at 100+ entries.`);
 lines.push(`4. **Scalability:** At 10,000 entries, the flat format consumes ${results[results.length - 1].flatTokens.toLocaleString()} tokens — the typed index uses ${results[results.length - 1].indexTokens.toLocaleString()} (${results[results.length - 1].savings}% less).`);
@@ -271,7 +274,7 @@ lines.push("");
 lines.push("## Methodology");
 lines.push("");
 lines.push("- Synthetic entries generated with realistic titles (20 rotating topics) and bodies (~120 chars each).");
-lines.push("- Token count approximated as ceil(chars / 4). Ratios are what matter, not absolute counts.");
+lines.push("- Token count measured with tiktoken cl100k_base encoding (used by GPT-4o / Claude-class models).");
 lines.push("- Tool call overhead estimated at 80 tokens per invocation (request framing + result wrapper).");
 lines.push("- Flat memory: all entries as bullet points in a single MEMORY.md file.");
 lines.push("- Typed index: markdown table in MEMORY.md with topic content in separate files under memory/topics/.");

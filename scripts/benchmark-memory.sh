@@ -50,6 +50,7 @@ COPY nemoclaw/dist/ /app/nemoclaw/dist/
 COPY nemoclaw/package.json /app/nemoclaw/package.json
 COPY scripts/benchmark-memory-runner.mjs /app/scripts/benchmark-memory-runner.mjs
 RUN cd /app/nemoclaw && npm install --omit=dev --ignore-scripts 2>/dev/null || true
+RUN cd /app && npm init -y --silent 2>/dev/null && npm install js-tiktoken --ignore-scripts 2>/dev/null || true
 DOCKERFILE
 echo ""
 
