@@ -2136,8 +2136,14 @@ async function startVmGatewayProcess({ exitOnFailure = true } = {}) {
     encoding: "utf-8",
     stdio: ["ignore", "pipe", "pipe"],
   });
-  if (prepResult.status === 0 && prepResult.stdout?.trim()) {
-    const rootfsDir = prepResult.stdout.trim();
+  const prepOutput = (prepResult.stdout || "").trim();
+  const prepErr = (prepResult.stderr || "").trim();
+  if (prepResult.status !== 0) {
+    console.log(`  prepare-rootfs failed (exit ${prepResult.status}): ${prepErr.slice(0, 200)}`);
+  }
+  if (prepOutput) {
+    const rootfsDir = prepOutput;
+    console.log(`  Rootfs: ${rootfsDir}`);
     const initScript = path.join(rootfsDir, "srv", "openshell-vm-init.sh");
     if (fs.existsSync(initScript)) {
       const initContent = fs.readFileSync(initScript, "utf-8");
@@ -2150,9 +2156,17 @@ async function startVmGatewayProcess({ exitOnFailure = true } = {}) {
         if (patched !== initContent) {
           fs.writeFileSync(initScript, patched);
           console.log("  Patched VM init script: added /dev/mqueue mount");
+        } else {
+          console.log("  Init script patch: string replacement did not match");
         }
+      } else {
+        console.log("  Init script already has /dev/mqueue mount");
       }
+    } else {
+      console.log(`  Init script not found at: ${initScript}`);
     }
+  } else {
+    console.log("  prepare-rootfs returned no output");
   }
 
   // --mem 4096: CI runners (16GB) can't spare the default 8GB while also
