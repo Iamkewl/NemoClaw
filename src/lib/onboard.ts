@@ -2732,9 +2732,62 @@ async function createSandbox(
     const defaultPolicyPath = path.join(ROOT, "nemoclaw-blueprint", "policies", "openclaw-sandbox.yaml");
     basePolicyPath = (agent && agentOnboard.getAgentPolicyPath(agent)) || defaultPolicyPath;
   }
+  // VM backend: build the image locally and import it into the VM's
+  // containerd via virtio-fs + exec agent, then pass --from <image-ref>
+  // so openshell CLI skips its Docker-based push (which fails without
+  // a Docker container).
+  const session = onboardSession.loadSession();
+  const useVmImagePath = session?.gatewayBackend === "vm";
+  let imageRef = null;
+  if (useVmImagePath) {
+    const tag = `nemoclaw-sandbox:${sandboxName}`;
+    console.log("  Building sandbox image locally (VM backend)...");
+    const buildResult = run(
+      `docker build -t ${shellQuote(tag)} -f ${shellQuote(stagedDockerfile)} ${shellQuote(path.dirname(stagedDockerfile))}`,
+      { ignoreError: true },
+    );
+    if (buildResult.status !== 0) {
+      console.error("  Docker build failed — falling back to standard path");
+    } else {
+      // Export and import into VM containerd via virtio-fs
+      const prepOut = runCapture(
+        `openshell-vm --name ${shellQuote(GATEWAY_NAME)} prepare-rootfs`,
+        { ignoreError: true },
+      );
+      const rootfsDir = (prepOut || "").trim();
+      const vmTarPath = rootfsDir
+        ? path.join(rootfsDir, "tmp", "sandbox-image.tar")
+        : null;
+      if (vmTarPath) {
+        console.log("  Exporting image to VM rootfs...");
+        const saveResult = run(
+          `docker save ${shellQuote(tag)} -o ${shellQuote(vmTarPath)}`,
+          { ignoreError: true },
+        );
+        if (saveResult.status === 0) {
+          console.log("  Importing image into VM containerd...");
+          const importResult = run(
+            `openshell-vm --name ${shellQuote(GATEWAY_NAME)} exec -- ctr -a /run/k3s/containerd/containerd.sock -n k8s.io images import /tmp/sandbox-image.tar`,
+            { ignoreError: true },
+          );
+          if (importResult.status === 0) {
+            // Clean up the tar inside the VM rootfs
+            try { fs.unlinkSync(vmTarPath); } catch { /* best effort */ }
+            imageRef = `docker.io/library/${tag}`;
+            console.log(`  ✓ Image imported into VM: ${imageRef}`);
+          } else {
+            console.error("  ctr import failed — falling back to standard path");
+          }
+        } else {
+          console.error("  docker save failed — falling back to standard path");
+        }
+      }
+    }
+  }
+
   const createArgs = [
     "--from",
-    `${buildCtx}/Dockerfile`,
+    imageRef || `${buildCtx}/Dockerfile`,
     "--name",
     sandboxName,
     "--policy",
