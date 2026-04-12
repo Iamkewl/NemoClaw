@@ -2221,6 +2221,36 @@ async function startVmGatewayProcess({ exitOnFailure = true } = {}) {
     console.log("  prepare-rootfs returned no output");
   }
 
+  // The vm-dev openshell-sandbox binary was built with cargo-zigbuild on
+  // a host with glibc 2.39, but sandbox containers use Ubuntu 22.04
+  // (glibc 2.35). The binary fails with "GLIBC_2.38 not found". Fix:
+  // extract the compatible binary from the Docker gateway image, which
+  // was built with rust:1.88-slim (Debian bookworm, glibc 2.36).
+  if (prepOutput) {
+    const supervisorPath = path.join(prepOutput, "opt", "openshell", "bin", "openshell-sandbox");
+    if (fs.existsSync(supervisorPath)) {
+      const gatewayImage = `ghcr.io/nvidia/openshell/cluster:${
+        require("./openshell").getInstalledOpenshellVersion("openshell", { ignoreError: true }) || "0.0.26"
+      }`;
+      console.log(`  Checking supervisor glibc compatibility...`);
+      // Extract openshell-sandbox from the Docker gateway image
+      const extractResult = run(
+        `docker create --name nemoclaw-extract-supervisor ${shellQuote(gatewayImage)} true 2>/dev/null && ` +
+        `docker cp nemoclaw-extract-supervisor:/opt/openshell/bin/openshell-sandbox ${shellQuote(supervisorPath)}.docker 2>/dev/null; ` +
+        `docker rm -f nemoclaw-extract-supervisor 2>/dev/null`,
+        { ignoreError: true, suppressOutput: true },
+      );
+      const dockerSupervisor = `${supervisorPath}.docker`;
+      if (extractResult.status === 0 && fs.existsSync(dockerSupervisor)) {
+        fs.renameSync(dockerSupervisor, supervisorPath);
+        fs.chmodSync(supervisorPath, 0o755);
+        console.log("  Replaced VM supervisor with Docker-compatible binary");
+      } else {
+        try { fs.unlinkSync(dockerSupervisor); } catch { /* may not exist */ }
+      }
+    }
+  }
+
   // --mem 4096: CI runners (16GB) can't spare the default 8GB while also
   // running k3s image pulls; 4GB is enough for a lightweight gateway.
   const vmArgs = ["--name", GATEWAY_NAME, "--mem", "4096"];
