@@ -3052,11 +3052,19 @@ async function createSandbox(
 
   // DNS proxy — run a forwarder in the sandbox pod so the isolated
   // sandbox namespace can resolve hostnames (fixes #626).
-  console.log("  Setting up sandbox DNS proxy...");
-  run(
-    `bash "${path.join(SCRIPTS, "setup-dns-proxy.sh")}" ${shellQuote(GATEWAY_NAME)} ${shellQuote(sandboxName)} 2>&1 || true`,
-    { ignoreError: true },
-  );
+  // VM backend: gvproxy provides NAT networking with working DNS through
+  // the gateway IP (192.168.127.1). The DNS proxy script uses docker exec
+  // to reach kubectl inside the gateway container — skip it for VM.
+  const currentSession = onboardSession.loadSession();
+  if (currentSession?.gatewayBackend === "vm") {
+    console.log("  DNS proxy: skipped (VM backend uses gvproxy networking)");
+  } else {
+    console.log("  Setting up sandbox DNS proxy...");
+    run(
+      `bash "${path.join(SCRIPTS, "setup-dns-proxy.sh")}" ${shellQuote(GATEWAY_NAME)} ${shellQuote(sandboxName)} 2>&1 || true`,
+      { ignoreError: true },
+    );
+  }
 
   // Check that messaging providers exist in the gateway (sandbox attachment
   // cannot be verified via CLI yet — only gateway-level existence is checked).
@@ -4121,6 +4129,18 @@ function getSuggestedPolicyPresets({ enabledChannels = null, webSearchConfig = n
 
 async function setupOpenclaw(sandboxName, model, provider) {
   step(7, 8, "Setting up OpenClaw inside sandbox");
+
+  // VM backend: the sandbox pod may briefly flip from Ready → NotReady during
+  // init container restarts. Wait for it to stabilize before connecting.
+  const sess = onboardSession.loadSession();
+  if (sess?.gatewayBackend === "vm") {
+    for (let i = 0; i < 15; i++) {
+      const list = runCaptureOpenshell(["sandbox", "list"], { ignoreError: true });
+      if (isSandboxReady(list, sandboxName)) break;
+      if (i === 14) console.warn("  Sandbox still not ready after 30s — attempting connect anyway...");
+      else sleep(2);
+    }
+  }
 
   const selectionConfig = getProviderSelectionConfig(provider, model);
   if (selectionConfig) {
