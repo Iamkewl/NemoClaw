@@ -2318,7 +2318,6 @@ async function startGatewayWithOptions(_gpu, { exitOnFailure = true } = {}) {
   // Detect which backend to use
   const backend = detectGatewayBackend({
     vmAvailable: isOpenshellVmAvailable(),
-    gpuRequested: !!_gpu,
   });
 
   // VM backend — delegate to openshell-vm process lifecycle
@@ -4963,7 +4962,6 @@ async function onboard(opts = {}) {
     // VM backend resume — check VM process health instead of Docker gateway state
     const isVmBackend = session?.gatewayBackend === "vm" || detectGatewayBackend({
       vmAvailable: isOpenshellVmAvailable(),
-      gpuRequested: !!gpu,
     }) === "vm";
     const gatewayStatus = runCaptureOpenshell(["status"], { ignoreError: true });
     const gatewayInfo = runCaptureOpenshell(["gateway", "info", "-g", GATEWAY_NAME], {

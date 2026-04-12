@@ -129,17 +129,14 @@ function detectGatewayBackend(opts = {}) {
     typeof opts.vmAvailable === "boolean"
       ? opts.vmAvailable
       : false; // caller should pass actual detection result
-  const gpuRequested =
-    typeof opts.gpuRequested === "boolean" ? opts.gpuRequested : false;
   const dockerAvailable =
     typeof opts.dockerAvailable === "boolean"
       ? opts.dockerAvailable
       : detectDockerHost(opts) !== null;
 
-  // GPU workloads require Docker (CDI injection, no libkrun GPU passthrough)
-  if (gpuRequested) return dockerAvailable ? "docker" : "unknown";
-
-  // Prefer VM when available (no Docker dependency, faster boot)
+  // GPU inference is routed through inference.local (OpenShell L7 proxy
+  // → host inference server), so the sandbox/gateway never needs direct
+  // GPU access. The VM backend works for all scenarios.
   if (vmAvailable) return "vm";
   if (dockerAvailable) return "docker";
   return "unknown";

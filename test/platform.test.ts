@@ -221,13 +221,12 @@ describe("platform helpers", () => {
       ).toBe("docker");
     });
 
-    it("prefers vm when available and no GPU requested", () => {
+    it("prefers vm when both available", () => {
       expect(
         detectGatewayBackend({
           env: {},
           vmAvailable: true,
           dockerAvailable: true,
-          gpuRequested: false,
         }),
       ).toBe("vm");
     });
@@ -238,31 +237,18 @@ describe("platform helpers", () => {
           env: {},
           vmAvailable: false,
           dockerAvailable: true,
-          gpuRequested: false,
         }),
       ).toBe("docker");
     });
 
-    it("requires docker when GPU is requested", () => {
+    it("prefers vm even when GPU is present (inference routed via inference.local)", () => {
       expect(
         detectGatewayBackend({
           env: {},
           vmAvailable: true,
           dockerAvailable: true,
-          gpuRequested: true,
         }),
-      ).toBe("docker");
-    });
-
-    it("returns unknown when GPU requested but docker unavailable", () => {
-      expect(
-        detectGatewayBackend({
-          env: {},
-          vmAvailable: true,
-          dockerAvailable: false,
-          gpuRequested: true,
-        }),
-      ).toBe("unknown");
+      ).toBe("vm");
     });
 
     it("returns unknown when nothing is available", () => {
@@ -271,7 +257,6 @@ describe("platform helpers", () => {
           env: {},
           vmAvailable: false,
           dockerAvailable: false,
-          gpuRequested: false,
         }),
       ).toBe("unknown");
     });
@@ -282,7 +267,6 @@ describe("platform helpers", () => {
           env: { NEMOCLAW_GATEWAY_BACKEND: "invalid" },
           vmAvailable: true,
           dockerAvailable: false,
-          gpuRequested: false,
         }),
       ).toBe("vm");
     });
