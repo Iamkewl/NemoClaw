@@ -329,6 +329,24 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: bash test/e2e/test-vm-backend-e2e.sh
 
+      - name: Collect VM diagnostics on failure
+        if: failure()
+        run: |
+          echo "=== openshell-vm log ==="
+          cat ~/.nemoclaw/openshell-vm.log 2>/dev/null || echo "(not found)"
+          echo ""
+          echo "=== gvproxy log ==="
+          find ~/.local/share/openshell -name '*gvproxy*' -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "(not found)"
+          echo ""
+          echo "=== dmesg OOM ==="
+          sudo dmesg 2>/dev/null | grep -i -E "oom|killed|out of memory" | tail -20 || echo "(no OOM)"
+          echo ""
+          echo "=== memory ==="
+          free -h
+          echo ""
+          echo "=== VM console log ==="
+          find ~/.local/share/openshell -name '*console*' -exec echo "--- {} ---" \; -exec tail -30 {} \; 2>/dev/null || echo "(not found)"
+
       - name: Upload install log on failure
         if: failure()
         uses: actions/upload-artifact@v4

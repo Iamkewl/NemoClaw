@@ -2115,9 +2115,27 @@ async function startVmGatewayProcess({ exitOnFailure = true } = {}) {
   // openshell-vm --name nemoclaw: boots a microVM with gateway identity
   // "openshell-vm-nemoclaw". The binary handles rootfs extraction, k3s
   // bootstrap, mTLS cert generation, and metadata registration internally.
-  const child = spawn("openshell-vm", ["--name", GATEWAY_NAME], {
+  //
+  // --mem 4096: CI runners (16GB) can't spare the default 8GB while also
+  // running k3s image pulls; 4GB is enough for a lightweight gateway.
+  const vmArgs = ["--name", GATEWAY_NAME, "--mem", "4096"];
+
+  // If the E2E test downloaded a VM runtime, prefer it over the embedded
+  // one — the downloaded runtime matches the release tag and may contain
+  // fixes not yet baked into the binary's embedded copy.
+  const vmEnv = { ...process.env };
+  const downloadedRuntime = path.join(
+    process.env.XDG_DATA_HOME || path.join(process.env.HOME || "/tmp", ".local", "share"),
+    "openshell-vm",
+  );
+  if (!vmEnv.OPENSHELL_VM_RUNTIME_DIR && fs.existsSync(path.join(downloadedRuntime, "gvproxy"))) {
+    vmEnv.OPENSHELL_VM_RUNTIME_DIR = downloadedRuntime;
+    console.log(`  Using downloaded VM runtime: ${downloadedRuntime}`);
+  }
+
+  const child = spawn("openshell-vm", vmArgs, {
     cwd: ROOT,
-    env: process.env,
+    env: vmEnv,
     stdio: ["ignore", logFd, logFd],
     detached: true,
   });
