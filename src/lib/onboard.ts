@@ -4811,6 +4811,40 @@ async function onboard(opts = {}) {
     let fromDockerfile;
     if (resume) {
       session = onboardSession.loadSession();
+
+      // VM backend: allow resuming a completed session when the gateway
+      // crashed. This handles the "kill openshell-vm → onboard --resume"
+      // recovery flow. Restart the gateway, verify sandbox is alive, done.
+      if (
+        session?.status === "complete" &&
+        session?.gatewayBackend === "vm" &&
+        !isVmGatewayHealthy()
+      ) {
+        console.log("  Completed session with dead VM gateway — restarting...");
+        await startVmGatewayProcess({ exitOnFailure: true });
+        const sandboxName = session.sandboxName;
+        if (sandboxName) {
+          // Give the sandbox time to reconnect after gateway restart
+          let sandboxOk = false;
+          for (let i = 0; i < 30; i++) {
+            const list = runCaptureOpenshell(["sandbox", "list"], { ignoreError: true });
+            if (isSandboxReady(list, sandboxName)) {
+              sandboxOk = true;
+              break;
+            }
+            sleep(2);
+          }
+          if (sandboxOk) {
+            console.log(`  ✓ Gateway recovered, sandbox '${sandboxName}' is ready`);
+            process.exit(0);
+          }
+          console.log("  Gateway recovered but sandbox not ready — falling through to re-onboard...");
+        }
+        // Mark session resumable so the normal resume path can re-run steps
+        session.resumable = true;
+        onboardSession.saveSession(session);
+      }
+
       if (!session || session.resumable === false) {
         console.error("  No resumable onboarding session was found.");
         console.error("  Run: nemoclaw onboard");
