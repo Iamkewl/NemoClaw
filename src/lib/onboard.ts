@@ -2755,8 +2755,11 @@ async function createSandbox(
         { ignoreError: true },
       );
       const rootfsDir = (prepOut || "").trim();
+      // /tmp is overlaid by a tmpfs mount inside the VM, so files written
+      // to rootfs/tmp/ on the host are invisible inside the guest. Use
+      // /opt/nemoclaw/ which lives on the virtio-fs rootfs directly.
       const vmTarPath = rootfsDir
-        ? path.join(rootfsDir, "tmp", "sandbox-image.tar")
+        ? path.join(rootfsDir, "opt", "nemoclaw", "sandbox-image.tar")
         : null;
       if (vmTarPath) {
         console.log("  Exporting image to VM rootfs...");
@@ -2769,7 +2772,7 @@ async function createSandbox(
           // k3s bundles ctr at /var/lib/rancher/k3s/data/<hash>/bin/ctr,
           // not in PATH. Use k3s ctr which wraps it, or find it via glob.
           const importResult = run(
-            `openshell-vm --name ${shellQuote(GATEWAY_NAME)} exec -- sh -c 'CTR=$(find /var/lib/rancher/k3s/data -name ctr -type f 2>/dev/null | head -1); [ -x "$CTR" ] && "$CTR" -a /run/k3s/containerd/containerd.sock -n k8s.io images import /tmp/sandbox-image.tar || k3s ctr images import /tmp/sandbox-image.tar'`,
+            `openshell-vm --name ${shellQuote(GATEWAY_NAME)} exec -- sh -c 'CTR=$(find /var/lib/rancher/k3s/data -name ctr -type f 2>/dev/null | head -1); [ -x "$CTR" ] && "$CTR" -a /run/k3s/containerd/containerd.sock -n k8s.io images import /opt/nemoclaw/sandbox-image.tar || k3s ctr images import /opt/nemoclaw/sandbox-image.tar'`,
             { ignoreError: true },
           );
           if (importResult.status === 0) {
