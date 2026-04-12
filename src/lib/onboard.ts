@@ -2766,8 +2766,10 @@ async function createSandbox(
         );
         if (saveResult.status === 0) {
           console.log("  Importing image into VM containerd...");
+          // k3s bundles ctr at /var/lib/rancher/k3s/data/<hash>/bin/ctr,
+          // not in PATH. Use k3s ctr which wraps it, or find it via glob.
           const importResult = run(
-            `openshell-vm --name ${shellQuote(GATEWAY_NAME)} exec -- ctr -a /run/k3s/containerd/containerd.sock -n k8s.io images import /tmp/sandbox-image.tar`,
+            `openshell-vm --name ${shellQuote(GATEWAY_NAME)} exec -- sh -c 'CTR=$(find /var/lib/rancher/k3s/data -name ctr -type f 2>/dev/null | head -1); [ -x "$CTR" ] && "$CTR" -a /run/k3s/containerd/containerd.sock -n k8s.io images import /tmp/sandbox-image.tar || k3s ctr images import /tmp/sandbox-image.tar'`,
             { ignoreError: true },
           );
           if (importResult.status === 0) {
