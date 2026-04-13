@@ -459,6 +459,18 @@ openclaw() {
       echo "This rebuilds the sandbox with your updated settings." >&2
       return 1
       ;;
+    agent)
+      # Warn when --local is used — it bypasses gateway protections including
+      # secret scanning, network policy, and inference auth. Ref: #1632
+      local _arg
+      for _arg in "$@"; do
+        if [ "$_arg" = "--local" ]; then
+          echo "[SECURITY] Warning: 'openclaw agent --local' bypasses the NemoClaw gateway." >&2
+          echo "[SECURITY] Secret scanning, network policy, and inference auth are NOT enforced in local mode." >&2
+          break
+        fi
+      done
+      ;;
   esac
   command openclaw "$@"
 }
@@ -547,6 +559,13 @@ json.dump({
 }, open(path, 'w'))
 os.chmod(path, 0o600)
 PYAUTH
+}
+
+harden_auth_profiles() {
+  if [ -d "${HOME}/.openclaw" ]; then
+    # Enforce 600 for all auth profiles across all agents
+    find -L "${HOME}/.openclaw" -type f -name "auth-profiles.json" -exec chmod 600 {} + 2>/dev/null || true
+  fi
 }
 
 configure_messaging_channels() {
@@ -840,6 +859,7 @@ if [ "$(id -u)" -ne 0 ]; then
   }
   fix_openclaw_data_ownership
   write_auth_profile
+  harden_auth_profiles
 
   if [ ${#NEMOCLAW_CMD[@]} -gt 0 ]; then
     exec "${NEMOCLAW_CMD[@]}"
@@ -881,7 +901,8 @@ install_configure_guard
 configure_messaging_channels
 
 # Write auth profile as sandbox user (needs writable .openclaw-data)
-gosu sandbox bash -c "$(declare -f write_auth_profile); write_auth_profile"
+# and recursively re-tighten any auth-profiles.json files under ~/.openclaw.
+gosu sandbox bash -c "$(declare -f write_auth_profile harden_auth_profiles); write_auth_profile; harden_auth_profiles"
 
 # If a command was passed (e.g., "openclaw agent ..."), run it as sandbox user
 if [ ${#NEMOCLAW_CMD[@]} -gt 0 ]; then
