@@ -361,7 +361,7 @@ exit 98
 
     expect(result.status).toBe(0);
     const output = `${result.stdout}${result.stderr}`;
-    expect(output.trim()).toMatch(/^nemoclaw-installer(?: v\d+\.\d+\.\d+(?:-.+)?)?$/);
+    expect(output.trim()).toMatch(/^nemoclaw-installer(?: v\d+\.\d+\.\d+(?:\.\d+)?(?:-.+)?)?$/);
     expect(output).not.toMatch(/0\.1\.0/);
   });
 
@@ -373,7 +373,7 @@ exit 98
 
     expect(result.status).toBe(0);
     const output = `${result.stdout}${result.stderr}`;
-    expect(output.trim()).toMatch(/^nemoclaw-installer(?: v\d+\.\d+\.\d+(?:-.+)?)?$/);
+    expect(output.trim()).toMatch(/^nemoclaw-installer(?: v\d+\.\d+\.\d+(?:\.\d+)?(?:-.+)?)?$/);
     expect(output).not.toMatch(/0\.1\.0/);
   });
 
@@ -1512,8 +1512,8 @@ describe("installer pure helpers", () => {
 
   it("resolve_installer_version: reads version from git or package.json", () => {
     const r = callInstallerFn("resolve_installer_version");
-    // May return clean semver ("0.0.2") or git describe format ("0.0.2-3-gabcdef1")
-    expect(r.stdout.trim()).toMatch(/^\d+\.\d+\.\d+(-.+)?$/);
+    // May return clean semver ("0.0.2"), git describe ("0.0.2-3-gabcdef1"), or 4-part ("0.0.7.1")
+    expect(r.stdout.trim()).toMatch(/^\d+\.\d+\.\d+(?:\.\d+)?(?:-.+)?$/);
   });
 
   it("resolve_openclaw_version: falls back to Dockerfile.base when package.json omits it", () => {

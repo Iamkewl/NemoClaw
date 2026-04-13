@@ -374,6 +374,49 @@ function step(n, total, msg) {
   console.log(`  ${"─".repeat(50)}`);
 }
 
+/**
+ * Returns true if left >= right (semver comparison).
+ */
+function versionGte(left, right) {
+  const lhs = String(left || "0.0.0")
+    .split(".")
+    .map((p) => parseInt(p, 10) || 0);
+  const rhs = String(right || "0.0.0")
+    .split(".")
+    .map((p) => parseInt(p, 10) || 0);
+  const length = Math.max(lhs.length, rhs.length);
+  for (let i = 0; i < length; i++) {
+    const a = lhs[i] || 0;
+    const b = rhs[i] || 0;
+    if (a > b) return true;
+    if (a < b) return false;
+  }
+  return true;
+}
+
+/**
+ * Read max_openshell_version from nemoclaw-blueprint/blueprint.yaml.
+ * Returns null if missing or unparseable — callers must treat null as
+ * "no constraint configured" to avoid blocking onboard on malformed installs.
+ */
+function getBlueprintMaxOpenshellVersion(rootDir) {
+  rootDir = rootDir || ROOT;
+  try {
+    const YAML = require("yaml");
+    const blueprintPath = path.join(rootDir, "nemoclaw-blueprint", "blueprint.yaml");
+    if (!fs.existsSync(blueprintPath)) return null;
+    const raw = fs.readFileSync(blueprintPath, "utf8");
+    const parsed = YAML.parse(raw);
+    const value = parsed && parsed.max_openshell_version;
+    if (typeof value !== "string") return null;
+    const trimmed = value.trim();
+    if (!/^[0-9]+\.[0-9]+\.[0-9]+/.test(trimmed)) return null;
+    return trimmed;
+  } catch (_e) {
+    return null;
+  }
+}
+
 function getInstalledOpenshellVersion(versionOutput = null) {
   const output = String(versionOutput ?? runCapture("openshell -V", { ignoreError: true })).trim();
   const match = output.match(/openshell\s+([0-9]+\.[0-9]+\.[0-9]+)/i);
@@ -1559,9 +1602,30 @@ async function preflight() {
       process.exit(1);
     }
   }
-  console.log(
-    `  ✓ openshell CLI: ${runCaptureOpenshell(["--version"], { ignoreError: true }) || "unknown"}`,
-  );
+  const openshellVersionOutput = runCaptureOpenshell(["--version"], { ignoreError: true });
+  console.log(`  ✓ openshell CLI: ${openshellVersionOutput || "unknown"}`);
+  // Enforce max OpenShell version from blueprint.yaml.
+  // OpenShell 0.0.26 hangs during onboard on macOS. Block early with
+  // actionable guidance rather than letting the user hit a silent hang.
+  const installedOpenshellVersion = getInstalledOpenshellVersion(openshellVersionOutput);
+  const maxOpenshellVersion = getBlueprintMaxOpenshellVersion();
+  if (
+    installedOpenshellVersion &&
+    maxOpenshellVersion &&
+    !versionGte(maxOpenshellVersion, installedOpenshellVersion)
+  ) {
+    console.error("");
+    console.error(
+      `  ✗ openshell ${installedOpenshellVersion} exceeds the maximum (${maxOpenshellVersion}) supported by this NemoClaw release.`,
+    );
+    console.error("");
+    console.error("    Downgrade OpenShell to a supported version:");
+    console.error(`      https://github.com/NVIDIA/OpenShell/releases/tag/v${maxOpenshellVersion}`);
+    console.error("");
+    console.error("    Or upgrade NemoClaw to a version that supports your OpenShell release.");
+    console.error("");
+    process.exit(1);
+  }
   if (openshellInstall.futureShellPathHint) {
     console.log(
       `  Note: openshell was installed to ${openshellInstall.localBin} for this onboarding run.`,
@@ -4159,6 +4223,8 @@ module.exports = {
   getNavigationChoice,
   getSandboxInferenceConfig,
   getInstalledOpenshellVersion,
+  getBlueprintMaxOpenshellVersion,
+  versionGte,
   getRequestedModelHint,
   getRequestedProviderHint,
   getStableGatewayImageRef,

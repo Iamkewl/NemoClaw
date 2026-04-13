@@ -20,6 +20,8 @@ import {
   getFutureShellPathHint,
   getSandboxInferenceConfig,
   getInstalledOpenshellVersion,
+  getBlueprintMaxOpenshellVersion,
+  versionGte,
   getRequestedModelHint,
   getRequestedProviderHint,
   getRequestedSandboxNameHint,
@@ -299,6 +301,38 @@ describe("onboard helpers", () => {
       inferenceApi: "openai-responses",
       inferenceCompat: null,
     });
+  });
+
+  it("compares semantic versions with versionGte", () => {
+    expect(versionGte("0.0.25", "0.0.25")).toBe(true);
+    expect(versionGte("0.0.26", "0.0.25")).toBe(true);
+    expect(versionGte("0.1.0", "0.0.99")).toBe(true);
+    expect(versionGte("1.0.0", "0.99.99")).toBe(true);
+    expect(versionGte("0.0.24", "0.0.25")).toBe(false);
+    expect(versionGte(null, "0.0.1")).toBe(false);
+    expect(versionGte("0.0.1", null)).toBe(true);
+  });
+
+  it("reads max_openshell_version from shipped blueprint.yaml", () => {
+    const repoRoot = path.resolve(import.meta.dirname, "..");
+    const v = getBlueprintMaxOpenshellVersion(repoRoot);
+    expect(v).toBe("0.0.25");
+  });
+
+  it("returns null for max_openshell_version when blueprint dir is missing", () => {
+    expect(getBlueprintMaxOpenshellVersion("/nonexistent/path")).toBe(null);
+  });
+
+  it("returns null for max_openshell_version when field is absent", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-blueprint-no-max-"));
+    const blueprintDir = path.join(tmpDir, "nemoclaw-blueprint");
+    fs.mkdirSync(blueprintDir, { recursive: true });
+    fs.writeFileSync(path.join(blueprintDir, "blueprint.yaml"), 'version: "0.1.0"\n');
+    try {
+      expect(getBlueprintMaxOpenshellVersion(tmpDir)).toBe(null);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 
   it("pins the gateway image to the installed OpenShell release version", () => {
