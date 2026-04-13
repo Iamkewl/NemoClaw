@@ -545,14 +545,28 @@ Use the provider and model that match the upstream you want to use.</p>
 <h4>Switching from Responses API to Chat Completions<a class="headerlink" href="#switching-from-responses-api-to-chat-completions" title="Link to this heading">#</a></h4>
 <p>If onboarding selected <code class="docutils literal notranslate"><span class="pre">/v1/responses</span></code> but the agent fails at runtime (for
 example, because the backend does not emit the streaming events OpenClaw
-requires), you can switch to <code class="docutils literal notranslate"><span class="pre">/v1/chat/completions</span></code> without a full re-onboard:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span><span class="nb">export</span><span class="w"> </span><span class="nv">NEMOCLAW_INFERENCE_API_OVERRIDE</span><span class="o">=</span>openai-completions
-<span class="gp">$ </span>nemoclaw<span class="w"> </span>onboard<span class="w"> </span>--resume<span class="w"> </span>--recreate-sandbox
+requires), re-run onboarding so the wizard re-probes the endpoint and bakes
+the correct API path into the image:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>nemoclaw<span class="w"> </span>onboard
 </pre></div>
 </div>
-<p>The entrypoint patches <code class="docutils literal notranslate"><span class="pre">openclaw.json</span></code> at container startup.
-No image rebuild is needed.
-Remove the env var and recreate the sandbox to revert to the original API path.</p>
+<p>Select the same provider and endpoint again.
+The updated streaming probe will detect incomplete <code class="docutils literal notranslate"><span class="pre">/v1/responses</span></code> support
+and select <code class="docutils literal notranslate"><span class="pre">/v1/chat/completions</span></code> automatically.</p>
+<p>To force <code class="docutils literal notranslate"><span class="pre">/v1/chat/completions</span></code> without re-probing, set <code class="docutils literal notranslate"><span class="pre">NEMOCLAW_PREFERRED_API</span></code>
+before onboarding:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span><span class="nv">NEMOCLAW_PREFERRED_API</span><span class="o">=</span>openai-completions<span class="w"> </span>nemoclaw<span class="w"> </span>onboard
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code class="docutils literal notranslate"><span class="pre">NEMOCLAW_INFERENCE_API_OVERRIDE</span></code> patches the config at container startup but
+does not update the Dockerfile ARG baked into the image.
+If you recreate the sandbox without the override env var, the image reverts to
+the original API path.
+A fresh <code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">onboard</span></code> is the reliable fix because it updates both the
+session and the baked image.</p>
+</div>
 </section>
 </section>
 </section>

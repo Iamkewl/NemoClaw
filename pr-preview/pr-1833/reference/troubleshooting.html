@@ -727,16 +727,19 @@ OpenClaw requires granular streaming events like <code class="docutils literal n
 that these backends do not emit.</p>
 <p>NemoClaw now tests streaming events during the <code class="docutils literal notranslate"><span class="pre">/v1/responses</span></code> probe and falls
 back to <code class="docutils literal notranslate"><span class="pre">/v1/chat/completions</span></code> automatically.
-If you onboarded before this check was added, switch the API path on an existing
-sandbox:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span><span class="nb">export</span><span class="w"> </span><span class="nv">NEMOCLAW_INFERENCE_API_OVERRIDE</span><span class="o">=</span>openai-completions
-<span class="gp">$ </span>nemoclaw<span class="w"> </span>onboard<span class="w"> </span>--resume<span class="w"> </span>--recreate-sandbox
+If you onboarded before this check was added, re-run onboarding so the wizard
+re-probes the endpoint and bakes the correct API path into the image:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>nemoclaw<span class="w"> </span>onboard
 </pre></div>
 </div>
-<p>To force <code class="docutils literal notranslate"><span class="pre">/v1/chat/completions</span></code> during a fresh onboard, set <code class="docutils literal notranslate"><span class="pre">NEMOCLAW_PREFERRED_API</span></code>:</p>
+<p>To force <code class="docutils literal notranslate"><span class="pre">/v1/chat/completions</span></code> without re-probing, set <code class="docutils literal notranslate"><span class="pre">NEMOCLAW_PREFERRED_API</span></code>:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span><span class="nv">NEMOCLAW_PREFERRED_API</span><span class="o">=</span>openai-completions<span class="w"> </span>nemoclaw<span class="w"> </span>onboard
 </pre></div>
 </div>
+<p>Do not rely on <code class="docutils literal notranslate"><span class="pre">NEMOCLAW_INFERENCE_API_OVERRIDE</span></code> alone — it patches the config
+at container startup but does not update the Dockerfile ARG baked into the
+image.
+A fresh <code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">onboard</span></code> is the reliable fix.</p>
 </section>
 <section id="nemoclaw-disable-device-auth-1-does-not-change-an-existing-sandbox">
 <h3><code class="docutils literal notranslate"><span class="pre">NEMOCLAW_DISABLE_DEVICE_AUTH=1</span></code> does not change an existing sandbox<a class="headerlink" href="#nemoclaw-disable-device-auth-1-does-not-change-an-existing-sandbox" title="Link to this heading">#</a></h3>
