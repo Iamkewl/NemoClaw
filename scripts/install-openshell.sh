@@ -35,7 +35,7 @@ info "Detected $OS_LABEL ($ARCH_LABEL)"
 
 # Minimum version required for sandbox persistence across gateway restarts
 # (deterministic k3s node name + workspace PVC: NVIDIA/OpenShell#739, #488)
-MIN_VERSION="0.0.22"
+MIN_VERSION="0.0.23"
 # Maximum version validated for this NemoClaw release (v0.0.7.1).
 # OpenShell 0.0.26 hangs during onboard preflight on macOS.
 MAX_VERSION="0.0.25"
