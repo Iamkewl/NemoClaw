@@ -53,13 +53,13 @@ Comment on the closed PR before you merge:
 
 ### Feature Requests
 
-> Thanks for the suggestion. We've noted this as a feature request and added it to our backlog. We don't have a timeline to share yet, but we've got it on our radar.
+> Thanks for the suggestion. We've noted this and will review it — we'll update this issue if it moves forward. We don't have a timeline to share yet.
 
-Or, if routing to Discussions:
+**Project status:** `No Status` (do NOT say "added to backlog" — that implies approval)
 
-> Thanks for the suggestion. This is a good candidate for a design conversation — I've opened a Discussion thread here: [link].
+**Labels:** Always apply `enhancement` + the most specific sub-label (`enhancement: inference`, `enhancement: ui`, etc.) + any Tier 3 dimension labels (`Integration: Slack`, `Platform: MacOS`, `Provider: NVIDIA`, etc.)
 
-**Label:** `status: feature-request`
+*Full label reference: [docs/project-workflow.md](project-workflow.md)*
 
 ---
 

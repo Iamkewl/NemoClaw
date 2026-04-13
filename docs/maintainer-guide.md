@@ -122,22 +122,28 @@ When an issue or PR covers the same ground as an existing open or closed item, c
 
 ## 6. Feature Requests
 
-Feature requests are not rejections — they're routing decisions. Route to the backlog or to Discussions; don't close without acknowledgment.
+Feature requests are not rejections — they're routing decisions. Route to the Enhancement Parking board; don't close without acknowledgment.
 
-**Response template (routing to backlog):**
+**Response template:**
 
-> Thanks for the suggestion. We've noted this as a feature request and added it to our backlog. We don't have a timeline to share yet, but we've got it on our radar.
+> Thanks for the suggestion. We've noted this and will review it — we'll update this issue if it moves forward. We don't have a timeline to share yet.
 
-**Response template (routing to Discussions):**
+**Project status:** `No Status` (unreviewed). A maintainer sets `Backlog` when approved for future work.
 
-> Thanks for the suggestion. This is a good candidate for a design conversation — I've opened a Discussion thread here: [link]. We'd love to hear more there.
-
-**Label:** `status: feature-request` (leave open if backlog; close if routing to Discussions)
+**Labels to apply** (see [project-workflow.md](project-workflow.md) for the full label structure):
+1. Always apply `enhancement` as the base label
+2. Add the most specific Tier 2 sub-label: `enhancement: inference`, `enhancement: ui`, `enhancement: security`, etc.
+3. Add Tier 3 dimension labels if platform-, integration-, or provider-specific: `Platform: MacOS`, `Integration: Slack`, `Provider: NVIDIA`, etc.
 
 **Rules:**
-- Don't reject feature requests — route them.
+- Do NOT say "added to backlog" — that implies maintainer approval. Use "we'll review it."
 - Don't commit to a timeline unless one is confirmed.
 - If the request is clearly outside NemoClaw's scope, use § 1 (Out of Scope) instead.
+- If the request is better suited for an open design conversation, use § 7 (Redirect to Discussions).
+
+**Promotion flow:** `No Status` → maintainer reviews → `Backlog` → approved for release → `In Progress`
+
+*Full workflow and label reference: [docs/project-workflow.md](project-workflow.md)*
 
 ---
 

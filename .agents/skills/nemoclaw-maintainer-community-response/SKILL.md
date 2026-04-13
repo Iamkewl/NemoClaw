@@ -10,15 +10,16 @@ Draft a response to a GitHub issue or PR, recommend an action, and log the appro
 
 **Tone:** Community first, firm and friendly. Lead with acknowledgment. Hold the line when needed. Never dismissive.
 
-## Step 1: Read the Guide
+## Step 1: Read the Guides
 
-Before drafting, read the current quick reference:
+Before drafting, read both reference docs:
 
 ```bash
 cat docs/maintainer-guide-snippet.md
+cat docs/project-workflow.md
 ```
 
-Do not draft from memory. The guide may have been updated.
+Do not draft from memory. The guides may have been updated. `maintainer-guide-snippet.md` has the response templates. `project-workflow.md` has the status semantics and full label structure.
 
 ## Step 2: Gather Context
 
@@ -42,7 +43,7 @@ Map the item to one of the situations in the guide:
 | Security acknowledgment | Contributor reported or fixed a vulnerability |
 | Poorly designed PR | PR cannot merge as-is; needs specific changes |
 | Duplicate | Same issue or PR already exists |
-| Feature request | Valid suggestion, not a bug, not in current scope |
+| Feature request | Valid suggestion, not a bug — route to parking |
 | Redirect to Discussions | Open-ended question or design topic, not actionable |
 | Triage acknowledgment | Valid open issue, confirmed, no timeline yet |
 | Needs info (first contact) | Can't investigate without more information from contributor |
@@ -70,15 +71,22 @@ State the recommended action and **project status** clearly before drafting. The
 | Won't fix | `Won't Fix` |
 | Out of scope / needs design | `Won't Fix` |
 | Duplicate / superseded PR | `Duplicate` |
-| Feature request (backlog) | `Backlog` |
-| Feature request (active) | `In Progress` |
+| Feature request (new, unreviewed) | `No Status` |
+| Feature request (approved for future) | `Backlog` — only set this if maintainer has explicitly approved |
 | Needs review / poorly designed PR | `Needs Review` |
 | Triage acknowledgment (confirmed, backlogged) | `Backlog` |
 | Needs info (first contact or close) | `No Status` |
 | Completed / merged | `Done` |
 | NVQA-tracked item | `NVQA` |
 
-Always present as: **Action:** `close` · **Project status:** `Won't Fix`
+**For feature requests — also suggest labels** (read label structure from `project-workflow.md`):
+1. Always suggest `enhancement` as the base label
+2. Suggest the most specific Tier 2 sub-label that fits (e.g., `enhancement: inference`, `enhancement: ui`)
+3. Suggest Tier 3 dimension label(s) if platform-, integration-, or provider-specific (e.g., `Integration: Slack`, `Platform: MacOS`)
+
+Present as: **Action:** `comment` · **Project status:** `No Status` · **Suggested labels:** `enhancement`, `enhancement: inference`
+
+Always present as: **Action:** `close` · **Project status:** `Won't Fix` (for closures)
 
 ## Step 5: Draft the Response
 
@@ -109,8 +117,9 @@ When the user approves, append to `.nemoclaw-maintainer/community-responses.md`:
 ```
 ## [ISSUE|PR] NVIDIA/NemoClaw#<number> — <title>
 **Date:** YYYY-MM-DD
-**Action:** comment | close | close+comment | request changes | escalate
-**Label:** <label if closing>
+**Action:** comment | close | request changes | escalate
+**Project status:** <status>
+**Labels:** <suggested or applied labels>
 
 **Response:**
 <approved response text>
