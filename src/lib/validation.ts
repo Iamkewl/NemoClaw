@@ -130,12 +130,12 @@ export function shouldSkipResponsesProbe(provider: string): boolean {
 }
 
 /**
- * Whether the user has explicitly requested the chat completions API path
- * via the `NEMOCLAW_PREFERRED_API` environment variable. This lets users
- * with backends that expose `/v1/responses` but lack full streaming-event
+ * Whether the caller has explicitly requested the chat completions API path.
+ * Pass the value of `NEMOCLAW_PREFERRED_API` (or any other source). This lets
+ * users with backends that expose `/v1/responses` but lack full streaming-event
  * support (e.g. SGLang) skip the Responses API probe during onboarding.
  */
-export function shouldForceCompletionsApi(): boolean {
-  const value = (process.env.NEMOCLAW_PREFERRED_API || "").trim().toLowerCase();
+export function shouldForceCompletionsApi(preferredApi?: string): boolean {
+  const value = (preferredApi || "").trim().toLowerCase();
   return value === "openai-completions" || value === "chat-completions";
 }

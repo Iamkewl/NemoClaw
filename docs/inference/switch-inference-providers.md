@@ -123,7 +123,7 @@ $ nemoclaw onboard --resume --recreate-sandbox
 ```
 
 The entrypoint patches `openclaw.json` at container startup with the override values.
-No image rebuild is needed.
+You do not need to rebuild the image.
 Remove the env vars and recreate the sandbox to revert to the original model.
 
 `NEMOCLAW_INFERENCE_API_OVERRIDE` accepts `openai-completions` (for NVIDIA, OpenAI, Gemini, compatible endpoints) or `anthropic-messages` (for Anthropic and Anthropic-compatible endpoints).

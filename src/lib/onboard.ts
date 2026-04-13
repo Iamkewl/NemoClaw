@@ -1216,7 +1216,9 @@ function probeOpenAiLikeEndpoint(endpointUrl, model, apiKey, options = {}) {
           }),
           `${String(endpointUrl).replace(/\/+$/, "")}/responses`,
         ]);
-        if (!streamResult.ok) {
+        if (!streamResult.ok && streamResult.missingEvents.length > 0) {
+          // Backend responds but lacks required streaming events — fall back
+          // to /chat/completions silently.
           console.log(`  ℹ ${streamResult.message}`);
           failures.push({
             name: probe.name + " (streaming)",
@@ -1226,6 +1228,23 @@ function probeOpenAiLikeEndpoint(endpointUrl, model, apiKey, options = {}) {
             body: "",
           });
           continue;
+        }
+        if (!streamResult.ok) {
+          // Transport or execution failure — surface as a hard error instead
+          // of silently switching APIs.
+          return {
+            ok: false,
+            message: `${probe.name} (streaming): ${streamResult.message}`,
+            failures: [
+              {
+                name: probe.name + " (streaming)",
+                httpStatus: 0,
+                curlStatus: 0,
+                message: streamResult.message,
+                body: "",
+              },
+            ],
+          };
         }
       }
       return { ok: true, api: probe.api, label: probe.name };
@@ -1376,7 +1395,7 @@ async function validateCustomOpenAiLikeSelection(
   const apiKey = getCredential(credentialEnv);
   const probe = probeOpenAiLikeEndpoint(endpointUrl, model, apiKey, {
     requireResponsesToolCalling: true,
-    skipResponsesProbe: shouldForceCompletionsApi(),
+    skipResponsesProbe: shouldForceCompletionsApi(process.env.NEMOCLAW_PREFERRED_API),
     probeStreaming: true,
   });
   if (probe.ok) {

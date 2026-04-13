@@ -176,7 +176,7 @@ $ nemoclaw onboard --resume --recreate-sandbox
 ```
 
 The entrypoint patches `openclaw.json` at container startup with the override values.
-No image rebuild is needed.
+You do not need to rebuild the image.
 Remove the env vars and recreate the sandbox to revert to the original model.
 
 `NEMOCLAW_INFERENCE_API_OVERRIDE` accepts `openai-completions` (for NVIDIA, OpenAI, Gemini, compatible endpoints) or `anthropic-messages` (for Anthropic and Anthropic-compatible endpoints).
@@ -324,9 +324,9 @@ If you need to bypass the `/v1/responses` probe entirely, set
 $ NEMOCLAW_PREFERRED_API=openai-completions nemoclaw onboard
 ```
 
-This variable tells the wizard to skip the `/v1/responses` probe and use
+Set this variable to make the wizard skip the `/v1/responses` probe and use
 `/v1/chat/completions` directly.
-It works in both interactive and non-interactive mode.
+You can use it in both interactive and non-interactive mode.
 
 | Variable | Values | Default |
 |---|---|---|

@@ -144,9 +144,9 @@ If you need to bypass the `/v1/responses` probe entirely, set
 $ NEMOCLAW_PREFERRED_API=openai-completions nemoclaw onboard
 ```
 
-This variable tells the wizard to skip the `/v1/responses` probe and use
+Set this variable to make the wizard skip the `/v1/responses` probe and use
 `/v1/chat/completions` directly.
-It works in both interactive and non-interactive mode.
+You can use it in both interactive and non-interactive mode.
 
 | Variable | Values | Default |
 |---|---|---|
