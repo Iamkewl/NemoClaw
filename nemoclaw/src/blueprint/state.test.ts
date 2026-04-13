@@ -42,6 +42,13 @@ describe("blueprint/state", () => {
       expect(state.hostBackupPath).toBeNull();
       expect(state.createdAt).toBeNull();
       expect(state.updatedAt).toBeDefined();
+      // Shields defaults
+      expect(state.shieldsDown).toBe(false);
+      expect(state.shieldsDownAt).toBeNull();
+      expect(state.shieldsDownTimeout).toBeNull();
+      expect(state.shieldsDownReason).toBeNull();
+      expect(state.shieldsDownPolicy).toBeNull();
+      expect(state.shieldsPolicySnapshotPath).toBeNull();
     });
 
     it("returns parsed state when file exists", () => {
@@ -54,9 +61,41 @@ describe("blueprint/state", () => {
         hostBackupPath: null,
         createdAt: "2026-03-01T00:00:00.000Z",
         updatedAt: "2026-03-01T12:00:00.000Z",
+        shieldsDown: false,
+        shieldsDownAt: null,
+        shieldsDownTimeout: null,
+        shieldsDownReason: null,
+        shieldsDownPolicy: null,
+        shieldsPolicySnapshotPath: null,
       };
       store.set(STATE_PATH, JSON.stringify(saved));
       expect(loadState()).toEqual(saved);
+    });
+
+    it("fills shields defaults for pre-shields state files", () => {
+      // Simulate a state file written before shields fields were added
+      const legacyState = {
+        lastRunId: "run-1",
+        lastAction: "deploy",
+        blueprintVersion: "1.0.0",
+        sandboxName: "sb",
+        migrationSnapshot: null,
+        hostBackupPath: null,
+        createdAt: "2026-03-01T00:00:00.000Z",
+        updatedAt: "2026-03-01T12:00:00.000Z",
+      };
+      store.set(STATE_PATH, JSON.stringify(legacyState));
+      const loaded = loadState();
+      // Original fields preserved
+      expect(loaded.lastRunId).toBe("run-1");
+      expect(loaded.lastAction).toBe("deploy");
+      // Shields fields filled with defaults
+      expect(loaded.shieldsDown).toBe(false);
+      expect(loaded.shieldsDownAt).toBeNull();
+      expect(loaded.shieldsDownTimeout).toBeNull();
+      expect(loaded.shieldsDownReason).toBeNull();
+      expect(loaded.shieldsDownPolicy).toBeNull();
+      expect(loaded.shieldsPolicySnapshotPath).toBeNull();
     });
   });
 
