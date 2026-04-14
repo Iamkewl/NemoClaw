@@ -1,3 +1,19 @@
+---
+orphan: true
+title: "NemoClaw Maintainer Guide"
+description: "Reference for NVIDIA engineers handling issues and PRs from external contributors. Covers closing, merging, rejecting, duplicates, feature requests, triage, and needs-info flows."
+keywords: maintainer, community, issues, pull requests, triage, response
+topics: [maintainer, community]
+tags: [maintainer, community]
+content_type: reference
+difficulty: intermediate
+audience: maintainers
+status: active
+---
+
+<!-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 # NemoClaw Maintainer Guide — Community Engagement
 
 A reference for NVIDIA engineers handling issues and PRs from external contributors.
@@ -206,3 +222,10 @@ Two distinct situations require different responses.
 - [SECURITY.md](../SECURITY.md) — vulnerability disclosure; direct reporters here, not GitHub issues
 - [CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md) — all community interactions are governed by this
 - [Bug report template](../.github/ISSUE_TEMPLATE/bug_report.yml) — what we ask contributors to provide
+
+---
+
+## Next Steps
+
+- [Project Workflow](project-workflow.md) — board status semantics and label taxonomy
+- [Agent Skills](resources/agent-skills.md) — community response and triage skills

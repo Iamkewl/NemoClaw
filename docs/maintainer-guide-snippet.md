@@ -1,3 +1,19 @@
+---
+orphan: true
+title: "NemoClaw Community Engagement Quick Reference"
+description: "Quick reference card for NemoClaw maintainers — closing, merging, rejecting, duplicates, feature requests, triage, and needs-info flows."
+keywords: maintainer, community, triage, quick reference
+topics: [maintainer, community]
+tags: [maintainer, community]
+content_type: reference
+difficulty: beginner
+audience: maintainers
+status: active
+---
+
+<!-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 # NemoClaw — Community Engagement Quick Reference
 
 > - **Always explain why** when closing — never close silently.
@@ -17,7 +33,7 @@
 | Outside project design/scope | `status: out-of-scope` |
 | Good idea, needs a proposal first | `status: needs-design` |
 
-> Thanks for raising this. After review, we're closing as **[label]** because [one sentence]. See [CONTRIBUTING.md] for scope guidance. We appreciate you taking the time.
+> Thanks for raising this. After review, we're closing as **[label]** because [one sentence]. See [CONTRIBUTING.md](../CONTRIBUTING.md) for scope guidance. We appreciate you taking the time.
 
 ---
 
@@ -100,3 +116,10 @@ If you'll miss a window — post an update before it lapses.
 ---
 
 *Full guide: [docs/maintainer-guide.md](maintainer-guide.md) · Scope: [CONTRIBUTING.md](../CONTRIBUTING.md) · Security: [SECURITY.md](../SECURITY.md)*
+
+---
+
+## Next Steps
+
+- [Maintainer Guide](maintainer-guide.md) — full workflows, decision trees, and templates
+- [Project Workflow](project-workflow.md) — board status semantics and label taxonomy

@@ -1,3 +1,19 @@
+---
+orphan: true
+title: "NemoClaw Project Workflow Reference"
+description: "Reference for maintainers covering project board status semantics, label taxonomy, board setup, and triage checklist."
+keywords: workflow, project board, labels, triage, maintainer
+topics: [maintainer, workflow]
+tags: [maintainer, workflow]
+content_type: reference
+difficulty: beginner
+audience: maintainers
+status: active
+---
+
+<!-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 # NemoClaw — Project Workflow Reference
 
 A reference for maintainers and the community response skill. Covers project board status semantics, the label structure for categorizing issues, and step-by-step instructions for configuring the NemoClaw Development Tracker.
@@ -159,3 +175,10 @@ When processing a new incoming issue:
 
 *Maintainer community response guide: [docs/maintainer-guide.md](maintainer-guide.md)*
 *Skill reference: [.agents/skills/nemoclaw-maintainer-community-response/SKILL.md](../.agents/skills/nemoclaw-maintainer-community-response/SKILL.md)*
+
+---
+
+## Next Steps
+
+- [Maintainer Guide](maintainer-guide.md) — community response workflows and comment templates
+- [Agent Skills](resources/agent-skills.md) — all available maintainer and user skills

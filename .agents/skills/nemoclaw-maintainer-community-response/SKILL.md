@@ -1,8 +1,11 @@
 ---
 name: nemoclaw-maintainer-community-response
-description: Drafts community-facing responses to GitHub issues and PRs for NemoClaw maintainers. For each item, recommends an action (comment, close, close+comment, request changes, escalate) and drafts the response text. Handles won't-fix closures, out-of-scope closures, superseded PRs, poorly designed PR rejections, security acknowledgments, duplicate issues, feature request routing, needs-info labeling, and general triage. Logs approved responses locally to .nemoclaw-maintainer/community-responses.md. Tone: community first, firm and friendly. Trigger keywords - respond to issue, close issue, respond to PR, community response, won't fix, out of scope, reject PR, triage response, draft response, what should I say, needs info, duplicate issue, feature request.
+description: Drafts community-facing responses to GitHub issues and PRs for NemoClaw maintainers. For each item, recommends an action (comment, close, close+comment, request changes, escalate) and drafts the response text. Handles won't-fix closures, out-of-scope closures, superseded PRs, poorly designed PR rejections, security acknowledgments, duplicate issues, feature request routing, needs-info labeling, and general triage. Logs approved responses to ~/development/daily-rhythm/activity/nemoclaw-community-responses.md. Tone: community first, firm and friendly. Trigger keywords - respond to issue, close issue, respond to PR, community response, won't fix, out of scope, reject PR, triage response, draft response, what should I say, needs info, duplicate issue, feature request.
 user_invocable: true
 ---
+
+<!-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
 
 # NemoClaw Maintainer — Community Response
 
@@ -88,7 +91,7 @@ State the recommended action and **project status** clearly before drafting. The
 
 Present as: **Action:** `comment` · **Project status:** `No Status` · **Suggested labels:** `enhancement`, `enhancement: inference`
 
-Always present as: **Action:** `close` · **Project status:** `Won't Fix` (for closures)
+For closures, use the project status from the mapping table above — `Won't Fix`, `Duplicate`, or `No Status` depending on the situation.
 
 ## Step 5: Draft the Response
 
