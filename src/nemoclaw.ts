@@ -1691,6 +1691,7 @@ function backupAll() {
   const liveNames = parseLiveSandboxNames(liveList.output || "");
 
   let backed = 0;
+  let failed = 0;
   let skipped = 0;
   for (const sb of sandboxes) {
     if (!liveNames.has(sb.name)) {
@@ -1705,12 +1706,18 @@ function backupAll() {
       backed++;
     } else {
       console.error(`  ${_RD}✗${R} ${sb.name}: backup failed (${result.failedDirs.join(", ")})`);
+      failed++;
     }
   }
   console.log("");
-  console.log(`  Pre-upgrade backup: ${backed} backed up, ${skipped} skipped`);
+  console.log(`  Pre-upgrade backup: ${backed} backed up, ${failed} failed, ${skipped} skipped`);
   if (backed > 0) {
     console.log(`  Backups stored in: ~/.nemoclaw/rebuild-backups/`);
+  }
+  // Exit non-zero if any live sandbox failed to back up — the upgrade hook
+  // in install.sh treats this as non-fatal but logs a warning.
+  if (failed > 0) {
+    process.exit(1);
   }
 }
 

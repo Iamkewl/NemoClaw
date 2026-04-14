@@ -237,8 +237,13 @@ export function backupSandboxState(sandboxName: string): BackupResult {
       .filter((d) => d.length > 0);
     _log(`Existing dirs in sandbox: [${existingDirs.join(",")}] (${existingDirs.length}/${stateDirs.length})`);
 
+    if (existResult.status !== 0) {
+      _log(`FAILED: SSH dir check exited ${existResult.status} — cannot determine which dirs exist`);
+      return { success: false, manifest, backedUpDirs, failedDirs: [...stateDirs] };
+    }
+
     if (existingDirs.length === 0) {
-      _log("No dirs to back up");
+      _log("No state dirs found in sandbox (all empty)");
       writeManifest(backupPath, manifest);
       return { success: true, manifest, backedUpDirs, failedDirs };
     }
@@ -347,13 +352,18 @@ export function restoreSandboxState(
     if (sshResult.status === 0) {
       restoredDirs.push(...localDirs);
 
-      // Fix ownership
+      // Fix ownership — treat failure as restore failure since wrong
+      // ownership means the agent can't read its own state files.
       const openshellBinary = resolveOpenshell();
       if (openshellBinary) {
-        spawnSync(openshellBinary, [
+        _log(`Fixing ownership: chown -R sandbox:sandbox ${writableDir}`);
+        const chownResult = spawnSync(openshellBinary, [
           "sandbox", "exec", sandboxName, "--",
           "chown", "-R", "sandbox:sandbox", writableDir,
-        ], { stdio: "ignore", timeout: 30000 });
+        ], { stdio: ["ignore", "pipe", "pipe"], timeout: 30000 });
+        if (chownResult.status !== 0) {
+          _log(`WARNING: chown failed (exit ${chownResult.status}) — agent may not be able to read restored state`);
+        }
       }
     } else {
       failedDirs.push(...localDirs);

@@ -73,7 +73,9 @@ export NEMOCLAW_SANDBOX_NAME="${SANDBOX_NAME}"
 export NEMOCLAW_RECREATE_SANDBOX=1
 
 INSTALL_LOG="/tmp/nemoclaw-e2e-install.log"
-bash "${REPO_ROOT}/install.sh" --non-interactive >"$INSTALL_LOG" 2>&1 || true
+if ! bash "${REPO_ROOT}/install.sh" --non-interactive >"$INSTALL_LOG" 2>&1; then
+  info "install.sh exited non-zero (may be expected on re-install). Checking for nemoclaw..."
+fi
 
 # Source shell profile to pick up nvm/PATH changes
 if [ -f "$HOME/.bashrc" ]; then
@@ -238,10 +240,12 @@ fi
 
 # Version upgraded
 NEW_VERSION=$(openshell sandbox exec --name "${SANDBOX_NAME}" -- openclaw --version 2>&1 || true)
-if echo "${NEW_VERSION}" | grep -qv "${OLD_OPENCLAW_VERSION}"; then
-  pass "OpenClaw version upgraded: ${NEW_VERSION}"
+if [ -z "${NEW_VERSION}" ]; then
+  fail "Could not get OpenClaw version from sandbox (empty output)"
+elif echo "${NEW_VERSION}" | grep -q "${OLD_OPENCLAW_VERSION}"; then
+  fail "Version still old after rebuild: ${NEW_VERSION}"
 else
-  fail "Version still old: ${NEW_VERSION}"
+  pass "OpenClaw version upgraded: ${NEW_VERSION}"
 fi
 
 # Registry updated
@@ -252,10 +256,10 @@ with open('${REGISTRY_FILE}') as f:
 sb = data.get('sandboxes', {}).get('${SANDBOX_NAME}', {})
 print(sb.get('agentVersion', 'null'))
 " 2>/dev/null || echo "error")
-if [ "$REGISTRY_VERSION" != "null" ] && [ "$REGISTRY_VERSION" != "${OLD_OPENCLAW_VERSION}" ]; then
+if [ "$REGISTRY_VERSION" != "null" ] && [ "$REGISTRY_VERSION" != "error" ] && [ "$REGISTRY_VERSION" != "${OLD_OPENCLAW_VERSION}" ]; then
   pass "Registry agentVersion updated to ${REGISTRY_VERSION}"
 else
-  fail "Registry agentVersion not updated: ${REGISTRY_VERSION}"
+  fail "Registry agentVersion not updated: got '${REGISTRY_VERSION}', expected != '${OLD_OPENCLAW_VERSION}'"
 fi
 
 # Inference works after rebuild (proves credential chain is intact)
@@ -275,12 +279,14 @@ fi
 # No credentials in backup
 BACKUP_DIR="$HOME/.nemoclaw/rebuild-backups/${SANDBOX_NAME}"
 if [ -d "$BACKUP_DIR" ]; then
-  CRED_LEAKS=$(find "$BACKUP_DIR" -name "*.json" -exec grep -l "nvapi-\|sk-\|Bearer " {} \; 2>/dev/null || true)
+  CRED_LEAKS=$(find "$BACKUP_DIR" \( -name "*.json" -o -name "*.env" -o -name ".env" \) -exec grep -l "nvapi-\|sk-\|Bearer " {} \; 2>/dev/null || true)
   if [ -z "$CRED_LEAKS" ]; then
     pass "No credentials in backup"
   else
     fail "Credentials found: $CRED_LEAKS"
   fi
+else
+  fail "Backup directory missing: $BACKUP_DIR"
 fi
 
 # ── Cleanup ─────────────────────────────────────────────────────────

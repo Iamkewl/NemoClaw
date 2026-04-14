@@ -71,7 +71,9 @@ export NEMOCLAW_RECREATE_SANDBOX=1
 export NEMOCLAW_AGENT=hermes
 
 INSTALL_LOG="/tmp/nemoclaw-e2e-install.log"
-bash "${REPO_ROOT}/install.sh" --non-interactive >"$INSTALL_LOG" 2>&1 || true
+if ! bash "${REPO_ROOT}/install.sh" --non-interactive >"$INSTALL_LOG" 2>&1; then
+  info "install.sh exited non-zero (may be expected on re-install). Checking for nemoclaw..."
+fi
 
 # Source shell profile to pick up nvm/PATH changes
 if [ -f "$HOME/.bashrc" ]; then
@@ -242,21 +244,23 @@ with open('${REGISTRY_FILE}') as f:
 sb = data.get('sandboxes', {}).get('${SANDBOX_NAME}', {})
 print(sb.get('agentVersion', 'null'))
 " 2>/dev/null || echo "error")
-if [ "$REGISTRY_VERSION" != "null" ] && [ "$REGISTRY_VERSION" != "2026.3.12" ]; then
+if [ "$REGISTRY_VERSION" != "null" ] && [ "$REGISTRY_VERSION" != "error" ] && [ "$REGISTRY_VERSION" != "2026.3.12" ]; then
   pass "Registry agentVersion updated to ${REGISTRY_VERSION}"
 else
-  fail "Registry agentVersion not updated: ${REGISTRY_VERSION}"
+  fail "Registry agentVersion not updated: got '${REGISTRY_VERSION}', expected != '2026.3.12'"
 fi
 
 # No credentials in backup
 BACKUP_DIR="$HOME/.nemoclaw/rebuild-backups/${SANDBOX_NAME}"
 if [ -d "$BACKUP_DIR" ]; then
-  CRED_LEAKS=$(find "$BACKUP_DIR" \( -name "*.json" -o -name "*.yaml" \) -exec grep -l "nvapi-\|sk-\|Bearer " {} \; 2>/dev/null || true)
+  CRED_LEAKS=$(find "$BACKUP_DIR" \( -name "*.json" -o -name "*.yaml" -o -name "*.env" -o -name ".env" \) -exec grep -l "nvapi-\|sk-\|Bearer " {} \; 2>/dev/null || true)
   if [ -z "$CRED_LEAKS" ]; then
     pass "No credentials in backup"
   else
     fail "Credentials found: $CRED_LEAKS"
   fi
+else
+  fail "Backup directory missing: $BACKUP_DIR"
 fi
 
 # ── Cleanup ─────────────────────────────────────────────────────────
