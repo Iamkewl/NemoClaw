@@ -435,6 +435,8 @@ describe("runner", () => {
       process.env.GITHUB_TOKEN = "ghp_leaked";
       process.env.AWS_ACCESS_KEY_ID = "AKIA_leaked";
       process.env.NVIDIA_API_KEY = "nvapi-leaked";
+      process.env.HTTPS_PROXY = "http://proxy.corp:8080";
+      process.env.OPENSHELL_DEBUG = "1";
       try {
         await actionApply("default", minimalBlueprint());
 
@@ -456,11 +458,17 @@ describe("runner", () => {
         // Allowed system vars should still be present
         expect(subEnv).toHaveProperty("PATH");
         expect(subEnv).toHaveProperty("HOME");
+
+        // Proxy, TLS, and openshell vars must pass through
+        expect(subEnv.HTTPS_PROXY).toBe("http://proxy.corp:8080");
+        expect(subEnv.OPENSHELL_DEBUG).toBe("1");
       } finally {
         delete process.env.MY_API_KEY;
         delete process.env.GITHUB_TOKEN;
         delete process.env.AWS_ACCESS_KEY_ID;
         delete process.env.NVIDIA_API_KEY;
+        delete process.env.HTTPS_PROXY;
+        delete process.env.OPENSHELL_DEBUG;
       }
     });
 

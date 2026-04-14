@@ -43,9 +43,27 @@ const ALLOWED_ENV_NAMES = new Set([
   "LANG",
   "NODE_ENV",
   "HOSTNAME",
+  // Proxy — required behind corporate firewalls
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "NO_PROXY",
+  "http_proxy",
+  "https_proxy",
+  "no_proxy",
+  // TLS — custom CA bundles in enterprise environments
+  "SSL_CERT_FILE",
+  "SSL_CERT_DIR",
+  "NODE_EXTRA_CA_CERTS",
+  // Rust diagnostics — openshell is a Rust binary
+  "RUST_LOG",
+  "RUST_BACKTRACE",
+  // Container and orchestration runtimes
+  "DOCKER_HOST",
+  "KUBECONFIG",
+  "SSH_AUTH_SOCK",
 ]);
 
-const ALLOWED_ENV_PREFIXES = ["LC_", "XDG_"];
+const ALLOWED_ENV_PREFIXES = ["LC_", "XDG_", "OPENSHELL_", "GRPC_"];
 
 function buildSubprocessEnv(extra?: Record<string, string>): Record<string, string> {
   const env: Record<string, string> = {};
