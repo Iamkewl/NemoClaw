@@ -54,6 +54,7 @@ const {
   saveCredential,
 } = require("./credentials");
 const registry = require("./registry");
+const { buildSubprocessEnv } = require("./subprocess-env");
 const nim = require("./nim");
 const onboardSession = require("./onboard-session");
 const policies = require("./policies");
@@ -2674,28 +2675,16 @@ async function createSandbox(
     messagingAllowedIds,
     discordGuilds,
   );
-  // Only pass non-sensitive env vars to the sandbox. Credentials flow through
-  // OpenShell providers — the gateway injects them as placeholders and the L7
-  // proxy rewrites Authorization headers with real secrets at egress.
+  // Only pass non-sensitive env vars to the sandbox creation subprocess.
+  // Credentials flow through OpenShell providers — the gateway injects them
+  // as placeholders and the L7 proxy rewrites Authorization headers with
+  // real secrets at egress.
   // See: crates/openshell-sandbox/src/secrets.rs (placeholder rewriting),
-  //      crates/openshell-router/src/backend.rs (inference auth injection).
+  //      crates/openshell-router/src/backend.rs (inference auth injection),
+  //      src/lib/subprocess-env.ts (allowlist definition),
+  //      NVBug 6010004 (original security report).
   const envArgs = [formatEnvAssignment("CHAT_UI_URL", chatUiUrl)];
-  const blockedSandboxEnvNames = new Set([
-    // Derived from REMOTE_PROVIDER_CONFIG to prevent drift
-    ...Object.values(REMOTE_PROVIDER_CONFIG)
-      .map((cfg) => cfg.credentialEnv)
-      .filter(Boolean),
-    // Additional credentials not in REMOTE_PROVIDER_CONFIG
-    "BEDROCK_API_KEY",
-    "DISCORD_BOT_TOKEN",
-    "SLACK_BOT_TOKEN",
-    "SLACK_APP_TOKEN",
-    "TELEGRAM_BOT_TOKEN",
-    webSearch.BRAVE_API_KEY_ENV,
-  ]);
-  const sandboxEnv = Object.fromEntries(
-    Object.entries(process.env).filter(([name]) => !blockedSandboxEnvNames.has(name)),
-  );
+  const sandboxEnv = buildSubprocessEnv();
   // Run without piping through awk — the pipe masked non-zero exit codes
   // from openshell because bash returns the status of the last pipeline
   // command (awk, always 0) unless pipefail is set. Removing the pipe

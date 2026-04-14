@@ -14,6 +14,7 @@ import { describe, it, expect } from "vitest";
 
 const ONBOARD_JS = path.join(import.meta.dirname, "..", "src", "lib", "onboard.ts");
 const RUNNER_TS = path.join(import.meta.dirname, "..", "nemoclaw", "src", "blueprint", "runner.ts");
+const SERVICES_TS = path.join(import.meta.dirname, "..", "src", "lib", "services.ts");
 
 // Matches --credential followed by a value containing "=" (i.e. KEY=VALUE).
 // Catches quoted KEY=VALUE patterns in JS and Python f-string interpolation.
@@ -73,28 +74,32 @@ describe("credential exposure in process arguments", () => {
     expect(src).not.toMatch(/"--credential",\s*process\.env\./);
   });
 
-  it("onboard.js does not embed sandbox secrets in the sandbox create command line", () => {
+  it("onboard.js uses buildSubprocessEnv allowlist, not a hand-rolled blocklist", () => {
     const src = fs.readFileSync(ONBOARD_JS, "utf-8");
 
-    // sandboxEnv must be built with a blocklist that strips all credential env vars.
-    // The blocklist derives provider keys from REMOTE_PROVIDER_CONFIG and adds
-    // messaging tokens explicitly. Verify both mechanisms are present.
-    const blocklistMatch = src.match(/const blockedSandboxEnvNames = new Set\(\[([\s\S]*?)\]\);/);
-    expect(blocklistMatch).not.toBeNull();
-    const blocklist = blocklistMatch[1];
-    // Provider credentials are derived from REMOTE_PROVIDER_CONFIG
-    expect(blocklist).toContain("REMOTE_PROVIDER_CONFIG");
-    // Messaging and additional credentials are listed explicitly
-    expect(blocklist).toContain('"BEDROCK_API_KEY"');
-    expect(blocklist).toContain('"DISCORD_BOT_TOKEN"');
-    expect(blocklist).toContain('"SLACK_BOT_TOKEN"');
-    expect(blocklist).toContain('"SLACK_APP_TOKEN"');
-    expect(blocklist).toContain('"TELEGRAM_BOT_TOKEN"');
+    // sandboxEnv must be built via the shared allowlist (buildSubprocessEnv),
+    // not a hand-rolled blocklist. The allowlist approach is more secure because
+    // it rejects unknown/future secrets by default.  See: NVBug 6010004.
+    expect(src).toMatch(/buildSubprocessEnv/);
+    expect(src).toMatch(/sandboxEnv\s*=\s*buildSubprocessEnv\(/);
+    // The old blocklist pattern must not be present
+    expect(src).not.toMatch(/blockedSandboxEnvNames/);
+    // Secrets must not be pushed into envArgs
     expect(src).toMatch(/streamSandboxCreate\(createCommand, sandboxEnv(?:, \{)?/);
     expect(src).not.toMatch(/envArgs\.push\(formatEnvAssignment\("NVIDIA_API_KEY"/);
     expect(src).not.toMatch(/envArgs\.push\(formatEnvAssignment\("DISCORD_BOT_TOKEN"/);
     expect(src).not.toMatch(/envArgs\.push\(formatEnvAssignment\("SLACK_BOT_TOKEN"/);
     expect(src).not.toMatch(/envArgs\.push\(formatEnvAssignment\("SLACK_APP_TOKEN"/);
+  });
+
+  it("services.ts must not spread full process.env into subprocess", () => {
+    const src = fs.readFileSync(SERVICES_TS, "utf-8");
+
+    const spreadRe = /env:\s*\{[^}]*\.\.\.process\.env/;
+    const violations = src.split("\n").filter(
+      (line) => spreadRe.test(line) && !line.trimStart().startsWith("//"),
+    );
+    expect(violations).toEqual([]);
   });
 
   it("onboard curl probes use explicit timeouts", () => {

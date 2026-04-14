@@ -21,63 +21,8 @@ import { execa } from "execa";
 import YAML from "yaml";
 
 import { validateEndpointUrl } from "./ssrf.js";
+import { buildSubprocessEnv } from "../lib/subprocess-env.js";
 import { DASHBOARD_PORT } from "../lib/ports.js";
-
-// ── Subprocess environment allowlist ───────────────────────────
-// Only these env vars (or prefixes) are forwarded to subprocesses
-// spawned by the runner.  Everything else — including secrets like
-// NVIDIA_API_KEY, GITHUB_TOKEN, AWS_ACCESS_KEY_ID — is stripped.
-// Credentials needed by the subprocess are injected explicitly via
-// the `credEnv` overlay.  See: NVBug 6010004.
-
-const ALLOWED_ENV_NAMES = new Set([
-  "HOME",
-  "USER",
-  "LOGNAME",
-  "SHELL",
-  "PATH",
-  "TERM",
-  "TMPDIR",
-  "TMP",
-  "TEMP",
-  "LANG",
-  "NODE_ENV",
-  "HOSTNAME",
-  // Proxy — required behind corporate firewalls
-  "HTTP_PROXY",
-  "HTTPS_PROXY",
-  "NO_PROXY",
-  "http_proxy",
-  "https_proxy",
-  "no_proxy",
-  // TLS — custom CA bundles in enterprise environments
-  "SSL_CERT_FILE",
-  "SSL_CERT_DIR",
-  "NODE_EXTRA_CA_CERTS",
-  // Rust diagnostics — openshell is a Rust binary
-  "RUST_LOG",
-  "RUST_BACKTRACE",
-  // Container and orchestration runtimes
-  "DOCKER_HOST",
-  "KUBECONFIG",
-  "SSH_AUTH_SOCK",
-]);
-
-const ALLOWED_ENV_PREFIXES = ["LC_", "XDG_", "OPENSHELL_", "GRPC_"];
-
-function buildSubprocessEnv(extra?: Record<string, string>): Record<string, string> {
-  const env: Record<string, string> = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (value === undefined) continue;
-    if (ALLOWED_ENV_NAMES.has(key) || ALLOWED_ENV_PREFIXES.some((p) => key.startsWith(p))) {
-      env[key] = value;
-    }
-  }
-  if (extra) {
-    Object.assign(env, extra);
-  }
-  return env;
-}
 
 type Action = "plan" | "apply" | "status" | "rollback";
 
