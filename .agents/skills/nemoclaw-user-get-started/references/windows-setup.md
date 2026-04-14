@@ -1,41 +1,19 @@
----
-title:
-  page: "Windows Prerequisites for NemoClaw"
-  nav: "Windows Prerequisites"
-description:
-  main: "Complete these steps on Windows before running the NemoClaw Quickstart: enable WSL 2, install Ubuntu, and configure Docker Desktop."
-  agent: "There are additional Windows-only prerequisites before the Quickstart to install NemoClaw on Windows."
-keywords: ["nemoclaw windows wsl2 setup", "nemoclaw install windows docker desktop"]
-topics: ["generative_ai", "ai_agents"]
-tags: ["openclaw", "openshell", "sandboxing", "nemoclaw", "windows", "wsl"]
-content:
-  type: reference
-  difficulty: technical_beginner
-  audience: ["developer", "engineer"]
-status: published
----
-
-<!--
-  SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-  SPDX-License-Identifier: Apache-2.0
--->
-
+<!-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
 # Windows Prerequisites
 
 NemoClaw runs inside Windows Subsystem for Linux (WSL 2) on Windows.
-Complete these steps before following the [Quickstart](quickstart.md).
+Complete these steps before following the Quickstart (see the `nemoclaw-user-get-started` skill).
 Linux and macOS users do not need this page and can go directly to the Quickstart.
 
-:::{note}
-This guide has been tested on x86-64.
-:::
+> **Note:** This guide has been tested on x86-64.
 
 ## Prerequisites
 
 Verify the following before you begin:
 
 - Windows 10 (build 19041 or later) or Windows 11.
-- Hardware requirements are the same as the [Quickstart](quickstart.md).
+- Hardware requirements are the same as the Quickstart (see the `nemoclaw-user-get-started` skill).
 
 ## Enable WSL 2
 
@@ -59,11 +37,9 @@ $ wsl --install -d Ubuntu
 
 Let the distribution launch and complete first-run setup (pick a Unix username and password), then type `exit` to return to PowerShell.
 
-:::{warning}
-Do not use the `--no-launch` flag.
-The `--no-launch` flag downloads the package but does not register the distribution with WSL.
-Commands like `wsl -d Ubuntu` fail with "There is no distribution with the supplied name" until the distribution has been launched at least once.
-:::
+> **Warning:** Do not use the `--no-launch` flag.
+> The `--no-launch` flag downloads the package but does not register the distribution with WSL.
+> Commands like `wsl -d Ubuntu` fail with "There is no distribution with the supplied name" until the distribution has been launched at least once.
 
 Verify the distribution is registered and running WSL 2:
 
@@ -111,7 +87,7 @@ You can also start it yourself beforehand with `ollama serve`.
 ## Next Step
 
 Your Windows environment is ready.
-Open a WSL terminal (type `wsl` in PowerShell, or open Ubuntu from Windows Terminal) and continue with the [Quickstart](quickstart.md) to install NemoClaw and launch your first sandbox.
+Open a WSL terminal (type `wsl` in PowerShell, or open Ubuntu from Windows Terminal) and continue with the Quickstart (see the `nemoclaw-user-get-started` skill) to install NemoClaw and launch your first sandbox.
 
 All NemoClaw commands run inside WSL, not in PowerShell.
 
