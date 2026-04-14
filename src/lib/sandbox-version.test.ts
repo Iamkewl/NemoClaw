@@ -115,7 +115,6 @@ describe("checkAgentVersion", () => {
     vi.mocked(captureOpenshellCommand).mockReturnValue({
       status: 0,
       output: "Host openshell-test-sb\n  HostName 127.0.0.1\n",
-      stderr: "",
     });
 
     vi.mocked(spawnSync).mockReturnValue({
@@ -143,7 +142,6 @@ describe("checkAgentVersion", () => {
     vi.mocked(captureOpenshellCommand).mockReturnValue({
       status: 1,
       output: "",
-      stderr: "connection refused",
     });
 
     const result = checkAgentVersion("test-sb");
@@ -161,7 +159,6 @@ describe("checkAgentVersion", () => {
     vi.mocked(captureOpenshellCommand).mockReturnValue({
       status: 0,
       output: "Host openshell-test-sb\n  HostName 127.0.0.1\n",
-      stderr: "",
     });
 
     vi.mocked(spawnSync).mockReturnValue({
