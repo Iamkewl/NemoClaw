@@ -43,13 +43,11 @@ describe("credential exposure in process arguments", () => {
   it("runner.ts must not spread full process.env into subprocess", () => {
     const src = fs.readFileSync(RUNNER_TS, "utf-8");
 
-    // Match { ...process.env } or { ...process.env, ... } as execa env option.
-    // The runner must use buildSubprocessEnv() with an allowlist instead.
-    const spreadRe = /env:\s*\{[^}]*\.\.\.process\.env/;
-    const violations = src.split("\n").filter(
-      (line) => spreadRe.test(line) && !line.trimStart().startsWith("//"),
-    );
-    expect(violations).toEqual([]);
+    // Strip comments so that documented bad patterns don't trigger false positives.
+    // Scan the full source (not line-by-line) to catch multiline spreads.
+    const uncommented = src.replace(/\/\/.*$/gm, "");
+    const spreadRe = /env\s*:\s*\{[\s\S]*?\.\.\.process\.env/;
+    expect(uncommented).not.toMatch(spreadRe);
   });
 
   it("runner.ts must not pass KEY=VALUE to --credential", () => {
@@ -104,11 +102,9 @@ describe("credential exposure in process arguments", () => {
   it("services.ts must not spread full process.env into subprocess", () => {
     const src = fs.readFileSync(SERVICES_TS, "utf-8");
 
-    const spreadRe = /env:\s*\{[^}]*\.\.\.process\.env/;
-    const violations = src.split("\n").filter(
-      (line) => spreadRe.test(line) && !line.trimStart().startsWith("//"),
-    );
-    expect(violations).toEqual([]);
+    const uncommented = src.replace(/\/\/.*$/gm, "");
+    const spreadRe = /env\s*:\s*\{[\s\S]*?\.\.\.process\.env/;
+    expect(uncommented).not.toMatch(spreadRe);
   });
 
   it("onboard curl probes use explicit timeouts", () => {

@@ -431,6 +431,12 @@ describe("runner", () => {
     });
 
     it("does not leak parent secrets into subprocess env", async () => {
+      const prevMyApiKey = process.env.MY_API_KEY;
+      const prevGithubToken = process.env.GITHUB_TOKEN;
+      const prevAwsKey = process.env.AWS_ACCESS_KEY_ID;
+      const prevNvidiaKey = process.env.NVIDIA_API_KEY;
+      const prevProxy = process.env.HTTPS_PROXY;
+      const prevOsDebug = process.env.OPENSHELL_DEBUG;
       process.env.MY_API_KEY = "secret-key-123";
       process.env.GITHUB_TOKEN = "ghp_leaked";
       process.env.AWS_ACCESS_KEY_ID = "AKIA_leaked";
@@ -463,12 +469,18 @@ describe("runner", () => {
         expect(subEnv.HTTPS_PROXY).toBe("http://proxy.corp:8080");
         expect(subEnv.OPENSHELL_DEBUG).toBe("1");
       } finally {
-        delete process.env.MY_API_KEY;
-        delete process.env.GITHUB_TOKEN;
-        delete process.env.AWS_ACCESS_KEY_ID;
-        delete process.env.NVIDIA_API_KEY;
-        delete process.env.HTTPS_PROXY;
-        delete process.env.OPENSHELL_DEBUG;
+        if (prevMyApiKey === undefined) delete process.env.MY_API_KEY;
+        else process.env.MY_API_KEY = prevMyApiKey;
+        if (prevGithubToken === undefined) delete process.env.GITHUB_TOKEN;
+        else process.env.GITHUB_TOKEN = prevGithubToken;
+        if (prevAwsKey === undefined) delete process.env.AWS_ACCESS_KEY_ID;
+        else process.env.AWS_ACCESS_KEY_ID = prevAwsKey;
+        if (prevNvidiaKey === undefined) delete process.env.NVIDIA_API_KEY;
+        else process.env.NVIDIA_API_KEY = prevNvidiaKey;
+        if (prevProxy === undefined) delete process.env.HTTPS_PROXY;
+        else process.env.HTTPS_PROXY = prevProxy;
+        if (prevOsDebug === undefined) delete process.env.OPENSHELL_DEBUG;
+        else process.env.OPENSHELL_DEBUG = prevOsDebug;
       }
     });
 
