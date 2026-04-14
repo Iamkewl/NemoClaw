@@ -106,6 +106,7 @@ Write the response following the template from the guide. Apply these rules:
   gh pr edit <number> --repo NVIDIA/NemoClaw --add-label "status: needs-info"
   ```
   This ensures stale PRs are surfaced for follow-up and treated consistently with the 7-day needs-info closure policy.
+- **Same contributor on multiple PRs needing rebase:** If the contributor who owns this PR also has another open PR that needs a rebase, note it in the comment — suggest a joint rebase on both at once. Example addition: "Note this is from the same contributor as #[N] — a joint rebase on both would be ideal." Apply `status: needs-info` to both PRs. Check for contributor overlap before sending any rebase nudge.
 
 ## Step 6: Present for Approval
 
