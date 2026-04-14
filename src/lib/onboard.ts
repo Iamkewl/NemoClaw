@@ -22,6 +22,10 @@ function envInt(name, fallback) {
 
 /** Inference timeout (seconds) for local providers (Ollama, vLLM, NIM). */
 const LOCAL_INFERENCE_TIMEOUT_SECS = envInt("NEMOCLAW_LOCAL_INFERENCE_TIMEOUT", 180);
+
+/** Strip ANSI escape sequences before printing process output to the terminal.
+ *  Covers CSI (color, erase, cursor), OSC, and C1 two-byte escapes per ECMA-48. */
+const ANSI_RE = /\x1B(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1B\\)|[@-_])/g;
 const { ROOT, SCRIPTS, redact, run, runCapture, shellQuote } = require("./runner");
 const { stageOptimizedSandboxBuildContext } = require("./sandbox-build-context");
 const { DASHBOARD_PORT, GATEWAY_PORT, VLLM_PORT, OLLAMA_PORT } = require("./ports");
@@ -683,8 +687,8 @@ function upsertProvider(name, type, credentialEnv, baseUrl, env = {}) {
   const result = runOpenshell(args, runOpts);
   if (result.status !== 0) {
     const output =
-      compactText(`${result.stderr || ""}`) ||
-      compactText(`${result.stdout || ""}`) ||
+      compactText(redact(`${result.stderr || ""}`)) ||
+      compactText(redact(`${result.stdout || ""}`)) ||
       `Failed to ${action} provider '${name}'.`;
     return { ok: false, status: result.status || 1, message: output };
   }
@@ -2187,9 +2191,13 @@ async function startGatewayWithOptions(_gpu, { exitOnFailure = true } = {}) {
           },
         );
         if (startResult.status !== 0) {
-          const output = compactText(String(startResult.output || ""));
-          if (output) {
-            console.log(`  Gateway start returned before healthy: ${output.slice(0, 240)}`);
+          const lines = String(redact(startResult.output || ""))
+            .split("\n")
+            .map((l) => compactText(l.replace(ANSI_RE, "")))
+            .filter(Boolean)
+            .map((l) => `    ${l}`);
+          if (lines.length > 0) {
+            console.log(`  Gateway start returned before healthy:\n${lines.join("\n")}`);
           }
         }
         console.log("  Waiting for gateway health...");
@@ -2229,6 +2237,25 @@ async function startGatewayWithOptions(_gpu, { exitOnFailure = true } = {}) {
       console.error(`  Gateway failed to start after ${retries + 1} attempts.`);
       console.error("  Gateway state preserved for diagnostics.");
       console.error("");
+      try {
+        const logs = redact(
+          runCaptureOpenshell(["doctor", "logs", "--name", GATEWAY_NAME], {
+            ignoreError: true,
+          }),
+        );
+        if (logs) {
+          console.error("  Gateway logs:");
+          for (const line of String(logs)
+            .split("\n")
+            .map((l) => l.replace(/\r/g, "").replace(ANSI_RE, ""))
+            .filter(Boolean)) {
+            console.error(`    ${line}`);
+          }
+          console.error("");
+        }
+      } catch {
+        // doctor logs unavailable — fall through to manual instructions
+      }
       console.error("  Troubleshooting:");
       console.error("    openshell doctor logs --name nemoclaw");
       console.error("    openshell doctor check");
@@ -3532,7 +3559,7 @@ async function setupInference(
         break;
       }
       const message =
-        compactText(`${applyResult.stderr || ""} ${applyResult.stdout || ""}`) ||
+        compactText(redact(`${applyResult.stderr || ""} ${applyResult.stdout || ""}`)) ||
         `Failed to configure inference provider '${provider}'.`;
       console.error(`  ${message}`);
       if (isNonInteractive()) {
@@ -5355,6 +5382,7 @@ module.exports = {
   repairRecordedSandbox,
   recoverGatewayRuntime,
   resolveDashboardForwardTarget,
+  startGateway,
   buildAuthenticatedDashboardUrl,
   getDashboardAccessInfo,
   getDashboardForwardPort,
