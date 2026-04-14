@@ -44,7 +44,7 @@ The wizard creates an OpenShell gateway, registers inference providers, builds t
 Use this command for new installs and for recreating a sandbox after changes to policy or configuration.
 
 ```console
-$ nemoclaw onboard [--non-interactive] [--resume] [--from <Dockerfile>]
+$ nemoclaw onboard [--non-interactive] [--resume] [--recreate-sandbox] [--from <Dockerfile>] [--agent <name>] [--dangerously-skip-permissions] [--yes-i-accept-third-party-software]
 ```
 
 > **Warning:** For NemoClaw-managed environments, use `nemoclaw onboard` when you need to create or recreate the OpenShell gateway or sandbox.
@@ -173,9 +173,9 @@ $ nemoclaw my-assistant logs [--follow]
 Stop the NIM container and delete the sandbox.
 This removes the sandbox from the registry.
 
-> **Warning:** Destroying a sandbox permanently deletes all files inside it, including
-> workspace files (see the `nemoclaw-user-workspace` skill) (SOUL.md, USER.md, IDENTITY.md, AGENTS.md, MEMORY.md, and daily memory notes).
-> Back up your workspace first by following the instructions at Back Up and Restore (see the `nemoclaw-user-workspace` skill).
+> **Warning:** This command permanently deletes the sandbox **and its persistent volume**.
+> All workspace files (see the `nemoclaw-user-workspace` skill) (SOUL.md, USER.md, IDENTITY.md, AGENTS.md, MEMORY.md, and daily memory notes) are lost.
+> Back up your workspace first — see Backup and Restore (see the `nemoclaw-user-workspace` skill).
 
 ```console
 $ nemoclaw my-assistant destroy
