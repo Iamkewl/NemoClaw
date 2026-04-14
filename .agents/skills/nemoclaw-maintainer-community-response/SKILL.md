@@ -112,7 +112,9 @@ Ask: "Want me to adjust the tone or any specific wording?"
 
 ## Step 7: Log the Approved Response
 
-When the user approves, append to `.nemoclaw-maintainer/community-responses.md`:
+When the user approves, append to `~/development/daily-rhythm/activity/nemoclaw-community-responses.md`.
+
+Use the absolute path — this file lives in the daily-rhythm activity folder so it is persisted to GitLab over time, not in the NemoClaw repo.
 
 ```
 ## [ISSUE|PR] NVIDIA/NemoClaw#<number> — <title>
@@ -127,7 +129,7 @@ When the user approves, append to `.nemoclaw-maintainer/community-responses.md`:
 ---
 ```
 
-Create the file and directory if they don't exist. This file is gitignored and local only — never stage or commit it.
+Create the file if it doesn't exist. Never stage or commit this file to the NemoClaw repo.
 
 ## Response Time Check
 
