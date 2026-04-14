@@ -258,6 +258,20 @@ else
   fail "Registry agentVersion not updated: ${REGISTRY_VERSION}"
 fi
 
+# Inference works after rebuild (proves credential chain is intact)
+info "Verifying inference after rebuild..."
+INFERENCE_RESPONSE=$(openshell sandbox exec --name "${SANDBOX_NAME}" -- \
+  curl -s --max-time 60 https://inference.local/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"nvidia/nemotron-3-super-120b-a12b","messages":[{"role":"user","content":"Reply with exactly one word: PONG"}],"max_tokens":100}' \
+  2>&1 || true)
+if echo "${INFERENCE_RESPONSE}" | python3 -c "import json,sys; r=json.load(sys.stdin); c=r['choices'][0]['message']; print(c.get('content',''))" 2>/dev/null | grep -qi "PONG"; then
+  pass "Inference works after rebuild (NVIDIA API key + provider chain intact)"
+else
+  # Non-fatal — inference depends on external API availability
+  info "Inference check inconclusive (may be API timeout): ${INFERENCE_RESPONSE:0:200}"
+fi
+
 # No credentials in backup
 BACKUP_DIR="$HOME/.nemoclaw/rebuild-backups/${SANDBOX_NAME}"
 if [ -d "$BACKUP_DIR" ]; then

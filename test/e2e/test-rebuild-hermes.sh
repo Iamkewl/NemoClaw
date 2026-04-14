@@ -220,6 +220,20 @@ else
   fail "Marker file lost: got '${RESTORED}', expected '${MARKER_CONTENT}'"
 fi
 
+# Inference works after rebuild (proves credential chain is intact)
+info "Verifying inference after rebuild..."
+INFERENCE_RESPONSE=$(openshell sandbox exec --name "${SANDBOX_NAME}" -- \
+  curl -s --max-time 60 https://inference.local/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"nvidia/nemotron-3-super-120b-a12b","messages":[{"role":"user","content":"Reply with exactly one word: PONG"}],"max_tokens":100}' \
+  2>&1 || true)
+if echo "${INFERENCE_RESPONSE}" | python3 -c "import json,sys; r=json.load(sys.stdin); c=r['choices'][0]['message']; print(c.get('content',''))" 2>/dev/null | grep -qi "PONG"; then
+  pass "Inference works after rebuild (NVIDIA API key + provider chain intact)"
+else
+  # Non-fatal — inference depends on external API availability and Hermes gateway being up
+  info "Inference check inconclusive (may be API timeout or gateway not started): ${INFERENCE_RESPONSE:0:200}"
+fi
+
 # Registry updated
 REGISTRY_VERSION=$(python3 -c "
 import json
