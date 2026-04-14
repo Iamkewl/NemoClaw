@@ -62,7 +62,9 @@ State the recommended action and **project status** clearly before drafting. The
 | `comment` | Post a reply, leave open (triage ack, needs-info first contact, redirect to Discussions) |
 | `close` | Close with comment |
 | `request changes` | PR needs revision — post comment, leave open |
+| `comment + label` | Post comment AND apply a label (e.g., rebase nudge → apply `status: needs-info`) |
 | `escalate` | Security report that should go through PSIRT — do not respond publicly |
+| `rebase nudge` | PR has merge conflicts or is significantly out of date — post comment asking author to rebase, apply `status: needs-info` |
 
 **Project status mapping (NemoClaw Development Tracker):**
 
@@ -99,6 +101,11 @@ Write the response following the template from the guide. Apply these rules:
 - Write in second person, direct address to the contributor.
 - Warm but specific — generic phrases without substance read as dismissive.
 - Never reference internal systems, roadmap items, or org decisions that shouldn't be public.
+- **PRs requiring rebase or author check-in:** After posting the comment, always apply `status: needs-info` via:
+  ```bash
+  gh pr edit <number> --repo NVIDIA/NemoClaw --add-label "status: needs-info"
+  ```
+  This ensures stale PRs are surfaced for follow-up and treated consistently with the 7-day needs-info closure policy.
 
 ## Step 6: Present for Approval
 
