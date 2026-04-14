@@ -67,6 +67,8 @@ const {
   runUninstallCommand,
 } = require("./lib/uninstall-command");
 const agentRuntime = require("../bin/lib/agent-runtime");
+const sandboxVersion = require("./lib/sandbox-version");
+const sandboxState = require("./lib/sandbox-state");
 const skillInstall = require("./lib/skill-install");
 
 // ── Global commands ──────────────────────────────────────────────
@@ -985,6 +987,17 @@ async function listSandboxes() {
 
 async function sandboxConnect(sandboxName, { dangerouslySkipPermissions = false } = {}) {
   await ensureLiveSandboxOrExit(sandboxName);
+
+  // Version staleness check — warn but don't block
+  try {
+    const versionCheck = sandboxVersion.checkAgentVersion(sandboxName);
+    if (versionCheck.isStale) {
+      for (const line of sandboxVersion.formatStalenessWarning(sandboxName, versionCheck)) {
+        console.error(line);
+      }
+    }
+  } catch { /* non-fatal — don't block connect on version check failure */ }
+
   if (dangerouslySkipPermissions) {
     printDangerouslySkipPermissionsWarning();
     const policies = require("./lib/policies");
@@ -1039,6 +1052,20 @@ async function sandboxStatus(sandboxName) {
     if (sb.dangerouslySkipPermissions) {
       console.log(`    Permissions: dangerously-skip-permissions (open)`);
     }
+
+    // Agent version check
+    try {
+      const versionCheck = sandboxVersion.checkAgentVersion(sandboxName);
+      const agent = agentRuntime.getSessionAgent(sandboxName);
+      const agentName = agentRuntime.getAgentDisplayName(agent);
+      if (versionCheck.sandboxVersion) {
+        console.log(`    Agent:    ${agentName} v${versionCheck.sandboxVersion}`);
+      }
+      if (versionCheck.isStale) {
+        console.log(`    ${YW}Update:   v${versionCheck.expectedVersion} available${R}`);
+        console.log(`              Run \`nemoclaw ${sandboxName} rebuild\` to upgrade`);
+      }
+    } catch { /* non-fatal */ }
   }
 
   const lookup = await getReconciledSandboxGatewayState(sandboxName);
@@ -1453,6 +1480,117 @@ async function sandboxDestroy(sandboxName, args = []) {
   console.log(`  ${G}✓${R} Sandbox '${sandboxName}' destroyed`);
 }
 
+// ── Rebuild ──────────────────────────────────────────────────────
+
+async function sandboxRebuild(sandboxName, args = []) {
+  const skipConfirm = args.includes("--yes") || args.includes("--force");
+  const sb = registry.getSandbox(sandboxName);
+  if (!sb) {
+    console.error(`  Sandbox '${sandboxName}' not found in registry.`);
+    process.exit(1);
+  }
+
+  // Multi-agent guard (temporary — until swarm lands)
+  if (sb.agents && sb.agents.length > 1) {
+    console.error("  Multi-agent sandbox rebuild is not yet supported.");
+    console.error("  Back up state manually and recreate with `nemoclaw onboard`.");
+    process.exit(1);
+  }
+
+  const agent = agentRuntime.getSessionAgent(sandboxName);
+  const agentName = agentRuntime.getAgentDisplayName(agent);
+
+  // Version check — show what's changing
+  const versionCheck = sandboxVersion.checkAgentVersion(sandboxName);
+  console.log("");
+  console.log(`  ${B}Rebuild sandbox '${sandboxName}'${R}`);
+  if (versionCheck.sandboxVersion) {
+    console.log(`    Current:  ${agentName} v${versionCheck.sandboxVersion}`);
+  }
+  if (versionCheck.expectedVersion) {
+    console.log(`    Target:   ${agentName} v${versionCheck.expectedVersion}`);
+  }
+  console.log("");
+
+  if (!skipConfirm) {
+    console.log("  This will:");
+    console.log("    1. Back up workspace state");
+    console.log("    2. Destroy and recreate the sandbox with the current image");
+    console.log("    3. Restore workspace state into the new sandbox");
+    console.log("");
+    const answer = await askPrompt("  Proceed? [y/N]: ");
+    if (answer.trim().toLowerCase() !== "y" && answer.trim().toLowerCase() !== "yes") {
+      console.log("  Cancelled.");
+      return;
+    }
+  }
+
+  // Step 1: Ensure sandbox is live for backup
+  const isLive = captureOpenshell(["sandbox", "list"], { ignoreError: true });
+  const liveNames = parseLiveSandboxNames(isLive.output || "");
+  if (!liveNames.includes(sandboxName)) {
+    console.error(`  Sandbox '${sandboxName}' is not running. Cannot back up state.`);
+    console.error("  Start it first or recreate with `nemoclaw onboard --recreate-sandbox`.");
+    process.exit(1);
+  }
+
+  // Step 2: Backup
+  console.log("  Backing up sandbox state...");
+  const backup = sandboxState.backupSandboxState(sandboxName);
+  if (!backup.success) {
+    console.error("  Failed to back up sandbox state.");
+    if (backup.backedUpDirs.length > 0) {
+      console.error(`  Partial backup: ${backup.backedUpDirs.join(", ")}`);
+    }
+    if (backup.failedDirs.length > 0) {
+      console.error(`  Failed: ${backup.failedDirs.join(", ")}`);
+    }
+    console.error("  Aborting rebuild to prevent data loss.");
+    process.exit(1);
+  }
+  console.log(`  ${G}\u2713${R} State backed up (${backup.backedUpDirs.length} directories)`);
+  console.log(`    Backup: ${backup.manifest.backupPath}`);
+
+  // Step 3: Destroy (programmatic, no prompt)
+  console.log("  Destroying old sandbox...");
+  await sandboxDestroy(sandboxName, ["--yes"]);
+
+  // Step 4: Recreate via onboard --resume
+  console.log("");
+  console.log("  Creating new sandbox with current image...");
+  const { onboard } = require("./lib/onboard");
+  await onboard({
+    resume: true,
+    nonInteractive: true,
+    recreateSandbox: true,
+    sandboxNameOverride: sandboxName,
+  });
+
+  // Step 5: Restore
+  console.log("");
+  console.log("  Restoring workspace state...");
+  const restore = sandboxState.restoreSandboxState(sandboxName, backup.manifest.backupPath);
+  if (!restore.success) {
+    console.error(`  Partial restore: ${restore.restoredDirs.join(", ") || "none"}`);
+    console.error(`  Failed: ${restore.failedDirs.join(", ")}`);
+    console.error(`  Manual restore available from: ${backup.manifest.backupPath}`);
+  } else {
+    console.log(`  ${G}\u2713${R} State restored (${restore.restoredDirs.length} directories)`);
+  }
+
+  // Step 6: Update registry with new version
+  const agentDef = agent ? require("./lib/agent-defs").loadAgent(agent.name) : require("./lib/agent-defs").loadAgent("openclaw");
+  registry.updateSandbox(sandboxName, {
+    agentVersion: agentDef.expectedVersion || null,
+  });
+
+  console.log("");
+  console.log(`  ${G}\u2713${R} Sandbox '${sandboxName}' rebuilt successfully`);
+  if (versionCheck.expectedVersion) {
+    console.log(`    Now running: ${agentName} v${versionCheck.expectedVersion}`);
+  }
+}
+
 // ── Help ─────────────────────────────────────────────────────────
 
 function help() {
@@ -1470,6 +1608,7 @@ function help() {
     nemoclaw <name> connect          Shell into a running sandbox
     nemoclaw <name> status           Sandbox health + NIM status
     nemoclaw <name> logs ${D}[--follow]${R}  Stream sandbox logs
+    nemoclaw <name> rebuild          Upgrade sandbox to current agent version ${D}(--yes to skip prompt)${R}
     nemoclaw <name> destroy          Stop NIM + delete sandbox ${D}(--yes to skip prompt)${R}
 
   ${G}Skills:${R}
@@ -1608,9 +1747,12 @@ const [cmd, ...args] = process.argv.slice(2);
       case "skill":
         await sandboxSkillInstall(cmd, actionArgs);
         break;
+      case "rebuild":
+        await sandboxRebuild(cmd, actionArgs);
+        break;
       default:
         console.error(`  Unknown action: ${action}`);
-        console.error(`  Valid actions: connect, status, logs, policy-add, policy-list, skill, destroy`);
+        console.error(`  Valid actions: connect, status, logs, policy-add, policy-list, skill, rebuild, destroy`);
         process.exit(1);
     }
     return;
