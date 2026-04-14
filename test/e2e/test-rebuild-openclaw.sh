@@ -122,7 +122,7 @@ RUN mkdir -p /sandbox/.openclaw-data/workspace /sandbox/.openclaw && echo '{}' >
 CMD ["/bin/bash"]
 DOCKERFILE
 
-openshell sandbox create --name "${SANDBOX_NAME}" --from "${TESTDIR}/Dockerfile"
+openshell sandbox create --name "${SANDBOX_NAME}" --from "${TESTDIR}/Dockerfile" --no-tty -- true
 rm -rf "${TESTDIR}"
 
 # Wait for Ready
