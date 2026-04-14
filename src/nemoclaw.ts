@@ -1551,9 +1551,26 @@ async function sandboxRebuild(sandboxName, args = []) {
   console.log(`  ${G}\u2713${R} State backed up (${backup.backedUpDirs.length} directories)`);
   console.log(`    Backup: ${backup.manifest.backupPath}`);
 
-  // Step 3: Destroy (programmatic, no prompt)
-  console.log("  Destroying old sandbox...");
-  await sandboxDestroy(sandboxName, ["--yes"]);
+  // Step 3: Delete sandbox without tearing down gateway or session.
+  // sandboxDestroy() cleans up the gateway when it's the last sandbox and
+  // nulls session.sandboxName — both break the immediate onboard --resume.
+  console.log("  Deleting old sandbox...");
+  const sbMeta = registry.getSandbox(sandboxName);
+  if (sbMeta && sbMeta.nimContainer) nim.stopNimContainerByName(sbMeta.nimContainer);
+  else nim.stopNimContainer(sandboxName);
+
+  const deleteResult = runOpenshell(["sandbox", "delete", sandboxName], {
+    ignoreError: true,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const { alreadyGone } = getSandboxDeleteOutcome(deleteResult);
+  if (deleteResult.status !== 0 && !alreadyGone) {
+    console.error("  Failed to delete sandbox. Aborting rebuild.");
+    console.error("  State backup is preserved at: " + backup.manifest.backupPath);
+    process.exit(deleteResult.status || 1);
+  }
+  registry.removeSandbox(sandboxName);
+  console.log(`  ${G}\u2713${R} Old sandbox deleted`);
 
   // Step 4: Recreate via onboard --resume
   console.log("");
