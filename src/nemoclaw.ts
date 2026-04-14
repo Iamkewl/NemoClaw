@@ -1666,6 +1666,48 @@ async function sandboxRebuild(sandboxName, args = []) {
   }
 }
 
+// ── Pre-upgrade backup ───────────────────────────────────────────
+
+/**
+ * Back up all registered sandboxes. Called by install.sh before upgrading
+ * NemoClaw or OpenShell so sandbox state is recoverable if the upgrade
+ * destroys sandbox contents.
+ */
+function backupAll() {
+  const { sandboxes } = registry.listSandboxes();
+  if (sandboxes.length === 0) {
+    console.log("  No sandboxes registered. Nothing to back up.");
+    return;
+  }
+
+  // Check which sandboxes are actually live
+  const liveList = captureOpenshell(["sandbox", "list"], { ignoreError: true });
+  const liveNames = parseLiveSandboxNames(liveList.output || "");
+
+  let backed = 0;
+  let skipped = 0;
+  for (const sb of sandboxes) {
+    if (!liveNames.has(sb.name)) {
+      console.log(`  ${D}Skipping '${sb.name}' (not running)${R}`);
+      skipped++;
+      continue;
+    }
+    console.log(`  Backing up '${sb.name}'...`);
+    const result = sandboxState.backupSandboxState(sb.name);
+    if (result.success) {
+      console.log(`  ${G}\u2713${R} ${sb.name}: ${result.backedUpDirs.length} dirs → ${result.manifest.backupPath}`);
+      backed++;
+    } else {
+      console.error(`  ${_RD}✗${R} ${sb.name}: backup failed (${result.failedDirs.join(", ")})`);
+    }
+  }
+  console.log("");
+  console.log(`  Pre-upgrade backup: ${backed} backed up, ${skipped} skipped`);
+  if (backed > 0) {
+    console.log(`  Backups stored in: ~/.nemoclaw/rebuild-backups/`);
+  }
+}
+
 // ── Help ─────────────────────────────────────────────────────────
 
 function help() {
@@ -1710,6 +1752,9 @@ function help() {
   ${G}Credentials:${R}
     nemoclaw credentials list        List stored credential keys
     nemoclaw credentials reset <KEY> Remove a stored credential so onboard re-prompts
+
+  ${G}Backup:${R}
+    nemoclaw backup-all              Back up all sandbox state before upgrade
 
   Cleanup:
     nemoclaw uninstall [flags]       Run uninstall.sh (local only; no remote fallback)
@@ -1772,6 +1817,9 @@ const [cmd, ...args] = process.argv.slice(2);
         break;
       case "list":
         await listSandboxes();
+        break;
+      case "backup-all":
+        backupAll();
         break;
       case "--version":
       case "-v": {
