@@ -48,6 +48,7 @@ These are different signals — use the right one.
 > We appreciate you taking the time — this kind of feedback helps us clarify what NemoClaw is and isn't designed to do.
 
 **Rules:**
+
 - Name the reason, not just the verdict.
 - Don't say "maybe later" unless you mean it. Vague deferral creates false expectations.
 - If scope is genuinely unclear, open an internal discussion before closing — don't leave the contributor waiting while you debate it.
@@ -94,6 +95,7 @@ Clear, specific feedback is more respectful than silence or vague encouragement.
 > Happy to discuss the right entry point in the issue if you want to take another pass.
 
 **Don't:**
+
 - Say "this isn't quite right" without saying what's wrong.
 - Ask for changes and then go quiet. If you request revisions, follow through on the review.
 - Leave a PR open for weeks with no feedback. If it's blocked on your side, say so.
@@ -113,7 +115,7 @@ These are team commitments, not aspirational targets.
 | New issue from external contributor | First response within 5 business days |
 | PR with no review | First comment within 7 business days |
 | Contributor asks for an update | Respond within 3 business days |
-| Security report via psirt@nvidia.com | Handled by PSIRT — not in scope here |
+| Security report via <psirt@nvidia.com> | Handled by PSIRT — not in scope here |
 
 If you're going to miss a window, post an update before it lapses — even one sentence ("We're reviewing this, expect feedback by [date]") resets the contributor's expectations and preserves trust.
 
@@ -130,6 +132,7 @@ When an issue or PR covers the same ground as an existing open or closed item, c
 **Label:** `status: duplicate`
 
 **Rules:**
+
 - Always link to the original. Don't close silently against a label alone.
 - If the duplicate adds meaningful new context not in the original, say so: "You've added [X] — I'll note that in #[N]."
 - If you're not sure which is the "original," close the one with less discussion.
@@ -147,11 +150,13 @@ Feature requests are not rejections — they're routing decisions. Route to the 
 **Project status:** `No Status` (unreviewed). A maintainer sets `Backlog` when approved for future work.
 
 **Labels to apply** (see [project-workflow.md](project-workflow.md) for the full label structure):
+
 1. Always apply `enhancement` as the base label
 2. Add the most specific Tier 2 sub-label: `enhancement: inference`, `enhancement: ui`, `enhancement: security`, etc.
 3. Add Tier 3 dimension labels if platform-, integration-, or provider-specific: `Platform: MacOS`, `Integration: Slack`, `Provider: NVIDIA`, etc.
 
 **Rules:**
+
 - Do NOT say "added to backlog" — that implies maintainer approval. Use "we'll review it."
 - Don't commit to a timeline unless one is confirmed.
 - If the request is clearly outside NemoClaw's scope, use § 1 (Out of Scope) instead.
@@ -172,6 +177,7 @@ Some issues are better suited to open conversation than bug or feature tracking.
 > This looks like a great topic for an open conversation rather than a bug or feature request. I've moved this to Discussions here: [link] — would love to hear more there. Closing the issue to keep the tracker focused on actionable items.
 
 **Rules:**
+
 - Only redirect when a Discussion thread exists or you're creating one at the same time. Don't close without a destination.
 - Good candidates: architecture questions, "how do you handle X?" questions, general feedback, use-case exploration.
 - Don't redirect bug reports or clear feature requests — route those properly via § 1 or § 6.
@@ -187,6 +193,7 @@ Use when an issue is valid and understood but not yet scheduled. This is an ackn
 > Thanks for the detailed report — we've confirmed this and added it to our backlog. We don't have a timeline to share yet, but we've got it on our radar. We'll update this issue when work begins.
 
 **Rules:**
+
 - Don't add a closure label — leave the issue open.
 - Don't say "soon" or imply urgency unless it's true.
 - If you need more information before confirming, use § 9 instead.
@@ -210,6 +217,7 @@ Two distinct situations require different responses.
 **Action:** `close + comment`. No additional label needed — `status: needs-info` already set.
 
 **Rules:**
+
 - Always name the specific information you need. "More details" wastes everyone's time.
 - The 7-day window starts from when the label is applied, not when the issue was opened.
 - Don't close Situation 1 in the same response — label first, give the contributor the window.
