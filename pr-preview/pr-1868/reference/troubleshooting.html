@@ -416,14 +416,14 @@
 <li class="toctree-l1"><a class="reference internal" href="../deployment/set-up-telegram-bridge.html">Set Up Telegram</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../deployment/sandbox-hardening.html">Sandbox Hardening</a></li>
 </ul>
-<p aria-level="2" class="caption" role="heading"><span class="caption-text">Monitoring</span></p>
-<ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="../monitoring/monitor-sandbox-activity.html">Monitor Sandbox Activity</a></li>
-</ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Workspace</span></p>
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="../workspace/workspace-files.html">Workspace Files</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../workspace/backup-restore.html">Back Up and Restore</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../workspace/backup-restore.html">Backup &amp; Restore</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Monitoring</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../monitoring/monitor-sandbox-activity.html">Monitor Sandbox Activity</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Reference</span></p>
 <ul class="current nav bd-sidenav">
@@ -591,8 +591,8 @@ For JetPack 7 (L4T 38.x / Thor), only bridge netfilter and sysctl settings are a
 </section>
 <section id="port-already-in-use">
 <h3>Port already in use<a class="headerlink" href="#port-already-in-use" title="Link to this heading">#</a></h3>
-<p>The NemoClaw gateway uses port <code class="docutils literal notranslate"><span class="pre">18789</span></code> by default.
-If another process is already bound to this port, onboarding fails.
+<p>The NemoClaw dashboard uses port <code class="docutils literal notranslate"><span class="pre">18789</span></code> by default and the gateway uses port <code class="docutils literal notranslate"><span class="pre">8080</span></code>.
+If another process is already bound to one of these ports, onboarding fails.
 Identify the conflicting process, verify it is safe to stop, and terminate it:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>sudo<span class="w"> </span>lsof<span class="w"> </span>-i<span class="w"> </span>:18789
 <span class="gp">$ </span><span class="nb">kill</span><span class="w"> </span>&lt;PID&gt;
@@ -600,6 +600,11 @@ Identify the conflicting process, verify it is safe to stop, and terminate it:</
 </div>
 <p>If the process does not exit, use <code class="docutils literal notranslate"><span class="pre">kill</span> <span class="pre">-9</span> <span class="pre">&lt;PID&gt;</span></code> to force-terminate it.
 Then retry onboarding.</p>
+<p>Alternatively, override the conflicting port with an environment variable instead of stopping the other process:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span><span class="nv">NEMOCLAW_DASHBOARD_PORT</span><span class="o">=</span><span class="m">19000</span><span class="w"> </span>nemoclaw<span class="w"> </span>onboard
+</pre></div>
+</div>
+<p>See <a class="reference internal" href="commands.html#environment-variables"><span class="std std-ref">Environment Variables</span></a> for the full list of port overrides.</p>
 </section>
 </section>
 <section id="onboarding">
@@ -630,7 +635,10 @@ If the installed OpenShell version exceeds the configured maximum, <code class="
 <h3>Invalid sandbox name<a class="headerlink" href="#invalid-sandbox-name" title="Link to this heading">#</a></h3>
 <p>Sandbox names must follow RFC 1123 subdomain rules: lowercase alphanumeric characters and hyphens only, and must start and end with an alphanumeric character.
 Uppercase letters are automatically lowercased.</p>
-<p>If the name does not match these rules, the wizard exits with an error.
+<p>Names that collide with global CLI commands are also rejected.
+Reserved names include <code class="docutils literal notranslate"><span class="pre">onboard</span></code>, <code class="docutils literal notranslate"><span class="pre">list</span></code>, <code class="docutils literal notranslate"><span class="pre">deploy</span></code>, <code class="docutils literal notranslate"><span class="pre">setup</span></code>, <code class="docutils literal notranslate"><span class="pre">start</span></code>, <code class="docutils literal notranslate"><span class="pre">stop</span></code>, <code class="docutils literal notranslate"><span class="pre">status</span></code>, <code class="docutils literal notranslate"><span class="pre">debug</span></code>, <code class="docutils literal notranslate"><span class="pre">uninstall</span></code>, <code class="docutils literal notranslate"><span class="pre">credentials</span></code>, and <code class="docutils literal notranslate"><span class="pre">help</span></code>.
+Using a reserved name would cause the CLI to route to the global command instead of the sandbox.</p>
+<p>If the name does not match these rules or is reserved, the wizard exits with an error.
 Choose a name such as <code class="docutils literal notranslate"><span class="pre">my-assistant</span></code> or <code class="docutils literal notranslate"><span class="pre">dev1</span></code>.</p>
 </section>
 <section id="sandbox-creation-fails-on-dgx">

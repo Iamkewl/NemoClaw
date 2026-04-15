@@ -416,14 +416,14 @@
 <li class="toctree-l1"><a class="reference internal" href="../deployment/set-up-telegram-bridge.html">Set Up Telegram</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../deployment/sandbox-hardening.html">Sandbox Hardening</a></li>
 </ul>
-<p aria-level="2" class="caption" role="heading"><span class="caption-text">Monitoring</span></p>
-<ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="../monitoring/monitor-sandbox-activity.html">Monitor Sandbox Activity</a></li>
-</ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Workspace</span></p>
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="../workspace/workspace-files.html">Workspace Files</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../workspace/backup-restore.html">Back Up and Restore</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../workspace/backup-restore.html">Backup &amp; Restore</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Monitoring</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../monitoring/monitor-sandbox-activity.html">Monitor Sandbox Activity</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Reference</span></p>
 <ul class="current nav bd-sidenav">
@@ -567,7 +567,7 @@ Landlock LSM enforcement applies on a best-effort basis.</p>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">npm_registry</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">registry.npmjs.org:443</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">/usr/local/bin/openclaw</span></code>, <code class="docutils literal notranslate"><span class="pre">/usr/local/bin/npm</span></code>, <code class="docutils literal notranslate"><span class="pre">/usr/local/bin/node</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">/usr/local/bin/openclaw</span></code> only (openclaw plugins install)</p></td>
 <td><p>GET only</p></td>
 </tr>
 </tbody>
@@ -581,6 +581,42 @@ Apply the <code class="docutils literal notranslate"><span class="pre">github</s
 See <a class="reference internal" href="../network-policy/customize-network-policy.html"><span class="std std-doc">Customize the Network Policy</span></a>.</p>
 </div>
 </section>
+</section>
+<section id="policy-tiers">
+<span id="id2"></span><h2>Policy Tiers<a class="headerlink" href="#policy-tiers" title="Link to this heading">#</a></h2>
+<p>During onboarding, the wizard prompts for a policy tier that determines the default set of presets applied on top of the baseline policy.
+The baseline policy is always applied regardless of the selected tier.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Tier</p></th>
+<th class="head"><p>Presets included</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Restricted</p></td>
+<td><p>None</p></td>
+<td><p>Base sandbox only. No third-party network access beyond inference and core agent tooling.</p></td>
+</tr>
+<tr class="row-odd"><td><p>Balanced (default)</p></td>
+<td><p>npm, pypi, huggingface, brew, brave</p></td>
+<td><p>Full dev tooling and web search. No messaging platform access.</p></td>
+</tr>
+<tr class="row-even"><td><p>Open</p></td>
+<td><p>npm, pypi, huggingface, brew, brave, slack, discord, telegram, jira, outlook</p></td>
+<td><p>Broad access across third-party services including messaging and productivity.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>After selecting a tier, a combined preset and access-mode screen lets you include or exclude individual presets and toggle each between read (GET only) and read-write (GET + POST/PUT/PATCH) access.
+Tier-default presets are pre-selected; additional presets can be added from the full list.</p>
+<p>Tier definitions are stored in <code class="docutils literal notranslate"><span class="pre">nemoclaw-blueprint/policies/tiers.yaml</span></code>.</p>
+<p>In non-interactive mode, set the tier with <code class="docutils literal notranslate"><span class="pre">NEMOCLAW_POLICY_TIER</span></code>:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span><span class="nv">NEMOCLAW_POLICY_TIER</span><span class="o">=</span>open<span class="w"> </span>nemoclaw<span class="w"> </span>onboard<span class="w"> </span>--non-interactive<span class="w"> </span>--yes-i-accept-third-party-software
+</pre></div>
+</div>
+<p>If the value does not match a known tier, onboarding exits with an error listing the valid options.</p>
 <section id="inference">
 <h3>Inference<a class="headerlink" href="#inference" title="Link to this heading">#</a></h3>
 <p>The baseline policy allows only the <code class="docutils literal notranslate"><span class="pre">local</span></code> inference route. External inference
@@ -615,7 +651,7 @@ providers are reached through the OpenShell gateway, not by direct sandbox egres
 <section id="dynamic-changes">
 <h3>Dynamic Changes<a class="headerlink" href="#dynamic-changes" title="Link to this heading">#</a></h3>
 <p>Apply policy updates to a running sandbox without restarting:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>openshell<span class="w"> </span>policy<span class="w"> </span><span class="nb">set</span><span class="w"> </span>&lt;policy-file&gt;
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>openshell<span class="w"> </span>policy<span class="w"> </span><span class="nb">set</span><span class="w"> </span>--policy<span class="w"> </span>&lt;policy-file&gt;<span class="w"> </span>&lt;sandbox-name&gt;
 </pre></div>
 </div>
 </section>
@@ -674,6 +710,9 @@ providers are reached through the OpenShell gateway, not by direct sandbox egres
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#baseline-policy">Baseline Policy</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#filesystem">Filesystem</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id1">Network Policies</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#policy-tiers">Policy Tiers</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#inference">Inference</a></li>
 </ul>
 </li>

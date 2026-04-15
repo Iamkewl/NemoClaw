@@ -416,14 +416,14 @@
 <li class="toctree-l1"><a class="reference internal" href="../deployment/set-up-telegram-bridge.html">Set Up Telegram</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../deployment/sandbox-hardening.html">Sandbox Hardening</a></li>
 </ul>
-<p aria-level="2" class="caption" role="heading"><span class="caption-text">Monitoring</span></p>
-<ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="../monitoring/monitor-sandbox-activity.html">Monitor Sandbox Activity</a></li>
-</ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Workspace</span></p>
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="../workspace/workspace-files.html">Workspace Files</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../workspace/backup-restore.html">Back Up and Restore</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../workspace/backup-restore.html">Backup &amp; Restore</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Monitoring</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../monitoring/monitor-sandbox-activity.html">Monitor Sandbox Activity</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Reference</span></p>
 <ul class="nav bd-sidenav">
@@ -504,6 +504,12 @@ NemoClaw supports both static policy changes that persist across restarts and dy
 <li><p>A running NemoClaw sandbox for dynamic changes, or the NemoClaw source repository for static changes.</p></li>
 <li><p>The OpenShell CLI on your <code class="docutils literal notranslate"><span class="pre">PATH</span></code>.</p></li>
 </ul>
+<blockquote>
+<div><p>[!IMPORTANT]
+Make static policy edits on the host, not inside the sandbox.
+The sandbox image is intentionally minimal and may not include editors or package-management tools.
+Changes made only inside the sandbox are also ephemeral and are lost when the sandbox is recreated.</p>
+</div></blockquote>
 </section>
 <section id="static-changes">
 <h2>Static Changes<a class="headerlink" href="#static-changes" title="Link to this heading">#</a></h2>
@@ -511,6 +517,11 @@ NemoClaw supports both static policy changes that persist across restarts and dy
 <section id="edit-the-policy-file">
 <h3>Edit the Policy File<a class="headerlink" href="#edit-the-policy-file" title="Link to this heading">#</a></h3>
 <p>Open <code class="docutils literal notranslate"><span class="pre">nemoclaw-blueprint/policies/openclaw-sandbox.yaml</span></code> and add or modify endpoint entries.</p>
+<p>If you only need one of the built-in presets, use <code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">&lt;name&gt;</span> <span class="pre">policy-add</span></code> instead of editing YAML by hand:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>nemoclaw<span class="w"> </span>my-assistant<span class="w"> </span>policy-add
+</pre></div>
+</div>
+<p>Use a manual YAML edit when you need to allow custom hosts that are not covered by a preset, such as an internal API or a weather service.</p>
 <p>Each entry in the <code class="docutils literal notranslate"><span class="pre">network</span></code> section defines an endpoint group with the following fields:</p>
 <dl class="simple myst">
 <dt><code class="docutils literal notranslate"><span class="pre">endpoints</span></code></dt><dd><p>Host and port pairs that the sandbox can reach.</p>
@@ -548,7 +559,7 @@ Follow the same format as the baseline policy in <code class="docutils literal n
 <section id="apply-the-policy">
 <h3>Apply the Policy<a class="headerlink" href="#apply-the-policy" title="Link to this heading">#</a></h3>
 <p>Use the OpenShell CLI to apply the policy update:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>openshell<span class="w"> </span>policy<span class="w"> </span><span class="nb">set</span><span class="w"> </span>&lt;policy-file&gt;
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>openshell<span class="w"> </span>policy<span class="w"> </span><span class="nb">set</span><span class="w"> </span>--policy<span class="w"> </span>&lt;policy-file&gt;<span class="w"> </span>&lt;sandbox-name&gt;
 </pre></div>
 </div>
 <p>The change takes effect immediately.</p>
@@ -559,11 +570,21 @@ Follow the same format as the baseline policy in <code class="docutils literal n
 When the sandbox stops, the running policy resets to the baseline defined in the policy file.
 To make changes permanent, update the static policy file and re-run setup.</p>
 </section>
+<section id="approve-requests-interactively">
+<h3>Approve Requests Interactively<a class="headerlink" href="#approve-requests-interactively" title="Link to this heading">#</a></h3>
+<p>For one-off access, you can approve blocked requests in the OpenShell TUI instead of editing the baseline policy:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>openshell<span class="w"> </span>term
+</pre></div>
+</div>
+<p>This is useful when you want to test a destination before deciding whether it belongs in a permanent preset or custom policy file.</p>
+</section>
 </section>
 <section id="policy-presets">
 <h2>Policy Presets<a class="headerlink" href="#policy-presets" title="Link to this heading">#</a></h2>
 <p>NemoClaw ships preset policy files for common integrations in <code class="docutils literal notranslate"><span class="pre">nemoclaw-blueprint/policies/presets/</span></code>.
 Apply a preset as-is or use it as a starting template for a custom policy.</p>
+<p>During onboarding, the <a class="reference internal" href="../reference/network-policies.html#id2"><span class="std std-ref">policy tier</span></a> you select determines which presets are enabled by default.
+You can add or remove individual presets in the interactive preset screen that follows tier selection.</p>
 <p>Available presets:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
@@ -609,7 +630,7 @@ Apply a preset as-is or use it as a starting template for a custom policy.</p>
 </table>
 </div>
 <p>To apply a preset to a running sandbox, pass it as a policy file:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>openshell<span class="w"> </span>policy<span class="w"> </span><span class="nb">set</span><span class="w"> </span>nemoclaw-blueprint/policies/presets/pypi.yaml
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>openshell<span class="w"> </span>policy<span class="w"> </span><span class="nb">set</span><span class="w"> </span>--policy<span class="w"> </span>nemoclaw-blueprint/policies/presets/pypi.yaml<span class="w"> </span>my-assistant
 </pre></div>
 </div>
 <p>To include a preset in the baseline, merge its entries into <code class="docutils literal notranslate"><span class="pre">openclaw-sandbox.yaml</span></code> and re-run <code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">onboard</span></code>.</p>
@@ -685,6 +706,7 @@ Apply a preset as-is or use it as a starting template for a custom policy.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#create-a-policy-file">Create a Policy File</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#apply-the-policy">Apply the Policy</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#scope-of-dynamic-changes">Scope of Dynamic Changes</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#approve-requests-interactively">Approve Requests Interactively</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#policy-presets">Policy Presets</a></li>

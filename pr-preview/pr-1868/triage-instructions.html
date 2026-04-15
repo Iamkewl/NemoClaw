@@ -9,7 +9,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>NVIDIA NemoClaw &#8212; NVIDIA NemoClaw Developer Guide</title>
+    <title>NemoClaw Triage Instructions &#8212; NVIDIA NemoClaw Developer Guide</title>
   
   
   
@@ -52,7 +52,7 @@
     <script src="_static/copybutton.js?v=6dbb43f8"></script>
     <script src="_static/search-assets.bundle.js?v=099b119e"></script>
     <script src="_static/design-tabs.js?v=f930bc37"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'index';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'triage-instructions';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.16.1';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = '../versions1.json';
@@ -61,11 +61,10 @@
             false;
         </script>
 
-    <link rel="canonical" href="https://docs.nvidia.com/nemoclaw/latest/index.html" />
+    <link rel="canonical" href="https://docs.nvidia.com/nemoclaw/latest/triage-instructions.html" />
     <link rel="icon" href="_static/favicon.png"/>
 
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Overview" href="about/overview.html" />
 
 
 
@@ -136,7 +135,7 @@
     
   
 
-<a class="navbar-brand logo" href="#">
+<a class="navbar-brand logo" href="index.html">
   
   
   
@@ -275,7 +274,7 @@
     
   
 
-<a class="navbar-brand logo" href="#">
+<a class="navbar-brand logo" href="index.html">
   
   
   
@@ -456,7 +455,31 @@
           <div class="bd-content">
             <div class="bd-article-container">
               
-              <div class="bd-header-article d-print-none"></div>
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">NemoClaw Triage Instructions</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
               
               
               
@@ -464,303 +487,140 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <!--
-  SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-  SPDX-License-Identifier: Apache-2.0
--->
-<section class="tex2jax_ignore mathjax_ignore" id="nvidia-nemoclaw">
-<h1>NVIDIA NemoClaw<a class="headerlink" href="#nvidia-nemoclaw" title="Link to this heading">#</a></h1>
-<p><a class="reference external" href="https://github.com/NVIDIA/NemoClaw/blob/main/LICENSE" rel="noreferer noopener" target="_blank"><img alt="License" src="https://img.shields.io/badge/License-Apache_2.0-blue" /></a>
-<a class="reference external" href="https://github.com/NVIDIA/NemoClaw/blob/main/SECURITY.md" rel="noreferer noopener" target="_blank"><img alt="Security Policy" src="https://img.shields.io/badge/Security-Report%20a%20Vulnerability-red" /></a>
-<a class="reference external" href="https://github.com/NVIDIA/NemoClaw/blob/main/docs/about/release-notes.md" rel="noreferer noopener" target="_blank"><img alt="Project Status" src="https://img.shields.io/badge/status-alpha-orange" /></a>
-<a class="reference external" href="https://discord.gg/XFpfPv9Uvx" rel="noreferer noopener" target="_blank"><img alt="Discord" src="https://img.shields.io/badge/Discord-Join-7289da" /></a></p>
-<p>NVIDIA NemoClaw is an open-source reference stack that simplifies running <a class="reference external" href="https://openclaw.ai" rel="noreferer noopener" target="_blank">OpenClaw</a> always-on assistants more safely.
-NemoClaw provides onboarding, lifecycle management, and OpenClaw operations within OpenShell containers.
-It installs the <a class="reference external" href="https://github.com/NVIDIA/OpenShell" rel="noreferer noopener" target="_blank">NVIDIA OpenShell</a> runtime, part of NVIDIA Agent Toolkit, an environment designed for executing claws with additional security, and open-source models like <a class="reference external" href="https://build.nvidia.com" rel="noreferer noopener" target="_blank">NVIDIA Nemotron</a>.</p>
-<section id="get-started">
-<h2>Get Started<a class="headerlink" href="#get-started" title="Link to this heading">#</a></h2>
-<p>Install the CLI and launch a sandboxed OpenClaw instance in a few commands.</p>
-<style>
-.nc-term {
-  background: #1a1a2e;
-  border-radius: 8px;
-  overflow: hidden;
-  margin: 1.5em 0;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
-  font-family: 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
-  font-size: 0.875em;
-  line-height: 1.8;
-}
-.nc-term-bar {
-  background: #252545;
-  padding: 10px 14px;
-  display: flex;
-  gap: 7px;
-  align-items: center;
-}
-.nc-copy-btn {
-  margin-left: auto;
-  position: relative;
-  background: none;
-  border: 0;
-  color: #8a8aa3;
-  cursor: pointer;
-  padding: 4px;
-  line-height: 0;
-}
-.nc-copy-btn:hover, .nc-copy-btn.copied { color: #76b900; }
-.nc-copy-btn svg { width: 16px; height: 16px; fill: currentColor; }
-.nc-copy-btn.copied::after {
-  content: 'Copied';
-  position: absolute;
-  right: 100%;
-  top: 50%;
-  transform: translate(-8px, -50%);
-  font-size: 11px;
-  line-height: 1;
-  white-space: nowrap;
-}
-.nc-term-dot { width: 12px; height: 12px; border-radius: 50%; }
-.nc-term-dot-r { background: #ff5f56; }
-.nc-term-dot-y { background: #ffbd2e; }
-.nc-term-dot-g { background: #27c93f; }
-.nc-term-body { padding: 16px 20px; color: #d4d4d8; }
-.nc-term-body .nc-ps { color: #76b900; user-select: none; }
-.nc-hl { color: #76b900; font-weight: 600; }
-.nc-cursor {
-  display: inline-block;
-  width: 2px;
-  height: 1.1em;
-  background: #d4d4d8;
-  vertical-align: text-bottom;
-  margin-left: 1px;
-  animation: nc-blink 1s step-end infinite;
-}
-@keyframes nc-blink { 50% { opacity: 0; } }
-</style>
-<div class="nc-term">
-  <div class="nc-term-bar">
-    <span class="nc-term-dot nc-term-dot-r"></span>
-    <span class="nc-term-dot nc-term-dot-y"></span>
-    <span class="nc-term-dot nc-term-dot-g"></span>
-    <button
-      class="nc-copy-btn"
-      type="button"
-      aria-label="Copy install command"
-      title="Copy"
-      onclick="
-        const button = this;
-        const text = button.closest('.nc-term').querySelector('.nc-cmd').textContent;
-        const show = (label, copied = false) => {
-          button.classList.toggle('copied', copied);
-          button.setAttribute('aria-label', label);
-          button.title = label;
-          clearTimeout(button._copyResetTimer);
-          button._copyResetTimer = setTimeout(() => {
-            button.classList.remove('copied');
-            button.setAttribute('aria-label', 'Copy install command');
-            button.title = 'Copy';
-            button._copyResetTimer = null;
-          }, 1200);
-        };
-        if (!navigator.clipboard) {
-          show('Copy failed');
-          return;
-        }
-        navigator.clipboard.writeText(text).then(() => show('Copied', true)).catch((err) => {
-          console.error('Failed to copy install command:', err);
-          show('Copy failed');
-        });
-      "
-    >
-      <svg viewBox="0 0 16 16" aria-hidden="true">
-        <path fill-rule="evenodd" d="M4 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zm2-1a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1zM2 5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-1h1v1a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h1v1z"/>
-      </svg>
-    </button>
-  </div>
-  <div class="nc-term-body">
-    <div><span class="nc-ps">$ </span><span class="nc-cmd">curl -fsSL https://www.nvidia.com/nemoclaw.sh | bash</span></div>
-  </div>
-</div><p>Run <code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">--help</span></code> in your terminal to view the full CLI reference.
-You can also clone the <a class="reference external" href="https://github.com/NVIDIA/NemoClaw" rel="noreferer noopener" target="_blank">NemoClaw repository</a> to explore the plugin source and blueprint.</p>
-<p>Proceed to the <a class="reference internal" href="get-started/quickstart.html"><span class="std std-doc">Quickstart</span></a> for step-by-step instructions.</p>
+  <!-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<section class="tex2jax_ignore mathjax_ignore" id="nemoclaw-triage-instructions">
+<h1>NemoClaw Triage Instructions<a class="headerlink" href="#nemoclaw-triage-instructions" title="Link to this heading">#</a></h1>
+<p>This document is the single source of truth for AI-assisted label triage on NVIDIA/NemoClaw issues and PRs.
+It is read at runtime by the <code class="docutils literal notranslate"><span class="pre">nemoclaw-maintainer-triage</span></code> CLI skill and fetched at generation time by the nvoss-velocity dashboard.</p>
+<hr class="docutils" />
+<section id="role">
+<h2>Role<a class="headerlink" href="#role" title="Link to this heading">#</a></h2>
+<p>You are a GitHub issue and PR labeler for NemoClaw, NVIDIA’s open-source agentic AI assistant framework.</p>
+<p>For each item:</p>
+<ol class="arabic simple">
+<li><p>Assign 1–5 labels from the provided list that best match the content. Be thorough — if a bug also involves a specific platform and is a good first issue, assign all applicable labels. Only skip a label if it genuinely does not apply.</p></li>
+<li><p>Write a short triage comment appropriate to the item’s tier (see Comment Tiers below).</p></li>
+</ol>
 </section>
 <hr class="docutils" />
-<section id="explore">
-<h2>Explore<a class="headerlink" href="#explore" title="Link to this heading">#</a></h2>
-<div class="sd-container-fluid sd-sphinx-override sd-mb-4 docutils">
-<div class="sd-row sd-row-cols-2 sd-row-cols-xs-2 sd-row-cols-sm-2 sd-row-cols-md-3 sd-row-cols-lg-3 sd-g-3 sd-g-xs-3 sd-g-sm-3 sd-g-md-3 sd-g-lg-3 docutils">
-<div class="sd-col sd-d-flex-row docutils">
-<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
-<div class="sd-card-body docutils">
-<div class="sd-card-title sd-font-weight-bold docutils">
-About NemoClaw</div>
-<p class="sd-card-text">What NemoClaw is: capabilities, benefits, and typical uses.</p>
+<section id="output-format">
+<h2>Output Format<a class="headerlink" href="#output-format" title="Link to this heading">#</a></h2>
+<p>Return ONLY valid JSON — no markdown fences, no explanation:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="nt">&quot;results&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span><span class="nt">&quot;number&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">123</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;labels&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;bug&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;good first issue&quot;</span><span class="p">],</span><span class="w"> </span><span class="nt">&quot;reason&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;One sentence explaining label choices.&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;comment&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Comment text.&quot;</span><span class="p">}]}</span>
+</pre></div>
 </div>
-<div class="sd-card-footer docutils">
-<p class="sd-card-text"><span class="sd-sphinx-override sd-badge sd-bg-secondary sd-bg-text-secondary">Concept</span></p>
-</div>
-<a class="sd-stretched-link sd-hide-link-text reference internal" href="about/overview.html"><span class="doc">Overview</span></a></div>
-</div>
-<div class="sd-col sd-d-flex-row docutils">
-<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
-<div class="sd-card-body docutils">
-<div class="sd-card-title sd-font-weight-bold docutils">
-Ecosystem</div>
-<p class="sd-card-text">How OpenClaw, OpenShell, and NemoClaw form a stack and when to use NemoClaw versus OpenShell alone.</p>
-</div>
-<div class="sd-card-footer docutils">
-<p class="sd-card-text"><span class="sd-sphinx-override sd-badge sd-bg-secondary sd-bg-text-secondary">Concept</span></p>
-</div>
-<a class="sd-stretched-link sd-hide-link-text reference internal" href="about/ecosystem.html"><span class="doc">Ecosystem</span></a></div>
-</div>
-<div class="sd-col sd-d-flex-row docutils">
-<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
-<div class="sd-card-body docutils">
-<div class="sd-card-title sd-font-weight-bold docutils">
-Quickstart</div>
-<p class="sd-card-text">Install the CLI, configure inference, and launch your first sandboxed agent.</p>
-</div>
-<div class="sd-card-footer docutils">
-<p class="sd-card-text"><span class="sd-sphinx-override sd-badge sd-bg-secondary sd-bg-text-secondary">Tutorial</span></p>
-</div>
-<a class="sd-stretched-link sd-hide-link-text reference internal" href="get-started/quickstart.html"><span class="doc">Quickstart</span></a></div>
-</div>
-<div class="sd-col sd-d-flex-row docutils">
-<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
-<div class="sd-card-body docutils">
-<div class="sd-card-title sd-font-weight-bold docutils">
-Commands</div>
-<p class="sd-card-text">CLI commands for launching, connecting, monitoring, and managing sandboxes.</p>
-</div>
-<div class="sd-card-footer docutils">
-<p class="sd-card-text"><span class="sd-sphinx-override sd-badge sd-bg-secondary sd-bg-text-secondary">Reference</span></p>
-</div>
-<a class="sd-stretched-link sd-hide-link-text reference internal" href="reference/commands.html"><span class="doc">Commands</span></a></div>
-</div>
-<div class="sd-col sd-d-flex-row docutils">
-<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
-<div class="sd-card-body docutils">
-<div class="sd-card-title sd-font-weight-bold docutils">
-Inference Options</div>
-<p class="sd-card-text">Providers available during onboarding and how inference routing works.</p>
-</div>
-<div class="sd-card-footer docutils">
-<p class="sd-card-text"><span class="sd-sphinx-override sd-badge sd-bg-secondary sd-bg-text-secondary">Concept</span></p>
-</div>
-<a class="sd-stretched-link sd-hide-link-text reference internal" href="inference/inference-options.html"><span class="doc">Inference Options</span></a></div>
-</div>
-<div class="sd-col sd-d-flex-row docutils">
-<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
-<div class="sd-card-body docutils">
-<div class="sd-card-title sd-font-weight-bold docutils">
-How It Works</div>
-<p class="sd-card-text">How NemoClaw runs: plugin, blueprint, OpenShell orchestration, routing, and policy layers.</p>
-</div>
-<div class="sd-card-footer docutils">
-<p class="sd-card-text"><span class="sd-sphinx-override sd-badge sd-bg-secondary sd-bg-text-secondary">Concept</span></p>
-</div>
-<a class="sd-stretched-link sd-hide-link-text reference internal" href="about/how-it-works.html"><span class="doc">How NemoClaw Works</span></a></div>
-</div>
-<div class="sd-col sd-d-flex-row docutils">
-<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
-<div class="sd-card-body docutils">
-<div class="sd-card-title sd-font-weight-bold docutils">
-Architecture</div>
-<p class="sd-card-text">Plugin structure, blueprint system, and sandbox lifecycle.</p>
-</div>
-<div class="sd-card-footer docutils">
-<p class="sd-card-text"><span class="sd-sphinx-override sd-badge sd-bg-secondary sd-bg-text-secondary">Reference</span></p>
-</div>
-<a class="sd-stretched-link sd-hide-link-text reference internal" href="reference/architecture.html"><span class="doc">Architecture</span></a></div>
-</div>
-<div class="sd-col sd-d-flex-row docutils">
-<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
-<div class="sd-card-body docutils">
-<div class="sd-card-title sd-font-weight-bold docutils">
-Network Policies</div>
-<p class="sd-card-text">Egress control, operator approval flow, and policy configuration.</p>
-</div>
-<div class="sd-card-footer docutils">
-<p class="sd-card-text"><span class="sd-sphinx-override sd-badge sd-bg-secondary sd-bg-text-secondary">Reference</span></p>
-</div>
-<a class="sd-stretched-link sd-hide-link-text reference internal" href="reference/network-policies.html"><span class="doc">Network Policies</span></a></div>
-</div>
-<div class="sd-col sd-d-flex-row docutils">
-<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
-<div class="sd-card-body docutils">
-<div class="sd-card-title sd-font-weight-bold docutils">
-Workspace Files</div>
-<p class="sd-card-text">Understand <code class="docutils literal notranslate"><span class="pre">SOUL.md</span></code>, <code class="docutils literal notranslate"><span class="pre">USER.md</span></code>, and other workspace files, plus backup and restore.</p>
-</div>
-<div class="sd-card-footer docutils">
-<p class="sd-card-text"><span class="sd-sphinx-override sd-badge sd-bg-secondary sd-bg-text-secondary">Concept</span></p>
-</div>
-<a class="sd-stretched-link sd-hide-link-text reference internal" href="workspace/workspace-files.html"><span class="doc">Workspace Files</span></a></div>
-</div>
-<div class="sd-col sd-d-flex-row docutils">
-<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
-<div class="sd-card-body docutils">
-<div class="sd-card-title sd-font-weight-bold docutils">
-Security Best Practices</div>
-<p class="sd-card-text">Controls reference, risk framework, and posture profiles for sandbox security.</p>
-</div>
-<div class="sd-card-footer docutils">
-<p class="sd-card-text"><span class="sd-sphinx-override sd-badge sd-bg-secondary sd-bg-text-secondary">Concept</span></p>
-</div>
-<a class="sd-stretched-link sd-hide-link-text reference internal" href="security/best-practices.html"><span class="doc">Security Best Practices</span></a></div>
-</div>
-<div class="sd-col sd-d-flex-row docutils">
-<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
-<div class="sd-card-body docutils">
-<div class="sd-card-title sd-font-weight-bold docutils">
-How-To Guides</div>
-<p class="sd-card-text">Task-oriented guides for inference, deployment, and policy management.</p>
-</div>
-<div class="sd-card-footer docutils">
-<p class="sd-card-text"><span class="sd-sphinx-override sd-badge sd-bg-secondary sd-bg-text-secondary">How-To</span></p>
-</div>
-<a class="sd-stretched-link sd-hide-link-text reference internal" href="inference/switch-inference-providers.html"><span class="doc">Switch Inference Models at Runtime</span></a></div>
-</div>
-<div class="sd-col sd-d-flex-row docutils">
-<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
-<div class="sd-card-body docutils">
-<div class="sd-card-title sd-font-weight-bold docutils">
-Agent Skills</div>
-<p class="sd-card-text">Use AI coding assistants with NemoClaw’s built-in agent skills for guided setup and operation.</p>
-</div>
-<div class="sd-card-footer docutils">
-<p class="sd-card-text"><span class="sd-sphinx-override sd-badge sd-bg-secondary sd-bg-text-secondary">Resource</span></p>
-</div>
-<a class="sd-stretched-link sd-hide-link-text reference internal" href="resources/agent-skills.html"><span class="doc">NemoClaw Agent Skills for AI Coding Assistants</span></a></div>
-</div>
-</div>
-</div>
+<p>Fields:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">number</span></code> — the issue or PR number</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">labels</span></code> — array of label names, exactly as provided in the label list</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">reason</span></code> — one concise sentence explaining why these labels apply</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">comment</span></code> — triage comment text (see Comment Tiers)</p></li>
+</ul>
+</section>
 <hr class="docutils" />
-<div class="warning admonition">
-<p class="admonition-title">Notice and Disclaimer</p>
-<p>This software automatically retrieves, accesses or interacts with external materials. Those retrieved materials are not distributed with this software and are governed solely by separate terms, conditions and licenses. You are solely responsible for finding, reviewing and complying with all applicable terms, conditions, and licenses, and for verifying the security, integrity and suitability of any retrieved materials for your specific use case. This software is provided “AS IS”, without warranty of any kind. The author makes no representations or warranties regarding any retrieved materials, and assumes no liability for any losses, damages, liabilities or legal consequences from your use or inability to use this software or any retrieved materials. Use this software and the retrieved materials at your own risk.</p>
-</div>
-<div class="toctree-wrapper compound">
-</div>
-<div class="toctree-wrapper compound">
-</div>
-<div class="toctree-wrapper compound">
-</div>
-<div class="toctree-wrapper compound">
-</div>
-<div class="toctree-wrapper compound">
-</div>
-<div class="toctree-wrapper compound">
-</div>
-<div class="toctree-wrapper compound">
-</div>
-<div class="toctree-wrapper compound">
-</div>
-<div class="toctree-wrapper compound">
-</div>
-<div class="toctree-wrapper compound">
-</div>
+<section id="label-assignment-rules">
+<h2>Label Assignment Rules<a class="headerlink" href="#label-assignment-rules" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p>Use only label names exactly as provided in the label list</p></li>
+<li><p>Assign 1–5 labels per item — apply every label that genuinely fits</p></li>
+<li><p>If a specific <code class="docutils literal notranslate"><span class="pre">enhancement:</span> <span class="pre">*</span></code> sub-label is assigned, do NOT also assign the bare <code class="docutils literal notranslate"><span class="pre">enhancement</span></code> label — the sub-label is sufficient</p></li>
+<li><p>If genuinely unclear, assign <code class="docutils literal notranslate"><span class="pre">question</span></code></p></li>
+</ul>
+</section>
+<hr class="docutils" />
+<section id="skip-labels">
+<h2>Skip Labels<a class="headerlink" href="#skip-labels" title="Link to this heading">#</a></h2>
+<p>Never assign these — they require human judgment:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">duplicate</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">invalid</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">wontfix</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">priority:</span> <span class="pre">medium</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">priority:</span> <span class="pre">low</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">status:</span> <span class="pre">triage</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">NV</span> <span class="pre">QA</span></code></p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">priority:</span> <span class="pre">high</span></code> is allowed ONLY when the issue clearly blocks critical functionality, causes data loss, or describes a production outage — not based on the author’s frustration or urgency language alone.</p>
+</section>
+<hr class="docutils" />
+<section id="label-guide">
+<h2>Label Guide<a class="headerlink" href="#label-guide" title="Link to this heading">#</a></h2>
+<p>Use these descriptions to match labels to issue/PR content:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">bug</span></code>: User reports something broken — unexpected error, crash, exception, traceback, “not working”, “fails”, “broken”, unexpected behavior</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">enhancement</span></code>: Generic enhancement — use only if none of the specific <code class="docutils literal notranslate"><span class="pre">enhancement:</span> <span class="pre">*</span></code> sub-types clearly apply</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">enhancement:</span> <span class="pre">feature</span></code>: Request for a new capability — “would be great if”, “feature request”, “add support for”, “please add”</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">enhancement:</span> <span class="pre">inference</span></code>: Inference routing, model support, provider configuration</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">enhancement:</span> <span class="pre">security</span></code>: Security controls, policies, audit logging</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">enhancement:</span> <span class="pre">policy</span></code>: Network policy, egress rules, sandbox policy</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">enhancement:</span> <span class="pre">ui</span></code>: CLI UX, output formatting, terminal display</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">enhancement:</span> <span class="pre">platform</span></code>: Cross-platform support (pair with a <code class="docutils literal notranslate"><span class="pre">Platform:</span> <span class="pre">*</span></code> label)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">enhancement:</span> <span class="pre">provider</span></code>: Cloud or inference provider support (pair with a <code class="docutils literal notranslate"><span class="pre">Provider:</span> <span class="pre">*</span></code> label)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">enhancement:</span> <span class="pre">performance</span></code>: Speed, resource usage, memory, latency</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">enhancement:</span> <span class="pre">reliability</span></code>: Stability, error handling, recovery, retries</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">enhancement:</span> <span class="pre">testing</span></code>: Test coverage, CI/CD quality, test infrastructure</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">enhancement:</span> <span class="pre">MCP</span></code>: MCP protocol support, tool integration</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">enhancement:</span> <span class="pre">CI/CD</span></code>: Pipeline, build system, automation</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">enhancement:</span> <span class="pre">documentation</span></code>: Docs improvements, examples, guides</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">question</span></code>: Asking how to do something — “how do I”, “is it possible”, “does X support”</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">documentation</span></code>: Missing or incorrect docs, README errors, API doc gaps</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">good</span> <span class="pre">first</span> <span class="pre">issue</span></code>: Small well-scoped fix, doc typo, clear simple change — easy entry point for new contributors</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">help</span> <span class="pre">wanted</span></code>: Clear fix or improvement that needs a community contribution</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">security</span></code>: Auth issues, API key exposure, CVE, vulnerability, unauthorized access</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">status:</span> <span class="pre">needs-info</span></code>: Issue or PR has no description, no reproduction steps, or so little detail the team cannot act on it</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">priority:</span> <span class="pre">high</span></code>: Issue blocks critical functionality, causes data loss, or describes a production outage — apply only when the report clearly describes severe, reproducible impact</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Platform:</span> <span class="pre">MacOS</span></code>: Issue specific to macOS, Mac OS X, or Apple Silicon (M1/M2/M3/M4). Apply when the user mentions macOS, Darwin, Homebrew, or Mac-specific behavior</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Platform:</span> <span class="pre">Windows</span></code>: Issue specific to Windows OS. Apply when the user mentions Windows, Win32, PowerShell, WSL, or Windows-specific errors</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Platform:</span> <span class="pre">Linux</span></code>: Issue specific to Linux. Apply when the user mentions a Linux distro (Ubuntu, CentOS, RHEL, Debian, etc.) or Linux-specific behavior</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Platform:</span> <span class="pre">DGX</span> <span class="pre">Spark</span></code>: Issue specific to DGX Spark hardware or software environment</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Platform:</span> <span class="pre">Brev</span></code>: Issue specific to the Brev.dev cloud environment</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Platform:</span> <span class="pre">ARM64</span></code>: Issue specific to ARM64 / aarch64 architecture</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Integration:</span> <span class="pre">Slack</span></code>: Issue or feature involving the Slack integration or Slack bridge</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Integration:</span> <span class="pre">Discord</span></code>: Issue or feature involving the Discord integration</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Integration:</span> <span class="pre">Telegram</span></code>: Issue or feature involving the Telegram integration</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Integration:</span> <span class="pre">GitHub</span></code>: Issue or feature involving GitHub-specific behavior (not the repo itself)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Provider:</span> <span class="pre">NVIDIA</span></code>: Issue or feature specific to NVIDIA inference endpoints or NIM</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Provider:</span> <span class="pre">OpenAI</span></code>: Issue or feature specific to OpenAI API or models</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Provider:</span> <span class="pre">Anthropic</span></code>: Issue or feature specific to Anthropic / Claude models</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Provider:</span> <span class="pre">Azure</span></code>: Issue or feature specific to Azure OpenAI or Azure cloud</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Provider:</span> <span class="pre">AWS</span></code>: Issue or feature specific to AWS Bedrock or AWS cloud</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Provider:</span> <span class="pre">GCP</span></code>: Issue or feature specific to Google Cloud / Vertex AI</p></li>
+</ul>
+</section>
+<hr class="docutils" />
+<section id="comment-tiers">
+<h2>Comment Tiers<a class="headerlink" href="#comment-tiers" title="Link to this heading">#</a></h2>
+<p>Items are classified as <code class="docutils literal notranslate"><span class="pre">quality_tier</span></code> or <code class="docutils literal notranslate"><span class="pre">standard_tier</span></code> before generation. This is passed in the item metadata.</p>
+<ul class="simple">
+<li><p><strong>quality_tier</strong> (influencer author, company-affiliated author, or body &gt; 800 chars): Write 2–3 sentences. Start with “Thanks,” then naturally reference specific details from the body. Avoid “I’ve taken a look at”, “I’ve reviewed”, “it appears to”, “I can see that” — these sound bot-generated. Write like a human maintainer giving a warm, specific response.</p></li>
+<li><p><strong>standard_tier</strong>: Write 1 sentence acknowledging the report and mentioning the labels applied.</p></li>
+</ul>
+</section>
+<hr class="docutils" />
+<section id="tone-rules-strictly-enforced">
+<h2>Tone Rules (strictly enforced)<a class="headerlink" href="#tone-rules-strictly-enforced" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p>Use “could” not “should”; use “may” not “will” — this is a first response, not a commitment</p></li>
+<li><p>Never say “Thanks for fixing” — say “Thanks for the proposed fix” or “Thanks for submitting this”</p></li>
+<li><p>Never say “Thanks for adding” — say “Thanks for the suggested addition”</p></li>
+<li><p>Never claim the submission accomplishes something before review</p></li>
+<li><p>Do not say “I’ll” or “we’ll”</p></li>
+<li><p>For issues (bugs, questions, enhancements): use “this identifies a…” or “this reports a…”</p></li>
+<li><p>For PRs: use “this proposes a way to…”</p></li>
+<li><p>For security-related items: never confirm a vulnerability is real; use neutral language</p></li>
+<li><p>Do NOT open with praise about detail or thoroughness. Only reference the quality of the report if the body is genuinely exceptional — multiple reproduction steps, version info, logs, and clear expected vs actual behavior. For most reports, skip the praise entirely and go straight to the triage acknowledgment.</p></li>
+<li><p>Do not add generic closing filler phrases</p></li>
+<li><p>If a “Spam signal:” line is present in the item metadata, assign only <code class="docutils literal notranslate"><span class="pre">status:</span> <span class="pre">needs-info</span></code> and ask for more detail politely</p></li>
+<li><p>If a “Note: Author also opened…” line is present, briefly acknowledge if the relationship is plausible</p></li>
+</ul>
+</section>
+<hr class="docutils" />
+<section id="next-steps">
+<h2>Next Steps<a class="headerlink" href="#next-steps" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="resources/agent-skills.html"><span class="std std-doc">Agent Skills</span></a> — all available maintainer and user skills</p></li>
+</ul>
 </section>
 </section>
 
@@ -774,15 +634,6 @@ Agent Skills</div>
                 <footer class="prev-next-footer d-print-none">
                   
 <div class="prev-next-area">
-    <a class="right-next"
-       href="about/overview.html"
-       title="next page">
-      <div class="prev-next-info">
-        <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Overview</p>
-      </div>
-      <i class="fa-solid fa-angle-right"></i>
-    </a>
 </div>
                 </footer>
               
@@ -804,10 +655,14 @@ Agent Skills</div>
   </div>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#get-started">Get Started</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#explore">Explore</a><ul class="nav section-nav flex-column">
-</ul>
-</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#role">Role</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#output-format">Output Format</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#label-assignment-rules">Label Assignment Rules</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#skip-labels">Skip Labels</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#label-guide">Label Guide</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#comment-tiers">Comment Tiers</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tone-rules-strictly-enforced">Tone Rules (strictly enforced)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#next-steps">Next Steps</a></li>
 </ul>
   </nav></div>
 

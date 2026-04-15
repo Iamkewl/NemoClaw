@@ -9,7 +9,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Back Up and Restore Workspace Files &#8212; NVIDIA NemoClaw Developer Guide</title>
+    <title>Backup and Restore Workspace Files &#8212; NVIDIA NemoClaw Developer Guide</title>
   
   
   
@@ -65,7 +65,7 @@
     <link rel="icon" href="../_static/favicon.png"/>
 
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Architecture" href="../reference/architecture.html" />
+    <link rel="next" title="Monitor Sandbox Activity and Debug Issues" href="../monitoring/monitor-sandbox-activity.html" />
     <link rel="prev" title="Workspace Files" href="workspace-files.html" />
 
 
@@ -416,14 +416,14 @@
 <li class="toctree-l1"><a class="reference internal" href="../deployment/set-up-telegram-bridge.html">Set Up Telegram</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../deployment/sandbox-hardening.html">Sandbox Hardening</a></li>
 </ul>
-<p aria-level="2" class="caption" role="heading"><span class="caption-text">Monitoring</span></p>
-<ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="../monitoring/monitor-sandbox-activity.html">Monitor Sandbox Activity</a></li>
-</ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Workspace</span></p>
 <ul class="current nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="workspace-files.html">Workspace Files</a></li>
-<li class="toctree-l1 current active"><a class="current reference internal" href="#">Back Up and Restore</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Backup &amp; Restore</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Monitoring</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../monitoring/monitor-sandbox-activity.html">Monitor Sandbox Activity</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Reference</span></p>
 <ul class="nav bd-sidenav">
@@ -472,7 +472,7 @@
         <i class="fa-solid fa-home"></i>
       </a>
     </li>
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Back Up and Restore Workspace Files</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Backup and Restore Workspace Files</span></li>
   </ul>
 </nav>
 </div>
@@ -490,28 +490,20 @@
                 <article class="bd-article">
                   
   <!--
-  SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
   SPDX-License-Identifier: Apache-2.0
 -->
-<section class="tex2jax_ignore mathjax_ignore" id="back-up-and-restore-workspace-files">
-<h1>Back Up and Restore Workspace Files<a class="headerlink" href="#back-up-and-restore-workspace-files" title="Link to this heading">#</a></h1>
+<section class="tex2jax_ignore mathjax_ignore" id="backup-and-restore-workspace-files">
+<h1>Backup and Restore Workspace Files<a class="headerlink" href="#backup-and-restore-workspace-files" title="Link to this heading">#</a></h1>
 <p>Workspace files define your agent’s personality, memory, and user context.
 They persist across sandbox restarts but are <strong>permanently deleted</strong> when you run <code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">&lt;name&gt;</span> <span class="pre">destroy</span></code>.</p>
 <p>This guide covers manual backup with CLI commands and an automated script.</p>
-<section id="prerequisites">
-<h2>Prerequisites<a class="headerlink" href="#prerequisites" title="Link to this heading">#</a></h2>
-<ul class="simple">
-<li><p>A running NemoClaw sandbox (for backup) or a freshly created sandbox (for restore).</p></li>
-<li><p>The OpenShell CLI on your <code class="docutils literal notranslate"><span class="pre">PATH</span></code>.</p></li>
-<li><p>The sandbox name (shown by <code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">list</span></code>).</p></li>
-</ul>
-</section>
 <section id="when-to-back-up">
 <h2>When to Back Up<a class="headerlink" href="#when-to-back-up" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p>Before running <code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">&lt;name&gt;</span> <span class="pre">destroy</span></code>.</p></li>
-<li><p>Before major NemoClaw version upgrades.</p></li>
-<li><p>Periodically, if you have invested time customizing your agent.</p></li>
+<li><p><strong>Before running <code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">&lt;name&gt;</span> <span class="pre">destroy</span></code></strong></p></li>
+<li><p>Before major NemoClaw version upgrades</p></li>
+<li><p>Periodically, if you’ve invested time customizing your agent</p></li>
 </ul>
 </section>
 <section id="manual-backup">
@@ -571,7 +563,7 @@ They persist across sandbox restarts but are <strong>permanently deleted</strong
 <section id="verifying-a-backup">
 <h2>Verifying a Backup<a class="headerlink" href="#verifying-a-backup" title="Link to this heading">#</a></h2>
 <p>List backed-up files to confirm completeness:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>ls<span class="w"> </span>~/.nemoclaw/backups/20260320-120000/
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>ls<span class="w"> </span>-la<span class="w"> </span>~/.nemoclaw/backups/20260320-120000/
 <span class="go">AGENTS.md</span>
 <span class="go">IDENTITY.md</span>
 <span class="go">MEMORY.md</span>
@@ -581,20 +573,11 @@ They persist across sandbox restarts but are <strong>permanently deleted</strong
 </pre></div>
 </div>
 </section>
-<section id="inspecting-files-inside-the-sandbox">
-<h2>Inspecting Files Inside the Sandbox<a class="headerlink" href="#inspecting-files-inside-the-sandbox" title="Link to this heading">#</a></h2>
-<p>Connect to the sandbox to list or view workspace files directly:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>openshell<span class="w"> </span>sandbox<span class="w"> </span>connect<span class="w"> </span>my-assistant
-<span class="gp">$ </span>ls<span class="w"> </span>-la<span class="w"> </span>/sandbox/.openclaw/workspace/
-</pre></div>
-</div>
-</section>
 <section id="next-steps">
 <h2>Next Steps<a class="headerlink" href="#next-steps" title="Link to this heading">#</a></h2>
 <ul class="simple">
 <li><p><a class="reference internal" href="workspace-files.html"><span class="std std-doc">Workspace Files overview</span></a> to learn what each file does</p></li>
 <li><p><a class="reference internal" href="../reference/commands.html"><span class="std std-doc">Commands reference</span></a></p></li>
-<li><p><a class="reference internal" href="../monitoring/monitor-sandbox-activity.html"><span class="std std-doc">Monitor Sandbox Activity</span></a></p></li>
 </ul>
 </section>
 </section>
@@ -619,11 +602,11 @@ They persist across sandbox restarts but are <strong>permanently deleted</strong
       </div>
     </a>
     <a class="right-next"
-       href="../reference/architecture.html"
+       href="../monitoring/monitor-sandbox-activity.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Architecture</p>
+        <p class="prev-next-title">Monitor Sandbox Activity and Debug Issues</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -648,7 +631,6 @@ They persist across sandbox restarts but are <strong>permanently deleted</strong
   </div>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#prerequisites">Prerequisites</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#when-to-back-up">When to Back Up</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#manual-backup">Manual Backup</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#manual-restore">Manual Restore</a></li>
@@ -658,7 +640,6 @@ They persist across sandbox restarts but are <strong>permanently deleted</strong
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#verifying-a-backup">Verifying a Backup</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#inspecting-files-inside-the-sandbox">Inspecting Files Inside the Sandbox</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#next-steps">Next Steps</a></li>
 </ul>
   </nav></div>
