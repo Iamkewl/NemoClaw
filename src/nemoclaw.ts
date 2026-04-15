@@ -599,6 +599,7 @@ function getSandboxGatewayState(sandboxName) {
   return { state: "unknown_error", output };
 }
 
+/** Print troubleshooting hints based on gateway lifecycle state in the output. */
 function printGatewayLifecycleHint(output = "", sandboxName = "", writer = console.error) {
   const cleanOutput = stripAnsi(output);
   if (/No gateway configured/i.test(cleanOutput)) {
