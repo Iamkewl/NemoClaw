@@ -21,10 +21,10 @@ The prefix in each skill name indicates who it is for.
 For end users operating a NemoClaw sandbox.
 Covers installation, inference configuration, network policy management, monitoring, remote deployment, security configuration, workspace management, and reference material.
 
-### `nemoclaw-maintainer-*` (6 skills)
+### `nemoclaw-maintainer-*` (9 skills)
 
 For project maintainers.
-Covers the daily maintainer cadence (morning standup, daytime loop, evening handoff), cutting releases, finding PRs to review, and performing security code reviews.
+Covers the daily maintainer cadence (morning standup, daytime loop, evening handoff), cutting releases, finding PRs to review, performing security code reviews, community response, AI-assisted triage, and sprint planning.
 
 ### `nemoclaw-contributor-*` (1 skill)
 
@@ -59,6 +59,9 @@ Covers drafting documentation updates from recent commits.
 | `nemoclaw-maintainer-cut-release-tag` | Cut an annotated semver tag on main, move the `latest` floating tag, and push both to origin. |
 | `nemoclaw-maintainer-find-review-pr` | Find open PRs labeled security + priority-high, link each to its issue, detect duplicates, and present a review summary. |
 | `nemoclaw-maintainer-security-code-review` | Perform a 9-category security review of a PR or issue, producing per-category PASS/WARNING/FAIL verdicts. |
+| `nemoclaw-maintainer-community-response` | Draft community-facing responses to GitHub issues and PRs: won't-fix closures, duplicate handling, feature request routing, needs-info flows, and security acknowledgments. |
+| `nemoclaw-maintainer-triage` | AI-assisted label triage for unlabeled issues and PRs. Reads triage instructions at runtime and applies Tier 1–3 labels with appropriate comments. |
+| `nemoclaw-maintainer-sprint-plan` | Generate a sprint execution plan by querying GitHub Projects iteration data, categorizing assigned items by label type, and writing `docs/sprints/sprint-NNN.md`. |
 
 ### Contributor Skills
 
@@ -80,6 +83,6 @@ Skills are cumulative. Each role includes the skills from the roles above it:
 |------|----------------|-------|------------|
 | User | `nemoclaw-user-*` | 9 | `nemoclaw-user-get-started` |
 | Contributor | `nemoclaw-user-*` + `nemoclaw-contributor-*` | 10 | `nemoclaw-user-overview` |
-| Maintainer | All skills | 16 | `nemoclaw-maintainer-morning` |
+| Maintainer | All skills | 19 | `nemoclaw-maintainer-morning` |
 
 After identifying the role, present the applicable skills from the Skill Catalog above and recommend the starting skill.
