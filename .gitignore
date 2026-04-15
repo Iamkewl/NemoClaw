@@ -46,3 +46,7 @@ secrets.json
 secrets.yaml
 service-account*.json
 token.json
+
+# Devlogs are local only
+DEVLOG.md
+**/DEVLOG.md
