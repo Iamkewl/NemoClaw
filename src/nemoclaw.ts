@@ -515,6 +515,7 @@ function getNamedGatewayLifecycleState() {
   return { state: "missing_named", status: status.output, gatewayInfo: gatewayInfo.output };
 }
 
+/** Attempt to recover the named NemoClaw gateway after a restart or connectivity loss. */
 async function recoverNamedGatewayRuntime() {
   const before = getNamedGatewayLifecycleState();
   if (before.state === "healthy_named") {
@@ -550,10 +551,45 @@ async function recoverNamedGatewayRuntime() {
   return { recovered: false, before, after, attempted: true };
 }
 
+/** Query sandbox presence and return its output with the live enforced policy. */
 function getSandboxGatewayState(sandboxName) {
   const result = captureOpenshell(["sandbox", "get", sandboxName]);
-  const output = result.output;
+  let output = result.output;
   if (result.status === 0) {
+    // `openshell sandbox get` returns the immutable baseline policy from sandbox
+    // creation, which does not include network_policies added later via
+    // `openshell policy set`. Replace the Policy section with the live policy
+    // from `policy get --full`, preserving the colored "Policy:" header and
+    // Sandbox info above it. (#1132)
+    const livePolicy = captureOpenshell(["policy", "get", "--full", sandboxName], {
+      ignoreError: true,
+    });
+    if (livePolicy.status === 0 && livePolicy.output.trim()) {
+      const rawLines = String(output).split("\n");
+      const cleanLines = stripAnsi(String(output)).split("\n");
+      const policyLineIdx = cleanLines.findIndex((l) => l.trim() === "Policy:");
+      if (policyLineIdx !== -1) {
+        // Keep everything before Policy (Sandbox info with colors),
+        // plus the original colored "Policy:" header line.
+        const before = rawLines.slice(0, policyLineIdx + 1).join("\n");
+        // Extract YAML content from policy get --full (skip metadata header before "---").
+        // Use a regex to handle varying line endings (\n, \r\n) and optional trailing whitespace.
+        const delimIdx = livePolicy.output.search(/^---\s*$/m);
+        const yamlPart = delimIdx !== -1
+          ? livePolicy.output.slice(delimIdx).replace(/^---\s*[\r\n]+/, "")
+          : livePolicy.output;
+        // Guard: only replace if the extracted content looks like policy YAML
+        // (starts with a YAML key like "version:" or "network_policies:").
+        // Avoids replacing with warnings or status text from unexpected output.
+        const trimmedYaml = yamlPart.trim();
+        const looksLikeError = /^(error|failed|invalid|warning|status)\b/i.test(trimmedYaml);
+        if (trimmedYaml && !looksLikeError && /^[a-z_][a-z0-9_]*\s*:/m.test(trimmedYaml)) {
+          // Add 2-space indent to match the original sandbox get output format.
+          const indented = trimmedYaml.split("\n").map((l) => (l ? "  " + l : l)).join("\n");
+          output = before + "\n\n" + indented + "\n";
+        }
+      }
+    }
     return { state: "present", output };
   }
   if (/\bNotFound\b|\bNot Found\b|sandbox not found/i.test(output)) {
@@ -569,6 +605,7 @@ function getSandboxGatewayState(sandboxName) {
   return { state: "unknown_error", output };
 }
 
+/** Print troubleshooting hints based on gateway lifecycle state in the output. */
 function printGatewayLifecycleHint(output = "", sandboxName = "", writer = console.error) {
   const cleanOutput = stripAnsi(output);
   if (/No gateway configured/i.test(cleanOutput)) {
@@ -862,8 +899,24 @@ function stop() {
 
 function debug(args) {
   const { runDebug } = require("./lib/debug");
+  const getDefaultSandbox = (): string | undefined => {
+    const { defaultSandbox, sandboxes } = registry.listSandboxes();
+    if (!defaultSandbox) return undefined;
+    if (!sandboxes.find((s) => s.name === defaultSandbox)) {
+      console.error(`${_RD}Warning:${R} default sandbox '${defaultSandbox}' is no longer in the registry.`);
+      console.error(`  Use ${B}--sandbox NAME${R} to target a specific sandbox, or run ${B}nemoclaw onboard${R} again.\n`);
+      return undefined;
+    }
+    const liveList = captureOpenshell(["sandbox", "list"], { ignoreError: true });
+    if (liveList.status === 0 && !parseLiveSandboxNames(liveList.output).has(defaultSandbox)) {
+      console.error(`${_RD}Warning:${R} default sandbox '${defaultSandbox}' exists in the local registry but not in OpenShell.`);
+      console.error(`  Use ${B}--sandbox NAME${R} to target a specific sandbox, or run ${B}nemoclaw onboard${R} again.\n`);
+      return undefined;
+    }
+    return defaultSandbox;
+  };
   runDebugCommand(args, {
-    getDefaultSandbox: () => registry.listSandboxes().defaultSandbox || undefined,
+    getDefaultSandbox,
     runDebug,
     log: console.log,
     error: console.error,
@@ -1402,6 +1455,35 @@ async function sandboxSkillInstall(sandboxName, args = []) {
   }
 }
 
+async function sandboxPolicyRemove(sandboxName, args = []) {
+  const dryRun = args.includes("--dry-run");
+  const allPresets = policies.listPresets();
+  const applied = policies.getAppliedPresets(sandboxName);
+
+  const answer = await policies.selectForRemoval(allPresets, { applied });
+  if (!answer) return;
+
+  const presetContent = policies.loadPreset(answer);
+  if (!presetContent) return;
+
+  const endpoints = policies.getPresetEndpoints(presetContent);
+  if (endpoints.length > 0) {
+    console.log(`  Endpoints that would be removed: ${endpoints.join(", ")}`);
+  }
+
+  if (dryRun) {
+    console.log("  --dry-run: no changes applied.");
+    return;
+  }
+
+  const confirm = await askPrompt(`  Remove '${answer}' from sandbox '${sandboxName}'? [Y/n]: `);
+  if (confirm.toLowerCase() === "n") return;
+
+  if (!policies.removePreset(sandboxName, answer)) {
+    process.exit(1);
+  }
+}
+
 function cleanupSandboxServices(sandboxName, { stopHostServices = false } = {}) {
   if (stopHostServices) {
     const { stopAll } = require("./lib/services");
@@ -1674,6 +1756,120 @@ async function sandboxRebuild(sandboxName, args = []) {
 
 // ── Pre-upgrade backup ───────────────────────────────────────────
 
+// ── Snapshot ─────────────────────────────────────────────────────
+
+function sandboxSnapshot(sandboxName, subArgs) {
+  const subcommand = subArgs[0] || "help";
+  switch (subcommand) {
+    case "create": {
+      const isLive = captureOpenshell(["sandbox", "list"], { ignoreError: true });
+      if (isLive.status !== 0) {
+        console.error("  Failed to query live sandbox state from OpenShell.");
+        process.exit(1);
+      }
+      const liveNames = parseLiveSandboxNames(isLive.output || "");
+      if (!liveNames.has(sandboxName)) {
+        console.error(`  Sandbox '${sandboxName}' is not running. Cannot create snapshot.`);
+        process.exit(1);
+      }
+      console.log(`  Creating snapshot of '${sandboxName}'...`);
+      const result = sandboxState.backupSandboxState(sandboxName);
+      if (result.success) {
+        console.log(`  ${G}\u2713${R} Snapshot created (${result.backedUpDirs.length} directories)`);
+        console.log(`    ${result.manifest.backupPath}`);
+      } else {
+        console.error("  Snapshot failed.");
+        if (result.failedDirs.length > 0) {
+          console.error(`  Failed directories: ${result.failedDirs.join(", ")}`);
+        }
+        process.exit(1);
+      }
+      break;
+    }
+    case "list": {
+      const backups = sandboxState.listBackups(sandboxName);
+      if (backups.length === 0) {
+        console.log(`  No snapshots found for '${sandboxName}'.`);
+        return;
+      }
+      console.log(`  Snapshots for '${sandboxName}':`);
+      console.log("");
+      for (const b of backups) {
+        const dirs = b.stateDirs?.length || 0;
+        const version = b.agentVersion || "unknown";
+        console.log(`    ${b.timestamp}  ${D}(${dirs} dirs, agent v${version})${R}`);
+        console.log(`      ${b.backupPath}`);
+      }
+      console.log("");
+      console.log(`  ${backups.length} snapshot(s). Restore with:`);
+      console.log(`    nemoclaw ${sandboxName} snapshot restore [timestamp]`);
+      break;
+    }
+    case "restore": {
+      const isLive = captureOpenshell(["sandbox", "list"], { ignoreError: true });
+      if (isLive.status !== 0) {
+        console.error("  Failed to query live sandbox state from OpenShell.");
+        process.exit(1);
+      }
+      const liveNames = parseLiveSandboxNames(isLive.output || "");
+      if (!liveNames.has(sandboxName)) {
+        console.error(`  Sandbox '${sandboxName}' is not running. Cannot restore snapshot.`);
+        process.exit(1);
+      }
+      const timestamp = subArgs[1] || null;
+      let backupPath;
+      if (timestamp) {
+        const all = sandboxState.listBackups(sandboxName);
+        const matches = all.filter(
+          (b) => b.timestamp === timestamp || b.timestamp.startsWith(timestamp),
+        );
+        if (matches.length === 0) {
+          console.error(`  No snapshot matching '${timestamp}' found for '${sandboxName}'.`);
+          console.error("  Run: nemoclaw " + sandboxName + " snapshot list");
+          process.exit(1);
+        }
+        if (matches.length > 1) {
+          console.error(`  Snapshot selector '${timestamp}' is ambiguous.`);
+          console.error("  Matching timestamps:");
+          for (const m of matches) console.error(`    ${m.timestamp}`);
+          console.error("  Re-run with an exact timestamp from `snapshot list`.");
+          process.exit(1);
+        }
+        backupPath = matches[0].backupPath;
+      } else {
+        const latest = sandboxState.getLatestBackup(sandboxName);
+        if (!latest) {
+          console.error(`  No snapshots found for '${sandboxName}'.`);
+          process.exit(1);
+        }
+        backupPath = latest.backupPath;
+        console.log(`  Using latest snapshot: ${latest.timestamp}`);
+      }
+      console.log(`  Restoring snapshot into '${sandboxName}'...`);
+      const result = sandboxState.restoreSandboxState(sandboxName, backupPath);
+      if (result.success) {
+        console.log(`  ${G}\u2713${R} Restored ${result.restoredDirs.length} directories`);
+      } else {
+        console.error(`  Restore failed.`);
+        if (result.restoredDirs.length > 0) {
+          console.error(`  Partial: ${result.restoredDirs.join(", ")}`);
+        }
+        if (result.failedDirs.length > 0) {
+          console.error(`  Failed: ${result.failedDirs.join(", ")}`);
+        }
+        process.exit(1);
+      }
+      break;
+    }
+    default:
+      console.log(`  Usage:`);
+      console.log(`    nemoclaw ${sandboxName} snapshot create          Create a snapshot`);
+      console.log(`    nemoclaw ${sandboxName} snapshot list            List available snapshots`);
+      console.log(`    nemoclaw ${sandboxName} snapshot restore [ts]    Restore from a snapshot`);
+      break;
+  }
+}
+
 /**
  * Back up all registered sandboxes. Called by install.sh before upgrading
  * NemoClaw or OpenShell so sandbox state is recoverable if the upgrade
@@ -1738,6 +1934,9 @@ function help() {
     nemoclaw <name> connect          Shell into a running sandbox
     nemoclaw <name> status           Sandbox health + NIM status
     nemoclaw <name> logs ${D}[--follow]${R}  Stream sandbox logs
+    nemoclaw <name> snapshot create   Create a snapshot of sandbox state
+    nemoclaw <name> snapshot list     List available snapshots
+    nemoclaw <name> snapshot restore  Restore state from a snapshot ${D}([timestamp] for specific)${R}
     nemoclaw <name> rebuild          Upgrade sandbox to current agent version ${D}(--yes to skip prompt)${R}
     nemoclaw <name> destroy          Stop NIM + delete sandbox ${D}(--yes to skip prompt)${R}
 
@@ -1746,6 +1945,7 @@ function help() {
 
   ${G}Policy Presets:${R}
     nemoclaw <name> policy-add       Add a network or filesystem policy preset ${D}(--dry-run to preview)${R}
+    nemoclaw <name> policy-remove    Remove an applied policy preset ${D}(--dry-run to preview)${R}
     nemoclaw <name> policy-list      List presets ${D}(● = applied)${R}
 
   ${G}Compatibility Commands:${R}
@@ -1759,7 +1959,8 @@ function help() {
     nemoclaw status                  Show sandbox list and service status
 
   Troubleshooting:
-    nemoclaw debug [--quick]         Collect diagnostics for bug reports
+    nemoclaw debug [--quick] [--sandbox NAME]
+                                     Collect diagnostics for bug reports
     nemoclaw debug --output FILE     Save diagnostics tarball for GitHub issues
 
   ${G}Credentials:${R}
@@ -1874,6 +2075,9 @@ const [cmd, ...args] = process.argv.slice(2);
       case "policy-add":
         await sandboxPolicyAdd(cmd, actionArgs);
         break;
+      case "policy-remove":
+        await sandboxPolicyRemove(cmd, actionArgs);
+        break;
       case "policy-list":
         sandboxPolicyList(cmd);
         break;
@@ -1886,9 +2090,12 @@ const [cmd, ...args] = process.argv.slice(2);
       case "rebuild":
         await sandboxRebuild(cmd, actionArgs);
         break;
+      case "snapshot":
+        sandboxSnapshot(cmd, actionArgs);
+        break;
       default:
         console.error(`  Unknown action: ${action}`);
-        console.error(`  Valid actions: connect, status, logs, policy-add, policy-list, skill, rebuild, destroy`);
+        console.error(`  Valid actions: connect, status, logs, policy-add, policy-remove, policy-list, skill, snapshot, rebuild, destroy`);
         process.exit(1);
     }
     return;
