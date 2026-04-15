@@ -2136,9 +2136,30 @@ const [cmd, ...args] = process.argv.slice(2);
             sandboxConfig.configGet(cmd, configOpts);
             break;
           }
+          case "set": {
+            const setOpts = { key: null, value: null, restart: false };
+            for (let i = 1; i < actionArgs.length; i++) {
+              if (actionArgs[i] === "--key") setOpts.key = actionArgs[++i];
+              else if (actionArgs[i] === "--value") setOpts.value = actionArgs[++i];
+              else if (actionArgs[i] === "--restart") setOpts.restart = true;
+            }
+            sandboxConfig.configSet(cmd, setOpts);
+            break;
+          }
+          case "rotate-token": {
+            const tokenOpts = { fromEnv: null, fromStdin: false };
+            for (let i = 1; i < actionArgs.length; i++) {
+              if (actionArgs[i] === "--from-env") tokenOpts.fromEnv = actionArgs[++i];
+              else if (actionArgs[i] === "--from-stdin") tokenOpts.fromStdin = true;
+            }
+            await sandboxConfig.configRotateToken(cmd, tokenOpts);
+            break;
+          }
           default:
-            console.error("  Usage: nemoclaw <name> config <get>");
-            console.error("    get  [--key dotpath] [--format json|yaml]");
+            console.error("  Usage: nemoclaw <name> config <get|set|rotate-token>");
+            console.error("    get           [--key dotpath] [--format json|yaml]");
+            console.error("    set           --key <dotpath> --value <value> [--restart]");
+            console.error("    rotate-token  [--from-env <VAR>] [--from-stdin]");
             process.exit(1);
         }
         break;
