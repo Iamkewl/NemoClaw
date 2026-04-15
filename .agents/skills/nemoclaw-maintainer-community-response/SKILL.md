@@ -225,7 +225,7 @@ gh pr list --repo NVIDIA/NemoClaw --label "status: rebase" --state open \
   --json number,title,author,url --limit 200
 ```
 
-### Step B: Determine label age for each item
+### Step B: Determine label age and author activity
 
 For each candidate, check when the relevant label was last applied:
 
@@ -236,10 +236,22 @@ gh api repos/NVIDIA/NemoClaw/issues/<number>/events \
 
 Use `"status: rebase"` for rebase items. Compute age in days from today.
 
+**For `status: needs-info` items only** — also check when the author last commented:
+
+```bash
+gh api repos/NVIDIA/NemoClaw/issues/<number>/comments \
+  --jq '[.[] | select(.user.login == "<author>")] | last | .created_at'
+```
+
+If the author's last comment is **after** the label was applied, the author has responded since labeling. Do NOT include this item in the warning or close buckets. Move it to the "responded" group (Step D) for label review. The `status: needs-info` label may no longer apply — the maintainer should re-triage.
+
+Note: this author-activity check does not apply to `status: rebase` items. A PR comment does not resolve merge conflicts; rebase state is determined by code, not by conversation.
+
 Bucket each item:
-- **7–13 days** → Stage 2 candidate (warning)
-- **14+ days** → Stage 3 candidate (close)
-- **< 7 days** → ignore
+- **Author commented after label** → responded — review for label removal (needs-info only)
+- **7–13 days, no author response** → Stage 2 candidate (warning)
+- **14+ days, no author response** → Stage 3 candidate (close)
+- **< 7 days, no author response** → ignore
 
 ### Step C: Check author NVIDIA membership
 
@@ -251,7 +263,17 @@ gh api orgs/NVIDIA/members/<username> --silent 2>/dev/null && echo "NVIDIA membe
 
 ### Step D: Present candidates by stage
 
-Present two tables — one per stage. If either stage has no candidates, say so explicitly.
+Present tables by category. If a category has no candidates, say so explicitly.
+
+**Responded since labeled — review for label removal (needs-info only):**
+```
+┌───────┬────────┬────────────┬──────────┬──────────┬─────────────────────┐
+│  #    │  Type  │  Author    │   NV?    │ Label Age│ Last Author Comment │
+├───────┼────────┼────────────┼──────────┼──────────┼─────────────────────┤
+│ #1234 │ issue  │ username   │ external │    8d    │ Apr 13 (after label)│
+└───────┴────────┴────────────┴──────────┴──────────┴─────────────────────┘
+```
+These items need re-triage, not automated action. Ask the maintainer: "Author has responded — does their reply address the request? If yes, remove `status: needs-info` and re-triage. If no, leave the label in place."
 
 **Stage 2 — Warning (7–13 days):**
 ```
