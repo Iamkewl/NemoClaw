@@ -605,10 +605,10 @@
 </thead>
 <tbody>
 <tr class="row-even"><td><p>New issue from external contributor</p></td>
-<td><p>First response within 5 business days</p></td>
+<td><p>First response within 3 business days</p></td>
 </tr>
 <tr class="row-odd"><td><p>PR with no review</p></td>
-<td><p>First comment within 7 business days</p></td>
+<td><p>First comment within 5 business days</p></td>
 </tr>
 <tr class="row-even"><td><p>Contributor asks for an update</p></td>
 <td><p>Respond within 3 business days</p></td>
@@ -695,13 +695,18 @@
 <hr class="docutils" />
 <section id="needs-info-labeling-and-closing">
 <h2>9. Needs Info — Labeling and Closing<a class="headerlink" href="#needs-info-labeling-and-closing" title="Link to this heading">#</a></h2>
-<p>Two distinct situations require different responses.</p>
-<p><strong>Situation 1 — Issue needs info from the contributor (first contact):</strong></p>
+<p>Three-stage flow — label, warn, close.</p>
+<p><strong>Situation 1 — First contact (day 0):</strong></p>
 <blockquote>
-<div><p>Thanks for the report. To move forward, we need a bit more information: [specific ask — e.g., reproduction steps, NemoClaw version, output of <code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">status</span></code>]. We’ll keep this open for 7 days — if we don’t hear back, we’ll close it to keep the tracker tidy. Feel free to reopen or file a new issue once you have the details.</p>
+<div><p>Thanks for the report. To move forward, we need a bit more information: [specific ask — e.g., reproduction steps, NemoClaw version, output of <code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">status</span></code>]. We’ll keep this open for 14 days — feel free to reopen or file a new issue once you have the details.</p>
 </div></blockquote>
 <p><strong>Action:</strong> Add label <code class="docutils literal notranslate"><span class="pre">status:</span> <span class="pre">needs-info</span></code>, post comment, leave open.</p>
-<p><strong>Situation 2 — Issue already labeled <code class="docutils literal notranslate"><span class="pre">status:</span> <span class="pre">needs-info</span></code>, 7+ days with no response:</strong></p>
+<p><strong>Situation 2 — 7 days, no response (warning):</strong></p>
+<blockquote>
+<div><p>Just a heads-up — we haven’t heard back yet on the information we requested. If this is still affecting you, please share [repeat specific ask] and we’ll keep the investigation going. We’ll close this in 7 days if we don’t hear back.</p>
+</div></blockquote>
+<p><strong>Action:</strong> Post comment only — do not close yet.</p>
+<p><strong>Situation 3 — 14 days total, still no response (close):</strong></p>
 <blockquote>
 <div><p>Closing due to no response — we weren’t able to get the information needed to investigate. If this is still happening, please open a new issue and include [repeat the specific ask]. Happy to take another look.</p>
 </div></blockquote>
@@ -709,9 +714,25 @@
 <p><strong>Rules:</strong></p>
 <ul class="simple">
 <li><p>Always name the specific information you need. “More details” wastes everyone’s time.</p></li>
-<li><p>The 7-day window starts from when the label is applied, not when the issue was opened.</p></li>
-<li><p>Don’t close Situation 1 in the same response — label first, give the contributor the window.</p></li>
+<li><p>The window starts from when the label is applied, not when the issue was opened.</p></li>
+<li><p>Don’t close at day 7 — warn first, close at day 14.</p></li>
 </ul>
+</section>
+<hr class="docutils" />
+<section id="a-needs-rebase-warning-and-close">
+<h2>9a. Needs Rebase — Warning and Close<a class="headerlink" href="#a-needs-rebase-warning-and-close" title="Link to this heading">#</a></h2>
+<p>Same three-stage flow applies to PRs labeled <code class="docutils literal notranslate"><span class="pre">status:</span> <span class="pre">rebase</span></code>.</p>
+<p><strong>Stage 1 — Rebase nudge (day 0):</strong> Post rebase comment, apply <code class="docutils literal notranslate"><span class="pre">status:</span> <span class="pre">rebase</span></code>. <em>(See § 5 in SKILL.md for template.)</em></p>
+<p><strong>Stage 2 — 7 days, no rebase (warning):</strong></p>
+<blockquote>
+<div><p>Just a heads-up — this PR still needs a rebase before we can review it. If you’re planning to update it, please rebase against <code class="docutils literal notranslate"><span class="pre">main</span></code> within the next 7 days. Happy to help if you run into conflicts.</p>
+</div></blockquote>
+<p><strong>Action:</strong> Post comment only — do not close yet.</p>
+<p><strong>Stage 3 — 14 days total, no rebase (close):</strong></p>
+<blockquote>
+<div><p>Closing due to inactivity — the PR needed a rebase and we didn’t hear back. If you’d like to continue, please open a new PR rebased against the current <code class="docutils literal notranslate"><span class="pre">main</span></code>. We’d be glad to review it.</p>
+</div></blockquote>
+<p><strong>Action:</strong> <code class="docutils literal notranslate"><span class="pre">close</span> <span class="pre">+</span> <span class="pre">comment</span></code>.</p>
 </section>
 <hr class="docutils" />
 <section id="references">
@@ -774,6 +795,7 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#redirecting-to-discussions">7. Redirecting to Discussions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#triage-acknowledgment">8. Triage Acknowledgment</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#needs-info-labeling-and-closing">9. Needs Info — Labeling and Closing</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#a-needs-rebase-warning-and-close">9a. Needs Rebase — Warning and Close</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#references">10. References</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#next-steps">Next Steps</a></li>
 </ul>

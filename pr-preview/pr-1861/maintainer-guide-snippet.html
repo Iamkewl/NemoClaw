@@ -590,13 +590,29 @@
 <hr class="docutils" />
 <section id="needs-info">
 <h2>Needs Info<a class="headerlink" href="#needs-info" title="Link to this heading">#</a></h2>
-<p><strong>First contact</strong> — label <code class="docutils literal notranslate"><span class="pre">status:</span> <span class="pre">needs-info</span></code>, leave open:</p>
+<p><strong>Day 0 — first contact:</strong> label <code class="docutils literal notranslate"><span class="pre">status:</span> <span class="pre">needs-info</span></code>, leave open:</p>
 <blockquote>
-<div><p>Thanks for the report. To move forward, we need: [specific ask]. We’ll keep this open for 7 days — if we don’t hear back, we’ll close it to keep the tracker tidy.</p>
+<div><p>Thanks for the report. To move forward, we need: [specific ask]. We’ll keep this open for 14 days.</p>
 </div></blockquote>
-<p><strong>7+ days, no response</strong> — close + comment:</p>
+<p><strong>Day 7 — warning</strong> (no response yet):</p>
+<blockquote>
+<div><p>Just a heads-up — we haven’t heard back yet. If this is still affecting you, please share [repeat specific ask]. We’ll close this in 7 days if we don’t hear back.</p>
+</div></blockquote>
+<p><strong>Day 14 — close:</strong></p>
 <blockquote>
 <div><p>Closing due to no response. If this is still happening, please open a new issue and include [repeat the specific ask]. Happy to take another look.</p>
+</div></blockquote>
+</section>
+<section id="needs-rebase">
+<h2>Needs Rebase<a class="headerlink" href="#needs-rebase" title="Link to this heading">#</a></h2>
+<p><strong>Day 0 — rebase nudge:</strong> apply <code class="docutils literal notranslate"><span class="pre">status:</span> <span class="pre">rebase</span></code>, post comment asking to rebase.</p>
+<p><strong>Day 7 — warning</strong> (no rebase yet):</p>
+<blockquote>
+<div><p>Just a heads-up — this PR still needs a rebase. Please rebase against <code class="docutils literal notranslate"><span class="pre">main</span></code> within the next 7 days.</p>
+</div></blockquote>
+<p><strong>Day 14 — close:</strong></p>
+<blockquote>
+<div><p>Closing due to inactivity — please open a new PR rebased against <code class="docutils literal notranslate"><span class="pre">main</span></code> if you’d like to continue.</p>
 </div></blockquote>
 </section>
 <hr class="docutils" />
@@ -610,10 +626,10 @@
 </thead>
 <tbody>
 <tr class="row-even"><td><p>New issue</p></td>
-<td><p>First response ≤ 5 business days</p></td>
+<td><p>First response &lt; 3 business days</p></td>
 </tr>
 <tr class="row-odd"><td><p>Open PR, no review</p></td>
-<td><p>First comment ≤ 7 business days</p></td>
+<td><p>First comment &lt; 5 business days</p></td>
 </tr>
 <tr class="row-even"><td><p>Contributor asks for update</p></td>
 <td><p>Reply ≤ 3 business days</p></td>
@@ -674,6 +690,7 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#redirecting-to-discussions">Redirecting to Discussions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#triage-acknowledgment">Triage Acknowledgment</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#needs-info">Needs Info</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#needs-rebase">Needs Rebase</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#response-time-commitments">Response Time Commitments</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#next-steps">Next Steps</a></li>
 </ul>
