@@ -128,7 +128,8 @@ fi
 
 # Extract the timestamp from list output for targeted restore later
 SNAPSHOT_TIMESTAMP=$(echo "$LIST_OUTPUT" | grep -oE "[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}" | head -1 || true)
-info "Snapshot timestamp: ${SNAPSHOT_TIMESTAMP:-unknown}"
+[ -n "${SNAPSHOT_TIMESTAMP}" ] || fail "Failed to parse a snapshot timestamp from list output: ${LIST_OUTPUT}"
+info "Snapshot timestamp: ${SNAPSHOT_TIMESTAMP}"
 
 # ── Phase 5: Delete marker + write second marker, create 2nd snapshot
 info "Phase 5: Modifying sandbox state and creating second snapshot..."
@@ -144,49 +145,40 @@ GONE=$(openshell sandbox exec --name "${SANDBOX_NAME}" -- cat "${MARKER_FILE}" 2
 nemoclaw "${SANDBOX_NAME}" snapshot create >/dev/null 2>&1 || fail "Second snapshot create failed"
 pass "State modified, second snapshot created"
 
+# Perturb workspace so restore has to do real work
+openshell sandbox exec --name "${SANDBOX_NAME}" -- \
+  sh -c "rm -f ${SECOND_MARKER} && echo 'BROKEN' > ${MARKER_FILE}" \
+  || fail "Failed to perturb sandbox before latest restore"
+
 # ── Phase 6: snapshot restore (latest) ──────────────────────────────
 info "Phase 6: Restoring latest snapshot..."
 
 RESTORE_OUTPUT=$(nemoclaw "${SANDBOX_NAME}" snapshot restore 2>&1)
 echo "$RESTORE_OUTPUT"
 
-if echo "$RESTORE_OUTPUT" | grep -q "Restored"; then
-  pass "snapshot restore (latest) succeeded"
-else
+if ! echo "$RESTORE_OUTPUT" | grep -q "Restored"; then
   fail "snapshot restore failed: ${RESTORE_OUTPUT}"
 fi
 
-# The latest snapshot should have the second marker but not the first
 SECOND_CHECK=$(openshell sandbox exec --name "${SANDBOX_NAME}" -- cat "${SECOND_MARKER}" 2>/dev/null || echo "MISSING")
-if [ "$SECOND_CHECK" = "${SECOND_CONTENT}" ]; then
-  pass "Latest snapshot restored second marker correctly"
-else
-  info "Second marker: ${SECOND_CHECK} (may differ if restore overwrites)"
-fi
+[ "$SECOND_CHECK" = "${SECOND_CONTENT}" ] || fail "Latest restore did not recover the second marker: ${SECOND_CHECK}"
+pass "Latest snapshot restored expected state"
 
 # ── Phase 7: snapshot restore with timestamp (first snapshot) ───────
 info "Phase 7: Restoring first snapshot by timestamp..."
 
-if [ -n "${SNAPSHOT_TIMESTAMP}" ]; then
-  TARGETED_OUTPUT=$(nemoclaw "${SANDBOX_NAME}" snapshot restore "${SNAPSHOT_TIMESTAMP}" 2>&1)
-  echo "$TARGETED_OUTPUT"
+TARGETED_OUTPUT=$(nemoclaw "${SANDBOX_NAME}" snapshot restore "${SNAPSHOT_TIMESTAMP}" 2>&1)
+echo "$TARGETED_OUTPUT"
 
-  if echo "$TARGETED_OUTPUT" | grep -q "Restored"; then
-    pass "snapshot restore (by timestamp) succeeded"
-  else
-    fail "Targeted snapshot restore failed: ${TARGETED_OUTPUT}"
-  fi
-
-  # The first snapshot should have the original marker
-  FIRST_CHECK=$(openshell sandbox exec --name "${SANDBOX_NAME}" -- cat "${MARKER_FILE}" 2>/dev/null || echo "MISSING")
-  if [ "$FIRST_CHECK" = "${MARKER_CONTENT}" ]; then
-    pass "First snapshot restored original marker file"
-  else
-    info "First marker: ${FIRST_CHECK} (may be missing if first snapshot didn't capture it)"
-  fi
-else
-  info "Skipping targeted restore (no timestamp extracted from list output)"
+if ! echo "$TARGETED_OUTPUT" | grep -q "Restored"; then
+  fail "Targeted snapshot restore failed: ${TARGETED_OUTPUT}"
 fi
+
+FIRST_CHECK=$(openshell sandbox exec --name "${SANDBOX_NAME}" -- cat "${MARKER_FILE}" 2>/dev/null || echo "MISSING")
+[ "$FIRST_CHECK" = "${MARKER_CONTENT}" ] || fail "First snapshot did not restore the original marker: ${FIRST_CHECK}"
+SECOND_AFTER_TARGETED=$(openshell sandbox exec --name "${SANDBOX_NAME}" -- cat "${SECOND_MARKER}" 2>/dev/null || echo "MISSING")
+[ "$SECOND_AFTER_TARGETED" = "MISSING" ] || fail "First snapshot should not contain the second marker"
+pass "First snapshot restored expected state"
 
 # ── Phase 8: No credentials in snapshots ────────────────────────────
 info "Phase 8: Checking snapshots for leaked credentials..."
@@ -207,7 +199,9 @@ fi
 info "Phase 9: Verifying snapshot help output..."
 
 HELP_OUTPUT=$(nemoclaw "${SANDBOX_NAME}" snapshot 2>&1)
-if echo "$HELP_OUTPUT" | grep -q "snapshot create" && echo "$HELP_OUTPUT" | grep -q "snapshot restore"; then
+if echo "$HELP_OUTPUT" | grep -q "snapshot create" \
+  && echo "$HELP_OUTPUT" | grep -q "snapshot list" \
+  && echo "$HELP_OUTPUT" | grep -q "snapshot restore"; then
   pass "snapshot help shows create/list/restore"
 else
   fail "snapshot help incomplete: ${HELP_OUTPUT}"

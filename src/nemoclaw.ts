@@ -1763,6 +1763,10 @@ function sandboxSnapshot(sandboxName, subArgs) {
   switch (subcommand) {
     case "create": {
       const isLive = captureOpenshell(["sandbox", "list"], { ignoreError: true });
+      if (isLive.status !== 0) {
+        console.error("  Failed to query live sandbox state from OpenShell.");
+        process.exit(1);
+      }
       const liveNames = parseLiveSandboxNames(isLive.output || "");
       if (!liveNames.has(sandboxName)) {
         console.error(`  Sandbox '${sandboxName}' is not running. Cannot create snapshot.`);
@@ -1806,13 +1810,22 @@ function sandboxSnapshot(sandboxName, subArgs) {
       let backupPath;
       if (timestamp) {
         const all = sandboxState.listBackups(sandboxName);
-        const match = all.find((b) => b.timestamp === timestamp || b.backupPath.includes(timestamp));
-        if (!match) {
+        const matches = all.filter(
+          (b) => b.timestamp === timestamp || b.timestamp.startsWith(timestamp),
+        );
+        if (matches.length === 0) {
           console.error(`  No snapshot matching '${timestamp}' found for '${sandboxName}'.`);
           console.error("  Run: nemoclaw " + sandboxName + " snapshot list");
           process.exit(1);
         }
-        backupPath = match.backupPath;
+        if (matches.length > 1) {
+          console.error(`  Snapshot selector '${timestamp}' is ambiguous.`);
+          console.error("  Matching timestamps:");
+          for (const m of matches) console.error(`    ${m.timestamp}`);
+          console.error("  Re-run with an exact timestamp from `snapshot list`.");
+          process.exit(1);
+        }
+        backupPath = matches[0].backupPath;
       } else {
         const latest = sandboxState.getLatestBackup(sandboxName);
         if (!latest) {
