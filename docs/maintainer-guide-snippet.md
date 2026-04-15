@@ -27,11 +27,11 @@ status: active
 
 ## Closing Won't Fix / Out of Scope
 
-| Reason | Label |
-|---|---|
-| Valid issue, won't address | `status: won't-fix` |
-| Outside project design/scope | `status: out-of-scope` |
-| Good idea, needs a proposal first | `status: needs-design` |
+| Reason | Label | Board status |
+|---|---|---|
+| Valid issue, won't address | `wontfix` | `Won't Fix` |
+| Outside project design/scope | `wontfix` | `Won't Fix` |
+| Good idea, needs a proposal first | `wontfix` | `Won't Fix` |
 
 > Thanks for raising this. After review, we're closing as **[label]** because [one sentence]. See [CONTRIBUTING.md](https://github.com/NVIDIA/NemoClaw/blob/main/CONTRIBUTING.md) for scope guidance. We appreciate you taking the time.
 
@@ -63,7 +63,7 @@ Comment on the closed PR before you merge:
 
 > Thanks for the report. This is a duplicate of #[N] — all discussion is happening there. Closing in favor of the original thread. Feel free to add context or subscribe to #[N] to follow along.
 
-**Label:** `status: duplicate`
+**Label:** `duplicate` · **Board status:** `Duplicate`
 
 ---
 

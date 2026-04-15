@@ -33,11 +33,11 @@ A reference for NVIDIA engineers handling issues and PRs from external contribut
 
 These are different signals — use the right one.
 
-| Close reason | When to use | Label |
-|---|---|---|
-| **Won't fix** | Valid bug or gap, but not something we intend to address | `status: won't-fix` |
-| **Out of scope** | Doesn't fit the project's design or intended use case | `status: out-of-scope` |
-| **Needs design first** | Technically feasible but needs a proposal before code | `status: needs-design` |
+| Close reason | When to use | Label | Board status |
+|---|---|---|---|
+| **Won't fix** | Valid bug or gap, but not something we intend to address | `wontfix` | `Won't Fix` |
+| **Out of scope** | Doesn't fit the project's design or intended use case | `wontfix` | `Won't Fix` |
+| **Needs design first** | Technically feasible but needs a proposal before code | `wontfix` | `Won't Fix` |
 
 **Response template:**
 
@@ -129,7 +129,7 @@ When an issue or PR covers the same ground as an existing open or closed item, c
 
 > Thanks for the report. This is a duplicate of #[N] — all discussion is happening there. Closing in favor of the original thread. Feel free to add context or subscribe to #[N] to follow along.
 
-**Label:** `status: duplicate`
+**Label:** `duplicate` · **Board status:** `Duplicate`
 
 **Rules:**
 
