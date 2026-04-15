@@ -1,6 +1,6 @@
 ---
 name: nemoclaw-maintainer-community-response
-description: Drafts community-facing responses to GitHub issues and PRs for NemoClaw maintainers. For each item, recommends an action (comment, close, close+comment, request changes, escalate) and drafts the response text. Handles won't-fix closures, out-of-scope closures, superseded PRs, poorly designed PR rejections, security acknowledgments, duplicate issues, feature request routing, needs-info labeling, and general triage. Logs approved responses to ~/development/daily-rhythm/activity/nemoclaw-community-responses.md. Tone: community first, firm and friendly. Trigger keywords - respond to issue, close issue, respond to PR, community response, won't fix, out of scope, reject PR, triage response, draft response, what should I say, needs info, duplicate issue, feature request.
+description: Drafts community-facing responses to GitHub issues and PRs for NemoClaw maintainers. For each item, recommends an action (comment, close, request changes, escalate) and drafts the response text. Handles won't-fix closures, out-of-scope closures, superseded PRs, poorly designed PR rejections, security acknowledgments, duplicate issues, feature request routing, needs-info labeling, and general triage. Tone: community first, firm and friendly. Trigger keywords - respond to issue, close issue, respond to PR, community response, won't fix, out of scope, reject PR, triage response, draft response, what should I say, needs info, duplicate issue, feature request.
 user_invocable: true
 ---
 
@@ -50,7 +50,8 @@ Map the item to one of the situations in the guide:
 | Redirect to Discussions | Open-ended question or design topic, not actionable |
 | Triage acknowledgment | Valid open issue, confirmed, no timeline yet |
 | Needs info (first contact) | Can't investigate without more information from contributor |
-| Needs info (close) | Already labeled `status: needs-info`, 7+ days, no response |
+| Needs info (day-7 warning) | Labeled `status: needs-info`, 7 days elapsed, no response yet |
+| Needs info (close) | Labeled `status: needs-info`, 14 days elapsed, no response |
 
 If the situation is ambiguous, ask: "Is this a closure, a needs-info, a routing decision, or something else?"
 
@@ -146,15 +147,3 @@ Use the absolute path — this file lives in the daily-rhythm activity folder so
 
 Create the file if it doesn't exist. Never stage or commit this file to the NemoClaw repo.
 
-## Response Time Check
-
-If the user asks whether a response window is at risk, check against:
-
-| Situation | Target |
-|---|---|
-| New issue | First response ≤ 5 business days |
-| Open PR, no review | First comment ≤ 7 business days |
-| Contributor asks for update | Reply ≤ 3 business days |
-| `status: needs-info` labeled | Close if no response after 7 days |
-
-A window is "at risk" when 80% of the target has elapsed. Surface as a flag, not an alarm.
