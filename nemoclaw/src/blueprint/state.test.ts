@@ -61,6 +61,8 @@ describe("blueprint/state", () => {
         hostBackupPath: null,
         createdAt: "2026-03-01T00:00:00.000Z",
         updatedAt: "2026-03-01T12:00:00.000Z",
+        lastRebuildAt: null,
+        lastRebuildBackupPath: null,
         shieldsDown: false,
         shieldsDownAt: null,
         shieldsDownTimeout: null,
