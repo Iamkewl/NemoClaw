@@ -14,9 +14,10 @@
 version: 1
 
 filesystem_policy:
-  # PERMISSIVE: true grants read-write to the container WORKDIR (/sandbox).
-  # The default policy sets this to false for security (see openclaw-sandbox.yaml).
-  include_workdir: true
+  # Must match the default policy's include_workdir value — OpenShell rejects
+  # changing include_workdir on a live sandbox. Instead, we explicitly list
+  # /sandbox and /sandbox/.openclaw in read_write to grant the same access.
+  include_workdir: false
   read_only:
     - /usr
     - /lib
@@ -28,6 +29,7 @@ filesystem_policy:
   read_write:
     - /tmp
     - /dev/null
+    - /sandbox                    # Home dir — writable during shields-down
     - /sandbox/.openclaw          # Config dir — writable during shields-down
     - /sandbox/.openclaw-data
     - /sandbox/.nemoclaw

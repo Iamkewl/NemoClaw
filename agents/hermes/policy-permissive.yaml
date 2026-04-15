@@ -11,7 +11,10 @@
 version: 1
 
 filesystem_policy:
-  include_workdir: true
+  # Must match the default policy's include_workdir value — OpenShell rejects
+  # changing include_workdir on a live sandbox. Instead, we explicitly list
+  # writable paths in read_write.
+  include_workdir: false
   read_only:
     - /usr
     - /lib
@@ -20,12 +23,10 @@ filesystem_policy:
     - /app
     - /etc
     - /var/log
-    # Note: /sandbox/.hermes is intentionally NOT read_only here.
-    # The permissive policy allows config writes during shields-down.
-    # The default policy (hermes-sandbox.yaml) locks it read-only.
   read_write:
     - /tmp
     - /dev/null
+    - /sandbox                   # Home dir — writable during shields-down
     - /sandbox/.hermes           # Config dir — writable during shields-down
     - /sandbox/.hermes-data
     - /sandbox/.nemoclaw
