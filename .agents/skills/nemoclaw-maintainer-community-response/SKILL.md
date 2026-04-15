@@ -1,6 +1,6 @@
 ---
 name: nemoclaw-maintainer-community-response
-description: Drafts community-facing responses to GitHub issues and PRs for NemoClaw maintainers. For each item, recommends an action (comment, close, close+comment, request changes, escalate) and drafts the response text. Handles won't-fix closures, out-of-scope closures, superseded PRs, poorly designed PR rejections, security acknowledgments, duplicate issues, feature request routing, needs-info labeling, and general triage. Logs approved responses locally to ~/development/daily-rhythm/activity/nemoclaw-community-responses.md. Tone: community first, firm and friendly. Trigger keywords - respond to issue, close issue, respond to PR, community response, won't fix, out of scope, reject PR, triage response, draft response, what should I say, needs info, duplicate issue, feature request.
+description: Drafts community-facing responses to GitHub issues and PRs for NemoClaw maintainers. For each item, recommends an action (comment, close, close+comment, request changes, escalate) and drafts the response text. Handles won't-fix closures, out-of-scope closures, superseded PRs, poorly designed PR rejections, security acknowledgments, duplicate issues, feature request routing, needs-info labeling, and general triage. Logs approved responses locally to ~/development/daily-rhythm/activity/nemoclaw-community-responses.md. Tone: community first, firm and friendly. Trigger keywords - respond to issue, close issue, respond to PR, community response, won't fix, out of scope, reject PR, triage response, draft response, what should I say, needs info, duplicate issue, feature request, stale sweep, 7-day warning, 14-day close, run stale sweep, find stale.
 user_invocable: true
 ---
 
@@ -50,7 +50,10 @@ Map the item to one of the situations in the guide:
 | Redirect to Discussions | Open-ended question or design topic, not actionable |
 | Triage acknowledgment | Valid open issue, confirmed, no timeline yet |
 | Needs info (first contact) | Can't investigate without more information from contributor |
-| Needs info (close) | Already labeled `status: needs-info`, 7+ days, no response |
+| Needs info (7-day warning) | Labeled `status: needs-info`, 7 days elapsed, no response — post warning |
+| Needs info (close) | Labeled `status: needs-info`, 14 days elapsed, no response — close |
+| Rebase (7-day warning) | Labeled `status: rebase`, 7 days elapsed, no response — post warning |
+| Rebase (close) | Labeled `status: rebase`, 14 days elapsed, no response — close |
 
 If the situation is ambiguous, ask: "Is this a closure, a needs-info, a routing decision, or something else?"
 
@@ -105,6 +108,7 @@ Write the response following the template from the guide. Apply these rules:
 - Write in second person, direct address to the contributor.
 - Warm but specific — generic phrases without substance read as dismissive.
 - Never reference internal systems, roadmap items, or org decisions that shouldn't be public.
+- **7-day notice in first-contact comments:** When posting a `needs-info` comment or `rebase nudge`, include a one-sentence notice at the end of the comment: "If we don't hear back within 7 days, we'll post a reminder; items with no response at 14 days are closed to keep the queue healthy."
 - **Hedged language for risks and impacts:** Do not assert that something IS a risk or problem. Use acknowledging, hedged language: "could be", "may", "worth noting", "potentially". Example: "unbounded CPU/memory could be an operational risk" — not "is a real operational risk". This applies to security, performance, correctness, and other concerns raised in response comments.
 - **Rebase verification gate (mandatory before any rebase nudge):** Before posting a rebase nudge or applying `status: rebase`, check the PR's actual merge state:
   ```bash
@@ -197,6 +201,117 @@ Columns:
 
 Ask the user to confirm or adjust the batch plan before proceeding to draft responses one by one.
 
+## Stale Sweep
+
+**Trigger phrases:** "stale sweep", "run stale sweep", "7-day warnings", "14-day closures", "find stale", "stale check"
+
+Runs Stage 2 (7-day warning) and/or Stage 3 (14-day close) for items carrying `status: needs-info` or `status: rebase`. Ask the user which stage(s) to run if not specified.
+
+### Step A: Discover candidates
+
+Run all queries:
+
+```bash
+# Issues with status: needs-info
+gh issue list --repo NVIDIA/NemoClaw --label "status: needs-info" --state open \
+  --json number,title,author,url --limit 200
+
+# PRs with status: needs-info
+gh pr list --repo NVIDIA/NemoClaw --label "status: needs-info" --state open \
+  --json number,title,author,url --limit 200
+
+# PRs with status: rebase
+gh pr list --repo NVIDIA/NemoClaw --label "status: rebase" --state open \
+  --json number,title,author,url --limit 200
+```
+
+### Step B: Determine label age for each item
+
+For each candidate, check when the relevant label was last applied:
+
+```bash
+gh api repos/NVIDIA/NemoClaw/issues/<number>/events \
+  --jq '[.[] | select(.event == "labeled" and .label.name == "status: needs-info")] | last | .created_at'
+```
+
+Use `"status: rebase"` for rebase items. Compute age in days from today.
+
+Bucket each item:
+- **7–13 days** → Stage 2 candidate (warning)
+- **14+ days** → Stage 3 candidate (close)
+- **< 7 days** → ignore
+
+### Step C: Check author NVIDIA membership
+
+For every candidate:
+
+```bash
+gh api orgs/NVIDIA/members/<username> --silent 2>/dev/null && echo "NVIDIA member" || echo "external"
+```
+
+### Step D: Present candidates by stage
+
+Present two tables — one per stage. If either stage has no candidates, say so explicitly.
+
+**Stage 2 — Warning (7–13 days):**
+```
+┌───────┬────────┬────────────┬──────────┬────────────┬──────┬─────────┐
+│  #    │  Type  │  Author    │   NV?    │   Label    │  Age │ Action  │
+├───────┼────────┼────────────┼──────────┼────────────┼──────┼─────────┤
+│ #1234 │ issue  │ username   │ external │ needs-info │  8d  │ warning │
+└───────┴────────┴────────────┴──────────┴────────────┴──────┴─────────┘
+```
+
+**Stage 3 — Close (14+ days):**
+```
+┌───────┬────────┬────────────┬──────────┬────────────┬──────┬─────────┐
+│  #    │  Type  │  Author    │   NV?    │   Label    │  Age │ Action  │
+├───────┼────────┼────────────┼──────────┼────────────┼──────┼─────────┤
+│ #1235 │ PR     │ username2  │ external │ rebase     │ 21d  │  close  │
+└───────┴────────┴────────────┴──────────┴────────────┴──────┴─────────┘
+```
+
+Ask: "Confirm which items to action — remove any to skip."
+
+If no candidates in either stage, report that and stop.
+
+### Step E: Draft and post — Stage 2 (warning)
+
+For each confirmed Stage 2 item, present the draft before posting. Leave the item **open** — do NOT close at Stage 2.
+
+**Template — needs-info warning:**
+> Just a friendly nudge — we're still waiting on the information requested above. If we don't hear back within 7 days, we'll close this to keep the queue healthy. Feel free to reopen any time if you'd like to continue.
+
+**Template — rebase warning:**
+> Just a friendly nudge — this PR still has merge conflicts. If the rebase isn't completed within 7 days, we'll close this to keep the queue healthy. Feel free to reopen once it's rebased, or open a new PR.
+
+```bash
+gh issue comment <number> --repo NVIDIA/NemoClaw --body "<warning comment>"
+gh pr comment <number> --repo NVIDIA/NemoClaw --body "<warning comment>"
+```
+
+### Step F: Draft and post — Stage 3 (close)
+
+For each confirmed Stage 3 item, present the draft before posting.
+
+**Template — needs-info close:**
+> Closing due to inactivity — it's been 14 days since we requested additional information and we haven't heard back. Feel free to reopen if you're able to follow up, or open a new issue with the requested details included. Thanks for contributing to NemoClaw.
+
+**Template — rebase close:**
+> Closing due to inactivity — this PR has had merge conflicts for 14 days without an update. Feel free to reopen once it's rebased against the latest main, or open a new PR to continue the work. Thanks for contributing to NemoClaw.
+
+```bash
+gh issue close <number> --repo NVIDIA/NemoClaw --comment "<closing comment>"
+gh pr close <number> --repo NVIDIA/NemoClaw --comment "<closing comment>"
+```
+
+### Step G: Log each actioned item
+
+For every Stage 2 warning and Stage 3 closure, append to the log using the Step 7 format:
+
+- Stage 2: **Action:** `comment` · **Project status:** `No Status`
+- Stage 3: **Action:** `close` · **Project status:** `No Status`
+
 ## Response Time Check
 
 If the user asks whether a response window is at risk, check against:
@@ -206,6 +321,7 @@ If the user asks whether a response window is at risk, check against:
 | New issue | First response ≤ 5 business days |
 | Open PR, no review | First comment ≤ 7 business days |
 | Contributor asks for update | Reply ≤ 3 business days |
-| `status: needs-info` labeled | Close if no response after 7 days |
+| `status: needs-info` labeled | Warning at 7 days, close at 14 days |
+| `status: rebase` labeled | Warning at 7 days, close at 14 days |
 
 A window is "at risk" when 80% of the target has elapsed. Surface as a flag, not an alarm.
