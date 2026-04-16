@@ -157,7 +157,8 @@ function shieldsDown(sandboxName: string, opts: ShieldsDownOpts = {}): void {
     rawPolicy = "";
   }
 
-  if (!rawPolicy || !rawPolicy.trim()) {
+  const policyYaml = parseCurrentPolicy(rawPolicy);
+  if (!policyYaml) {
     console.error("  Cannot capture current policy. Is the sandbox running?");
     process.exit(1);
   }
@@ -165,7 +166,7 @@ function shieldsDown(sandboxName: string, opts: ShieldsDownOpts = {}): void {
   const ts = Date.now();
   const snapshotPath = path.join(STATE_DIR, `policy-snapshot-${ts}.yaml`);
   fs.mkdirSync(STATE_DIR, { recursive: true, mode: 0o700 });
-  fs.writeFileSync(snapshotPath, rawPolicy, { mode: 0o600 });
+  fs.writeFileSync(snapshotPath, policyYaml, { mode: 0o600 });
   console.log(`  Saved: ${snapshotPath}`);
 
   // 2. Determine and apply relaxed policy
