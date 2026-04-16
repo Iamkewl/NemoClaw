@@ -14,13 +14,13 @@ status: active
 <!-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-# NemoClaw — Project Workflow Reference
+# NemoClaw Project Workflow Reference
 
 A reference for maintainers and the community response skill. Covers project board status semantics, the label structure for categorizing issues, and step-by-step instructions for configuring the NemoClaw Development Tracker.
 
 ---
 
-## 1. Project Status Semantics
+## Project Status Semantics
 
 | Status | Meaning |
 |---|---|
@@ -51,7 +51,7 @@ No Status → Backlog → In Progress → Done
 
 ---
 
-## 2. Label Structure
+## Label Structure
 
 NemoClaw uses a three-tier label system. Apply labels in combination — start with Tier 1, add Tier 2, add Tier 3 if applicable.
 
@@ -119,11 +119,11 @@ For feature requests, apply `enhancement` (Tier 1) plus one of:
 
 ---
 
-## 3. Board Setup Instructions
+## Board Setup Instructions
 
 One-time configuration for the NemoClaw Development Tracker (GitHub Projects UI).
 
-### View 1: Enhancement Parking
+### Enhancement Parking
 
 This is the holding area for all unreviewed and approved-but-unscheduled feature requests.
 
@@ -133,7 +133,7 @@ This is the holding area for all unreviewed and approved-but-unscheduled feature
 4. Group by: Label
 5. Add status filter: show only `No Status` and `Backlog`
 
-### View 2: Platform & Integration Requests
+### Platform and Integration Requests
 
 Separate view for platform-, integration-, and provider-specific requests (triaged separately from general enhancements).
 
@@ -160,7 +160,7 @@ Keep the main working board clean of unreviewed enhancements.
 
 ---
 
-## 4. Triage Checklist
+## Triage Checklist
 
 When processing a new incoming issue:
 

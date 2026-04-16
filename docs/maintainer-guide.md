@@ -14,7 +14,7 @@ status: active
 <!-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-# NemoClaw Maintainer Guide — Community Engagement
+# NemoClaw Maintainer Guide
 
 A reference for NVIDIA engineers handling issues and PRs from external contributors.
 
@@ -29,7 +29,7 @@ A reference for NVIDIA engineers handling issues and PRs from external contribut
 
 ---
 
-## 1. Closing Issues as Won't Fix or Out of Scope
+## Closing Issues as Won't Fix or Out of Scope
 
 These are different signals — use the right one.
 
@@ -56,7 +56,7 @@ These are different signals — use the right one.
 
 ---
 
-## 2. Merging a PR That Makes Another PR Redundant
+## Merging a PR That Makes Another PR Redundant
 
 When your merge closes out another contributor's open PR, comment on the superseded PR before or immediately after merging.
 
@@ -78,7 +78,7 @@ NVIDIA's SECURITY.md notes that acknowledgement is offered under the coordinated
 
 ---
 
-## 3. Rejecting Poorly Designed Contributions
+## Rejecting Poorly Designed Contributions
 
 Clear, specific feedback is more respectful than silence or vague encouragement. If something can't merge as-is, say why and give the contributor a concrete path forward.
 
@@ -106,7 +106,7 @@ Clear, specific feedback is more respectful than silence or vague encouragement.
 
 ---
 
-## 4. Response Time Norms
+## Response Time Norms
 
 These are team commitments, not aspirational targets.
 
@@ -121,7 +121,7 @@ If you're going to miss a window, post an update before it lapses — even one s
 
 ---
 
-## 5. Closing Duplicates
+## Closing Duplicates
 
 When an issue or PR covers the same ground as an existing open or closed item, close the newer one and point to the original.
 
@@ -139,7 +139,7 @@ When an issue or PR covers the same ground as an existing open or closed item, c
 
 ---
 
-## 6. Feature Requests
+## Feature Requests
 
 Feature requests are not rejections — they're routing decisions. Route to the Enhancement Parking board; don't close without acknowledgment.
 
@@ -168,7 +168,7 @@ Feature requests are not rejections — they're routing decisions. Route to the 
 
 ---
 
-## 7. Redirecting to Discussions
+## Redirecting to Discussions
 
 Some issues are better suited to open conversation than bug or feature tracking. Move them to Discussions rather than closing without a destination.
 
@@ -184,7 +184,7 @@ Some issues are better suited to open conversation than bug or feature tracking.
 
 ---
 
-## 8. Triage Acknowledgment
+## Triage Acknowledgment
 
 Use when an issue is valid and understood but not yet scheduled. This is an acknowledgment, not a closure.
 
@@ -200,7 +200,7 @@ Use when an issue is valid and understood but not yet scheduled. This is an ackn
 
 ---
 
-## 9. Needs Info — Labeling and Closing
+## Needs Info
 
 Three-stage flow — label, warn, close.
 
@@ -230,7 +230,7 @@ Three-stage flow — label, warn, close.
 
 ---
 
-## 9a. Needs Rebase — Warning and Close
+## Needs Rebase
 
 Same three-stage flow applies to PRs labeled `status: rebase`.
 
@@ -250,7 +250,7 @@ Same three-stage flow applies to PRs labeled `status: rebase`.
 
 ---
 
-## 10. References
+## References
 
 - [CONTRIBUTING.md](https://github.com/NVIDIA/NemoClaw/blob/main/CONTRIBUTING.md) — scope, PR process, commit conventions
 - [SECURITY.md](https://github.com/NVIDIA/NemoClaw/blob/main/SECURITY.md) — vulnerability disclosure; direct reporters here, not GitHub issues
