@@ -2046,8 +2046,9 @@ async function preflight() {
       // if its command line contains "openshell" to avoid killing unrelated SSH
       // tunnels the user may have set up on the same port. (#1950)
       if (port === DASHBOARD_PORT && portCheck.process === "ssh" && portCheck.pid) {
+        // Use `ps` to get the command line — works on Linux, macOS, and WSL.
         const cmdline = runCapture(
-          `cat /proc/${portCheck.pid}/cmdline 2>/dev/null | tr '\\0' ' '`,
+          `ps -p ${portCheck.pid} -o args= 2>/dev/null`,
           { ignoreError: true },
         ).trim();
         if (cmdline.includes("openshell")) {
