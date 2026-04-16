@@ -393,6 +393,34 @@ if [ -w "$_SANDBOX_HOME" ]; then
   _write_proxy_snippet "${_SANDBOX_HOME}/.profile"
 fi
 
+# ── Egress proxy namespace diagnostic (#1471) ────────────────────
+# The OpenShell egress proxy resolves calling binaries by reading
+# /proc/<pid>/net/tcp. If the sandbox runs in a different network
+# namespace than the proxy, binary resolution fails (binary=-) and
+# all CONNECT requests are denied. Log a diagnostic so operators
+# can identify this issue from container logs.
+#
+# Ref: https://github.com/NVIDIA/NemoClaw/issues/1471
+_check_proxy_namespace() {
+  local sandbox_netns pod_netns
+  sandbox_netns="$(readlink /proc/self/ns/net 2>/dev/null || true)"
+  # The proxy typically runs as PID 1's child; check if we share the
+  # same network namespace as PID 1 (the pod init process).
+  pod_netns="$(readlink /proc/1/ns/net 2>/dev/null || true)"
+
+  if [ -n "$sandbox_netns" ] && [ -n "$pod_netns" ]; then
+    if [ "$sandbox_netns" != "$pod_netns" ]; then
+      echo "[proxy] WARNING: sandbox netns ($sandbox_netns) differs from pod netns ($pod_netns)" >&2
+      echo "[proxy] The egress proxy may fail to resolve calling binaries (binary=-)." >&2
+      echo "[proxy] Affected: all HTTPS CONNECT requests including Telegram, Discord." >&2
+      echo "[proxy] See: https://github.com/NVIDIA/NemoClaw/issues/1471" >&2
+    else
+      echo "[proxy] Network namespace check OK (shared with pod init)" >&2
+    fi
+  fi
+}
+_check_proxy_namespace
+
 # ── Main ─────────────────────────────────────────────────────────
 
 echo 'Setting up NemoClaw...' >&2

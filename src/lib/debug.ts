@@ -330,6 +330,17 @@ function collectSandboxInternals(
     // Use collect() with array args — no shell interpolation of sandboxName
     collect(collectDir, "sandbox-ps", "ssh", [...sshBase, "ps", "-ef"]);
     collect(collectDir, "sandbox-free", "ssh", [...sshBase, "free", "-m"]);
+
+    // Namespace diagnostics for egress proxy binary resolution (#1471).
+    // The proxy reads /proc/<pid>/net/tcp to identify calling binaries.
+    // If the sandbox is in a different network namespace, binary resolution
+    // fails with "binary=-" and all CONNECT requests are denied.
+    collectShell(
+      collectDir,
+      "sandbox-netns",
+      `ssh ${sshBase.map((a) => `'${a}'`).join(" ")} 'readlink /proc/self/ns/net 2>/dev/null; echo "---"; cat /proc/self/net/tcp 2>/dev/null | head -5; echo "---"; ip addr show 2>/dev/null | grep "inet "'`,
+    );
+
     if (!quick) {
       collect(collectDir, "sandbox-top", "ssh", [
         ...sshBase,
