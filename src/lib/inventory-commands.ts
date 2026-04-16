@@ -132,7 +132,11 @@ export function showStatusCommand(deps: ShowStatusCommandDeps): void {
   }
 
   if (deps.checkMessagingBridgeHealth && defaultSandbox) {
-    const defaultEntry = sandboxes.find((sb) => sb.name === defaultSandbox);
+    // Re-fetch: backfillAndFindOverlaps above may have populated
+    // messagingChannels for the default sandbox on first run after upgrade,
+    // and the original `sandboxes` snapshot is stale.
+    const refreshed = deps.listSandboxes().sandboxes;
+    const defaultEntry = refreshed.find((sb) => sb.name === defaultSandbox);
     const channels = defaultEntry?.messagingChannels;
     if (Array.isArray(channels) && channels.length > 0) {
       const degraded = deps.checkMessagingBridgeHealth(defaultSandbox, channels);

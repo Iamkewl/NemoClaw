@@ -1054,6 +1054,28 @@ function checkMessagingBridgeHealth(sandboxName, channels) {
   }
 }
 
+function makeConflictProbe() {
+  // Upfront liveness check so we can distinguish "provider not attached" from
+  // "gateway unreachable". Without this, every non-zero `openshell provider
+  // get` collapses into "absent", and a transient gateway failure would
+  // persist messagingChannels: [] and permanently suppress future retries.
+  let gatewayAlive: boolean | null = null;
+  const isGatewayAlive = () => {
+    if (gatewayAlive === null) {
+      const result = captureOpenshell(["sandbox", "list"], { ignoreError: true });
+      gatewayAlive = result.status === 0;
+    }
+    return gatewayAlive;
+  };
+  return {
+    providerExists: (name) => {
+      if (!isGatewayAlive()) return "error";
+      const result = captureOpenshell(["provider", "get", name], { ignoreError: true });
+      return result.status === 0 ? "present" : "absent";
+    },
+  };
+}
+
 function backfillAndFindOverlaps() {
   // Non-critical path: status must remain usable even if the gateway probe or
   // registry write throws, so any failure yields an empty overlap list.
@@ -1062,8 +1084,7 @@ function backfillAndFindOverlaps() {
       backfillMessagingChannels,
       findAllOverlaps,
     } = require("./lib/messaging-conflict");
-    const { providerExistsInGateway } = require("./lib/onboard");
-    backfillMessagingChannels(registry, { providerExists: providerExistsInGateway });
+    backfillMessagingChannels(registry, makeConflictProbe());
     return findAllOverlaps(registry);
   } catch {
     return [];

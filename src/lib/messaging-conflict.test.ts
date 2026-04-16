@@ -91,7 +91,9 @@ describe("backfillMessagingChannels", () => {
   it("fills in missing messagingChannels by probing OpenShell", () => {
     const registry = makeRegistry([{ name: "alice" }]);
     const probe = {
-      providerExists: vi.fn((name: string) => name === "alice-telegram-bridge"),
+      providerExists: vi.fn((name: string) =>
+        name === "alice-telegram-bridge" ? "present" : "absent",
+      ) as (name: string) => "present" | "absent" | "error",
     };
     backfillMessagingChannels(registry, probe);
     expect(registry.updateSandbox).toHaveBeenCalledWith("alice", {
@@ -106,44 +108,60 @@ describe("backfillMessagingChannels", () => {
     const registry = makeRegistry([
       { name: "alice", messagingChannels: ["telegram"] },
     ]);
-    const probe = { providerExists: vi.fn(() => true) };
+    const probe = {
+      providerExists: vi.fn(() => "present") as (name: string) => "present" | "absent" | "error",
+    };
     backfillMessagingChannels(registry, probe);
     expect(registry.updateSandbox).not.toHaveBeenCalled();
     expect(probe.providerExists).not.toHaveBeenCalled();
   });
 
-  it("writes an empty array when no providers exist for a sandbox", () => {
+  it("writes an empty array when all probes return absent", () => {
     const registry = makeRegistry([{ name: "alice" }]);
-    const probe = { providerExists: vi.fn(() => false) };
+    const probe = {
+      providerExists: vi.fn(() => "absent") as (name: string) => "present" | "absent" | "error",
+    };
     backfillMessagingChannels(registry, probe);
     expect(registry.updateSandbox).toHaveBeenCalledWith("alice", { messagingChannels: [] });
   });
 
-  it("does NOT persist a partial result when a probe throws (retry on next call)", () => {
-    // Writing a partial list would set messagingChannels and prevent future
-    // retries, permanently hiding real overlaps for upgraded sandboxes.
+  it("does NOT persist when a probe returns error (retry on next call)", () => {
+    // "error" is distinct from "absent": a transient gateway failure must not
+    // be collapsed into "provider not attached" and persisted, because that
+    // would prevent all future backfill retries and hide real overlaps.
     const registry = makeRegistry([{ name: "alice" }]);
     const probe = {
       providerExists: vi.fn((name: string) => {
-        if (name.endsWith("-telegram-bridge")) throw new Error("gateway down");
-        return name.endsWith("-discord-bridge");
-      }),
+        if (name.endsWith("-telegram-bridge")) return "error";
+        return name.endsWith("-discord-bridge") ? "present" : "absent";
+      }) as (name: string) => "present" | "absent" | "error",
     };
     backfillMessagingChannels(registry, probe);
     expect(registry.updateSandbox).not.toHaveBeenCalled();
   });
 
-  it("re-attempts backfill on a subsequent call after a prior probe failure", () => {
+  it("also treats a thrown probe as error (defensive; callers should return 'error' instead)", () => {
     const registry = makeRegistry([{ name: "alice" }]);
-    let throwOnce = true;
+    const probe = {
+      providerExists: vi.fn(() => {
+        throw new Error("unexpected");
+      }) as (name: string) => "present" | "absent" | "error",
+    };
+    backfillMessagingChannels(registry, probe);
+    expect(registry.updateSandbox).not.toHaveBeenCalled();
+  });
+
+  it("re-attempts backfill on a subsequent call after a prior error", () => {
+    const registry = makeRegistry([{ name: "alice" }]);
+    let firstPass = true;
     const probe = {
       providerExists: vi.fn((name: string) => {
-        if (name.endsWith("-telegram-bridge") && throwOnce) {
-          throwOnce = false;
-          throw new Error("gateway down");
+        if (name.endsWith("-telegram-bridge") && firstPass) {
+          firstPass = false;
+          return "error";
         }
-        return name === "alice-telegram-bridge";
-      }),
+        return name === "alice-telegram-bridge" ? "present" : "absent";
+      }) as (name: string) => "present" | "absent" | "error",
     };
     backfillMessagingChannels(registry, probe);
     expect(registry.updateSandbox).not.toHaveBeenCalled();

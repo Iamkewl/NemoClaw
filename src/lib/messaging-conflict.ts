@@ -14,9 +14,13 @@
 
 import type { SandboxEntry } from "./registry";
 
+type ProbeResult = "present" | "absent" | "error";
+
 interface ConflictProbe {
-  // Returns true when a provider with this exact name exists in OpenShell.
-  providerExists: (name: string) => boolean;
+  // Tri-state — "error" is distinct from "absent" so a transient gateway
+  // failure does not get collapsed into "provider not attached" and then
+  // persisted as a bogus empty messagingChannels.
+  providerExists: (name: string) => ProbeResult;
 }
 
 interface ConflictRegistry {
@@ -59,9 +63,15 @@ export function backfillMessagingChannels(
     let probeFailed = false;
     for (const channel of KNOWN_CHANNELS) {
       const providerName = `${entry.name}${PROVIDER_SUFFIXES[channel]}`;
+      let state: ProbeResult;
       try {
-        if (probe.providerExists(providerName)) discovered.push(channel);
+        state = probe.providerExists(providerName);
       } catch {
+        state = "error";
+      }
+      if (state === "present") {
+        discovered.push(channel);
+      } else if (state === "error") {
         // Partial results can't be persisted: writing a partial/empty list
         // sets messagingChannels, preventing future retries and permanently
         // hiding real overlaps. Skip the write so we retry on next call.
