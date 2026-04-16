@@ -281,6 +281,58 @@ stop_openshell_forward_processes() {
   done
 }
 
+# Kill orphaned openshell processes left behind after uninstall —
+# sandbox create, ssh-proxy, and related ssh sessions. (#1940)
+stop_orphaned_openshell_processes() {
+  if ! command -v pgrep >/dev/null 2>&1; then
+    warn "pgrep not found; skipping orphaned openshell process cleanup."
+    return 0
+  fi
+
+  local -a pids=()
+  local pid
+
+  # Collect openshell sandbox create, ssh-proxy, and related ssh processes.
+  while IFS= read -r pid; do
+    [ -n "$pid" ] || continue
+    pids+=("$pid")
+  done < <(pgrep -f "openshell (sandbox create|ssh-proxy)" 2>/dev/null || true)
+
+  # Also collect ssh processes whose command line references openshell
+  # (these are the SSH sessions spawned by openshell sandbox create).
+  while IFS= read -r pid; do
+    [ -n "$pid" ] || continue
+    local cmd
+    cmd="$(ps -p "$pid" -o args= 2>/dev/null)" || continue
+    if [[ "$cmd" == *openshell* ]]; then
+      pids+=("$pid")
+    fi
+  done < <(pgrep -x ssh 2>/dev/null || true)
+
+  # Deduplicate
+  local -A seen=()
+  local -a unique_pids=()
+  for pid in "${pids[@]}"; do
+    if [ -z "${seen[$pid]:-}" ]; then
+      seen[$pid]=1
+      unique_pids+=("$pid")
+    fi
+  done
+
+  if [ "${#unique_pids[@]}" -eq 0 ]; then
+    info "No orphaned openshell processes found"
+    return 0
+  fi
+
+  for pid in "${unique_pids[@]}"; do
+    if kill "$pid" >/dev/null 2>&1 || kill -9 "$pid" >/dev/null 2>&1; then
+      info "Stopped orphaned openshell process $pid"
+    else
+      warn "Failed to stop orphaned openshell process $pid"
+    fi
+  done
+}
+
 remove_openshell_resources() {
   if ! command -v openshell >/dev/null 2>&1; then
     warn "openshell not found; skipping gateway/provider/sandbox cleanup."
@@ -629,6 +681,7 @@ main() {
   step 1 "Stopping services"
   stop_helper_services
   stop_openshell_forward_processes
+  stop_orphaned_openshell_processes
 
   step 2 "OpenShell resources"
   remove_openshell_resources
