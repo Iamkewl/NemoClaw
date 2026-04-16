@@ -522,8 +522,11 @@ print(','.join(str(i) for i in ids))
     # Check that all configured IDs are present
     IFS=',' read -ra expected_ids <<<"$TELEGRAM_IDS"
     missing_ids=()
+    tg_allow_from_csv=",${tg_allow_from//[[:space:]]/},"
     for eid in "${expected_ids[@]}"; do
-      if ! echo "$tg_allow_from" | grep -qF "$eid"; then
+      eid="${eid//[[:space:]]/}"
+      [ -z "$eid" ] && continue
+      if [[ "$tg_allow_from_csv" != *",$eid,"* ]]; then
         missing_ids+=("$eid")
       fi
     done
