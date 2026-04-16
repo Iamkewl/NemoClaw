@@ -1032,6 +1032,42 @@ async function credentialsCommand(args) {
   process.exit(1);
 }
 
+function checkMessagingBridgeHealth(sandboxName, channels) {
+  // Only Telegram currently emits a recognizable conflict signature in the
+  // gateway log. Discord/Slack have similar single-consumer constraints but
+  // log differently; we can extend the regex when those patterns are known.
+  if (!Array.isArray(channels) || !channels.includes("telegram")) return [];
+  const { spawnSync } = require("child_process");
+  const script =
+    'tail -n 200 /tmp/gateway.log 2>/dev/null | grep -cE "getUpdates conflict|409[[:space:]:]+Conflict" || true';
+  try {
+    const result = spawnSync(
+      getOpenshellBinary(),
+      ["sandbox", "exec", sandboxName, "sh", "-c", script],
+      { encoding: "utf-8", timeout: 3000, stdio: ["ignore", "pipe", "pipe"] },
+    );
+    const count = Number.parseInt((result.stdout || "").trim(), 10);
+    if (!Number.isFinite(count) || count === 0) return [];
+    return [{ channel: "telegram", conflicts: count }];
+  } catch {
+    return [];
+  }
+}
+
+function providerExistsInGateway(name) {
+  const result = captureOpenshell(["provider", "get", name], { ignoreError: true });
+  return result.status === 0;
+}
+
+function backfillAndFindOverlaps() {
+  const {
+    backfillMessagingChannels,
+    findAllOverlaps,
+  } = require("./lib/messaging-conflict");
+  backfillMessagingChannels(registry, { providerExists: providerExistsInGateway });
+  return findAllOverlaps(registry);
+}
+
 function showStatus() {
   const { showStatus: showServiceStatus } = require("./lib/services");
   showStatusCommand({
@@ -1039,6 +1075,8 @@ function showStatus() {
     getLiveInference: () =>
       parseGatewayInference(captureOpenshell(["inference", "get"], { ignoreError: true }).output),
     showServiceStatus,
+    checkMessagingBridgeHealth,
+    backfillAndFindOverlaps,
     log: console.log,
   });
 }
