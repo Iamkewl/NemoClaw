@@ -323,20 +323,22 @@ for pong_attempt in 1 2 3; do
   fi
   [ "$pong_attempt" -lt 3 ] || break
   sleep 5
-  # Re-fetch
+  # Re-fetch with verbose curl on retry to diagnose proxy issues (#1969)
   ssh_config="$(mktemp)"
   sandbox_response=""
   if openshell sandbox ssh-config "$SANDBOX_NAME" >"$ssh_config" 2>/dev/null; then
+    info "Retry $((pong_attempt + 1)): using curl -v to capture proxy request/response headers"
     sandbox_response=$($TIMEOUT_CMD ssh -F "$ssh_config" \
       -o StrictHostKeyChecking=no \
       -o UserKnownHostsFile=/dev/null \
       -o ConnectTimeout=10 \
       -o LogLevel=ERROR \
       "openshell-${SANDBOX_NAME}" \
-      "curl -s --max-time 60 https://inference.local/v1/chat/completions \
+      "curl -v --max-time 60 https://inference.local/v1/chat/completions \
         -H 'Content-Type: application/json' \
         -d '{\"model\":\"nvidia/nemotron-3-super-120b-a12b\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with exactly one word: PONG\"}],\"max_tokens\":100}'" \
       2>&1) || true
+    info "Verbose response (first 500 chars): ${sandbox_response:0:500}"
   fi
   rm -f "$ssh_config"
 done
