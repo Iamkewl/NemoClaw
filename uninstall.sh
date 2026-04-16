@@ -314,9 +314,9 @@ stop_orphaned_openshell_processes() {
   # Match "openshell ssh-proxy" or "openshell-" (gateway name pattern) to
   # avoid false positives on unrelated ssh sessions. User scoping via
   # _pgrep_user provides an additional safety net.
+  local cmd
   while IFS= read -r pid; do
     [ -n "$pid" ] || continue
-    local cmd
     cmd="$(ps -p "$pid" -o args= 2>/dev/null)" || continue
     if [[ "$cmd" == *"openshell ssh-proxy"* ]] || [[ "$cmd" == *"openshell-"* ]]; then
       pids+=("$pid")
