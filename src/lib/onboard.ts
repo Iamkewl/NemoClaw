@@ -2867,6 +2867,14 @@ async function createSandbox(
           console.error("  State backup failed — aborting rebuild to prevent data loss.");
           console.error("  Pass --recreate-sandbox to force recreation without backup.");
           upsertMessagingProviders(messagingTokenDefs);
+          // Update stored hashes so the next onboard doesn't re-detect rotation.
+          const abortHashes = {};
+          for (const { envKey, token } of messagingTokenDefs) {
+            if (token) abortHashes[envKey] = hashCredential(token);
+          }
+          if (Object.keys(abortHashes).length > 0) {
+            registry.updateSandbox(sandboxName, { providerCredentialHashes: abortHashes });
+          }
           ensureDashboardForward(sandboxName, chatUiUrl);
           return sandboxName;
         }
@@ -2874,6 +2882,13 @@ async function createSandbox(
         console.error(`  State backup threw: ${err.message} — aborting rebuild.`);
         console.error("  Pass --recreate-sandbox to force recreation without backup.");
         upsertMessagingProviders(messagingTokenDefs);
+        const abortHashes = {};
+        for (const { envKey, token } of messagingTokenDefs) {
+          if (token) abortHashes[envKey] = hashCredential(token);
+        }
+        if (Object.keys(abortHashes).length > 0) {
+          registry.updateSandbox(sandboxName, { providerCredentialHashes: abortHashes });
+        }
         ensureDashboardForward(sandboxName, chatUiUrl);
         return sandboxName;
       }

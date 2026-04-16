@@ -97,6 +97,7 @@ export NEMOCLAW_RECREATE_SANDBOX=1
 
 info "Running install.sh --non-interactive (includes first onboard)..."
 cd "$REPO" || exit 1
+touch "$INSTALL_LOG"
 bash install.sh --non-interactive >"$INSTALL_LOG" 2>&1 &
 install_pid=$!
 tail -f "$INSTALL_LOG" --pid=$install_pid 2>/dev/null &
@@ -160,10 +161,10 @@ fi
 
 # Verify credential hashes are stored for this sandbox in the registry
 if [ -f "$REGISTRY" ] && node -e "
-const r = require('$REGISTRY');
-const h = (r.sandboxes || {})['$SANDBOX_NAME']?.providerCredentialHashes || {};
+const r = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
+const h = (r.sandboxes || {})[process.argv[2]]?.providerCredentialHashes || {};
 process.exit('TELEGRAM_BOT_TOKEN' in h ? 0 : 1);
-" 2>/dev/null; then
+" "$REGISTRY" "$SANDBOX_NAME" 2>/dev/null; then
   pass "Credential hash stored for $SANDBOX_NAME"
 else
   fail "Credential hash not found for $SANDBOX_NAME in registry"
