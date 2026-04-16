@@ -1505,6 +1505,15 @@ async function promptOllamaModel(gpu = null) {
   return promptManualModelId("  Ollama model id: ", "Ollama");
 }
 
+function printOllamaExposureWarning() {
+  console.log("");
+  console.log("  ⚠ Ollama is binding to 0.0.0.0 so the sandbox can reach it via Docker.");
+  console.log("    This exposes the Ollama API to your local network (no auth required).");
+  console.log("    On public WiFi, any device on the same network can send prompts to your GPU.");
+  console.log("    See: CNVD-2025-04094, CVE-2024-37032");
+  console.log("");
+}
+
 function pullOllamaModel(model) {
   const result = spawnSync("bash", ["-c", `ollama pull ${shellQuote(model)}`], {
     cwd: ROOT,
@@ -3362,6 +3371,7 @@ async function setupNim(gpu) {
           const ollamaEnv = isWsl() ? "" : `OLLAMA_HOST=0.0.0.0:${OLLAMA_PORT} `;
           run(`${ollamaEnv}ollama serve > /dev/null 2>&1 &`, { ignoreError: true });
           sleep(2);
+          if (!isWsl()) printOllamaExposureWarning();
         }
         console.log(`  ✓ Using Ollama on localhost:${OLLAMA_PORT}`);
         provider = "ollama-local";
@@ -3420,6 +3430,7 @@ async function setupNim(gpu) {
         console.log("  Starting Ollama...");
         run(`OLLAMA_HOST=0.0.0.0:${OLLAMA_PORT} ollama serve > /dev/null 2>&1 &`, { ignoreError: true });
         sleep(2);
+        printOllamaExposureWarning();
         console.log(`  ✓ Using Ollama on localhost:${OLLAMA_PORT}`);
         provider = "ollama-local";
         credentialEnv = "OPENAI_API_KEY";
