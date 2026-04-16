@@ -2042,15 +2042,23 @@ async function preflight() {
         continue;
       }
       // Auto-cleanup orphaned SSH port-forward from a previous NemoClaw session
-      // (e.g. dashboard forward left behind after destroy). (#1950)
+      // (e.g. dashboard forward left behind after destroy). Only kill the process
+      // if its command line contains "openshell" to avoid killing unrelated SSH
+      // tunnels the user may have set up on the same port. (#1950)
       if (port === DASHBOARD_PORT && portCheck.process === "ssh" && portCheck.pid) {
-        console.log(`  Cleaning up orphaned SSH port-forward on port ${port} (PID ${portCheck.pid})...`);
-        run(`kill ${portCheck.pid} 2>/dev/null || true`, { ignoreError: true });
-        sleep(1);
-        portCheck = await checkPortAvailable(port);
-        if (portCheck.ok) {
-          console.log(`  ✓ Port ${port} available after orphaned forward cleanup (${label})`);
-          continue;
+        const cmdline = runCapture(
+          `cat /proc/${portCheck.pid}/cmdline 2>/dev/null | tr '\\0' ' '`,
+          { ignoreError: true },
+        ).trim();
+        if (cmdline.includes("openshell")) {
+          console.log(`  Cleaning up orphaned SSH port-forward on port ${port} (PID ${portCheck.pid})...`);
+          run(`kill ${portCheck.pid} 2>/dev/null || true`, { ignoreError: true });
+          sleep(1);
+          portCheck = await checkPortAvailable(port);
+          if (portCheck.ok) {
+            console.log(`  ✓ Port ${port} available after orphaned forward cleanup (${label})`);
+            continue;
+          }
         }
       }
       console.error("");
