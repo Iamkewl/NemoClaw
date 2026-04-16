@@ -294,10 +294,11 @@ stop_orphaned_openshell_processes() {
   local -a pids=()
   local pid
 
-  # Scope to the invoking user to avoid killing other users' processes
-  # on shared systems (e.g. when running via sudo). (#1940)
+  # Scope to the original invoking user to avoid killing other users' processes
+  # on shared systems. Under sudo, SUDO_USER holds the real caller; fall back
+  # to LOGNAME, then id -un. (#1940)
   local _user
-  _user="$(id -un 2>/dev/null || echo "")"
+  _user="${SUDO_USER:-${LOGNAME:-$(id -un 2>/dev/null || echo "")}}"
   local -a _pgrep_user=()
   if [ -n "$_user" ]; then
     _pgrep_user=(-u "$_user")
@@ -309,13 +310,15 @@ stop_orphaned_openshell_processes() {
     pids+=("$pid")
   done < <(pgrep "${_pgrep_user[@]}" -f "openshell (sandbox create|ssh-proxy)" 2>/dev/null || true)
 
-  # Also collect ssh processes whose command line references openshell
-  # (these are the SSH sessions spawned by openshell sandbox create).
+  # Also collect ssh processes whose command line references openshell.
+  # Match "openshell ssh-proxy" or "openshell-" (gateway name pattern) to
+  # avoid false positives on unrelated ssh sessions. User scoping via
+  # _pgrep_user provides an additional safety net.
   while IFS= read -r pid; do
     [ -n "$pid" ] || continue
     local cmd
     cmd="$(ps -p "$pid" -o args= 2>/dev/null)" || continue
-    if [[ "$cmd" == *openshell* ]]; then
+    if [[ "$cmd" == *"openshell ssh-proxy"* ]] || [[ "$cmd" == *"openshell-"* ]]; then
       pids+=("$pid")
     fi
   done < <(pgrep "${_pgrep_user[@]}" -x ssh 2>/dev/null || true)
