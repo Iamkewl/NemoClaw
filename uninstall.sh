@@ -243,6 +243,7 @@ remove_file_with_optional_sudo() {
   info "Removed $path"
 }
 
+# Stop NemoClaw helper services (e.g. Telegram bridge, cloudflared).
 stop_helper_services() {
   if [ -x "$SCRIPT_DIR/scripts/start-services.sh" ]; then
     run_optional "Stopped NemoClaw helper services" "$SCRIPT_DIR/scripts/start-services.sh" --stop
@@ -251,6 +252,7 @@ stop_helper_services() {
   remove_glob_paths "${TMP_ROOT}/nemoclaw-services-*"
 }
 
+# Stop openshell port-forward processes on the dashboard port.
 stop_openshell_forward_processes() {
   if ! command -v pgrep >/dev/null 2>&1; then
     warn "pgrep not found; skipping local OpenShell forward process cleanup."
@@ -342,6 +344,7 @@ stop_orphaned_openshell_processes() {
   done
 }
 
+# Remove OpenShell sandboxes, providers, and gateway.
 remove_openshell_resources() {
   if ! command -v openshell >/dev/null 2>&1; then
     warn "openshell not found; skipping gateway/provider/sandbox cleanup."
