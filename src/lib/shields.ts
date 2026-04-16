@@ -132,6 +132,9 @@ interface ShieldsDownOpts {
 function shieldsDown(sandboxName: string, opts: ShieldsDownOpts = {}): void {
   validateName(sandboxName, "sandbox name");
 
+  // Kill any stale timer from a previous shields-down cycle
+  killTimer(sandboxName);
+
   const state = loadShieldsState();
   if (state.shieldsDown) {
     console.error(
@@ -207,13 +210,16 @@ function shieldsDown(sandboxName: string, opts: ShieldsDownOpts = {}): void {
   });
 
   // 4. Start auto-restore timer (detached child process)
+  //    Pass the absolute restore time, not a relative timeout. Steps 1-2b
+  //    can take minutes (policy apply + kubectl chmod), so a relative timeout
+  //    passed at fork time would fire too early.
+  const restoreAt = new Date(Date.now() + timeoutSeconds * 1000);
   const timerScript = path.join(__dirname, "shields-timer.ts");
-  // The timer script might be compiled to .js in dist/
   const timerScriptJs = timerScript.replace(/\.ts$/, ".js");
   const actualScript = fs.existsSync(timerScriptJs) ? timerScriptJs : timerScript;
 
   try {
-    const child = fork(actualScript, [sandboxName, snapshotPath, String(timeoutSeconds)], {
+    const child = fork(actualScript, [sandboxName, snapshotPath, restoreAt.toISOString()], {
       detached: true,
       stdio: "ignore",
     });
@@ -227,7 +233,7 @@ function shieldsDown(sandboxName: string, opts: ShieldsDownOpts = {}): void {
         pid: child.pid,
         sandboxName,
         snapshotPath,
-        restoreAt: new Date(Date.now() + timeoutSeconds * 1000).toISOString(),
+        restoreAt: restoreAt.toISOString(),
       }),
       { mode: 0o600 },
     );

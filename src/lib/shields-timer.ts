@@ -3,11 +3,11 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // Auto-restore timer for shields-down. Runs as a detached child process
-// forked by shields.ts. Sleeps for the specified timeout, then restores
-// the captured policy snapshot.
+// forked by shields.ts. Sleeps until the absolute restore time, then
+// restores the captured policy snapshot.
 //
 // Usage (internal — called by shields.ts via fork()):
-//   node shields-timer.js <sandbox-name> <snapshot-path> <timeout-seconds>
+//   node shields-timer.js <sandbox-name> <snapshot-path> <restore-at-iso>
 
 const fs = require("fs");
 const path = require("path");
@@ -18,10 +18,11 @@ const STATE_DIR = path.join(process.env.HOME ?? "/tmp", ".nemoclaw", "state");
 const STATE_FILE = path.join(STATE_DIR, "nemoclaw.json");
 const AUDIT_FILE = path.join(STATE_DIR, "shields-audit.jsonl");
 
-const [sandboxName, snapshotPath, timeoutStr] = process.argv.slice(2);
-const timeoutMs = Number(timeoutStr) * 1000;
+const [sandboxName, snapshotPath, restoreAtIso] = process.argv.slice(2);
+const restoreAtMs = new Date(restoreAtIso).getTime();
+const delayMs = Math.max(0, restoreAtMs - Date.now());
 
-if (!sandboxName || !snapshotPath || !timeoutMs || isNaN(timeoutMs)) {
+if (!sandboxName || !snapshotPath || !restoreAtIso || isNaN(restoreAtMs)) {
   process.exit(1);
 }
 
@@ -92,7 +93,6 @@ setTimeout(() => {
       sandbox: sandboxName,
       timestamp: now,
       restored_by: "auto_timer",
-      duration_seconds: Number(timeoutStr),
       policy_snapshot: snapshotPath,
     });
   } catch (err) {
@@ -107,4 +107,4 @@ setTimeout(() => {
     cleanupMarker();
     process.exit(0);
   }
-}, timeoutMs);
+}, delayMs);
