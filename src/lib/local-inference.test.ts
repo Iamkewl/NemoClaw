@@ -52,7 +52,7 @@ describe("local inference helpers", () => {
 
   it("returns the expected health check command for ollama-local", () => {
     expect(getLocalProviderHealthEndpoint("ollama-local")).toBe(
-      "http://localhost:11434/api/tags",
+      "http://127.0.0.1:11434/api/tags",
     );
     expect(getLocalProviderLabel("ollama-local")).toBe("Local Ollama");
     expect(getLocalProviderHealthCheck("ollama-local")).toBe(
@@ -126,8 +126,8 @@ describe("local inference helpers", () => {
     expect(result).toEqual({
       ok: true,
       providerLabel: "Local Ollama",
-      endpoint: "http://localhost:11434/api/tags",
-      detail: "Local Ollama is reachable on http://localhost:11434/api/tags.",
+      endpoint: "http://127.0.0.1:11434/api/tags",
+      detail: "Local Ollama is reachable on http://127.0.0.1:11434/api/tags.",
     });
   });
 
@@ -146,7 +146,7 @@ describe("local inference helpers", () => {
     expect(result?.ok).toBe(false);
     expect(result?.detail).toContain("Local Ollama is selected for inference");
     expect(result?.detail).toContain("Start Ollama and retry");
-    expect(result?.detail).toContain("http://localhost:11434/api/tags");
+    expect(result?.detail).toContain("http://127.0.0.1:11434/api/tags");
   });
 
   it("returns null when provider health probing is not supported", () => {

@@ -677,9 +677,9 @@ credentials.ensureApiKey = async () => { process.env.NVIDIA_API_KEY = "nvapi-goo
 runner.run = () => ({ status: 0 });
 runner.runCapture = (command) => {
   if (command.includes("command -v ollama")) return "/usr/bin/ollama";
-  if (command.includes("localhost:11434/api/tags")) return JSON.stringify({ models: [{ name: "nemotron-3-nano:30b" }] });
+  if (command.includes("127.0.0.1:11434/api/tags")) return JSON.stringify({ models: [{ name: "nemotron-3-nano:30b" }] });
   if (command.includes("ollama list")) return "nemotron-3-nano:30b  abc  24 GB  now";
-  if (command.includes("localhost:8000/v1/models")) return "";
+  if (command.includes("127.0.0.1:8000/v1/models")) return "";
   if (command.includes("api/generate")) return '{"response":"hello"}';
   return "";
 };

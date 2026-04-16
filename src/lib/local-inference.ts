@@ -65,9 +65,9 @@ export function getLocalProviderValidationBaseUrl(provider: string): string | nu
 export function getLocalProviderHealthEndpoint(provider: string): string | null {
   switch (provider) {
     case "vllm-local":
-      return "http://localhost:8000/v1/models";
+      return "http://127.0.0.1:8000/v1/models";
     case "ollama-local":
-      return "http://localhost:11434/api/tags";
+      return "http://127.0.0.1:11434/api/tags";
     default:
       return null;
   }
