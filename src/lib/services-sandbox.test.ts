@@ -52,7 +52,7 @@ describe("stopSandboxChannels", () => {
 
     expect(spawnSyncSpy).toHaveBeenCalledWith(
       "/usr/local/bin/openshell",
-      ["sandbox", "exec", "my-sandbox", "--", "pkill", "-TERM", "-f", "openclaw gateway"],
+      ["sandbox", "exec", "--name", "my-sandbox", "--", "pkill", "-TERM", "-f", "openclaw gateway run"],
       expect.objectContaining({ timeout: 15000 }),
     );
     const output = logSpy.mock.calls.map((c) => c[0]).join("\n");
@@ -105,6 +105,31 @@ describe("stopSandboxChannels", () => {
     expect(output).toContain("openshell not found");
     logSpy.mockRestore();
   });
+
+  it("uses --name flag for sandbox selection (not positional)", () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    stopSandboxChannels("my-sandbox");
+
+    const args = spawnSyncSpy.mock.calls[0][1] as string[];
+    expect(args[1]).toBe("exec");
+    expect(args[2]).toBe("--name");
+    expect(args[3]).toBe("my-sandbox");
+    logSpy.mockRestore();
+  });
+
+  it("targets 'openclaw gateway run' (not just 'openclaw gateway') to avoid killing unrelated processes", () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    stopSandboxChannels("my-sandbox");
+
+    const args = spawnSyncSpy.mock.calls[0][1] as string[];
+    const pkillPattern = args[args.length - 1];
+    // Must include "run" to avoid matching decoy processes like
+    // "openclaw gateway decoy" or "openclaw gateway status".
+    expect(pkillPattern).toBe("openclaw gateway run");
+    logSpy.mockRestore();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -138,7 +163,7 @@ describe("stopAll with sandbox channels", () => {
 
     expect(spawnSyncSpy).toHaveBeenCalledWith(
       "/usr/local/bin/openshell",
-      ["sandbox", "exec", "test-sb", "--", "pkill", "-TERM", "-f", "openclaw gateway"],
+      ["sandbox", "exec", "--name", "test-sb", "--", "pkill", "-TERM", "-f", "openclaw gateway run"],
       expect.any(Object),
     );
     const output = logSpy.mock.calls.map((c) => c[0]).join("\n");
@@ -150,14 +175,17 @@ describe("stopAll with sandbox channels", () => {
   it("warns when no sandbox name is available", () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const savedNemoclaw = process.env.NEMOCLAW_SANDBOX;
+    const savedNemoclawName = process.env.NEMOCLAW_SANDBOX_NAME;
     const savedSandbox = process.env.SANDBOX_NAME;
     delete process.env.NEMOCLAW_SANDBOX;
+    delete process.env.NEMOCLAW_SANDBOX_NAME;
     delete process.env.SANDBOX_NAME;
 
     try {
       stopAll({ pidDir });
     } finally {
       if (savedNemoclaw !== undefined) process.env.NEMOCLAW_SANDBOX = savedNemoclaw;
+      if (savedNemoclawName !== undefined) process.env.NEMOCLAW_SANDBOX_NAME = savedNemoclawName;
       if (savedSandbox !== undefined) process.env.SANDBOX_NAME = savedSandbox;
     }
 
@@ -197,6 +225,36 @@ describe("stopAll with sandbox channels", () => {
     expect(spawnSyncSpy).toHaveBeenCalledWith(
       "/usr/local/bin/openshell",
       expect.arrayContaining(["env-sandbox"]),
+      expect.any(Object),
+    );
+    logSpy.mockRestore();
+  });
+
+  it("reads sandbox name from NEMOCLAW_SANDBOX_NAME when NEMOCLAW_SANDBOX is unset", () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const savedNemoclaw = process.env.NEMOCLAW_SANDBOX;
+    const savedNemoclawName = process.env.NEMOCLAW_SANDBOX_NAME;
+    delete process.env.NEMOCLAW_SANDBOX;
+    process.env.NEMOCLAW_SANDBOX_NAME = "named-sandbox";
+
+    try {
+      stopAll({ pidDir });
+    } finally {
+      if (savedNemoclaw !== undefined) {
+        process.env.NEMOCLAW_SANDBOX = savedNemoclaw;
+      } else {
+        delete process.env.NEMOCLAW_SANDBOX;
+      }
+      if (savedNemoclawName !== undefined) {
+        process.env.NEMOCLAW_SANDBOX_NAME = savedNemoclawName;
+      } else {
+        delete process.env.NEMOCLAW_SANDBOX_NAME;
+      }
+    }
+
+    expect(spawnSyncSpy).toHaveBeenCalledWith(
+      "/usr/local/bin/openshell",
+      expect.arrayContaining(["named-sandbox"]),
       expect.any(Object),
     );
     logSpy.mockRestore();

@@ -261,7 +261,10 @@ export function stopSandboxChannels(sandboxName: string): void {
   info("Stopping in-sandbox OpenClaw gateway and messaging channels...");
   const result = spawnSync(
     openshell,
-    ["sandbox", "exec", sandboxName, "--", "pkill", "-TERM", "-f", "openclaw gateway"],
+    [
+      "sandbox", "exec", "--name", sandboxName, "--",
+      "pkill", "-TERM", "-f", "openclaw gateway run",
+    ],
     { encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"], timeout: 15000 },
   );
 
@@ -286,12 +289,15 @@ export function stopAll(opts: ServiceOptions = {}): void {
 
   // Stop the in-sandbox OpenClaw gateway (and its messaging channels).
   const sandboxName =
-    opts.sandboxName ?? process.env.NEMOCLAW_SANDBOX ?? process.env.SANDBOX_NAME;
+    opts.sandboxName ??
+    process.env.NEMOCLAW_SANDBOX ??
+    process.env.NEMOCLAW_SANDBOX_NAME ??
+    process.env.SANDBOX_NAME;
   if (sandboxName) {
     stopSandboxChannels(sandboxName);
   } else {
     warn("No sandbox name available — cannot stop in-sandbox messaging channels.");
-    warn("Hint: run 'nemoclaw stop' with a registered sandbox or set NEMOCLAW_SANDBOX.");
+    warn("Hint: run 'nemoclaw stop' with a registered sandbox or set NEMOCLAW_SANDBOX_NAME.");
   }
 
   // Stop host-side services.
