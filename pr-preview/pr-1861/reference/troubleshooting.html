@@ -606,6 +606,25 @@ Then retry onboarding.</p>
 </div>
 <p>See <a class="reference internal" href="commands.html#environment-variables"><span class="std std-ref">Environment Variables</span></a> for the full list of port overrides.</p>
 </section>
+<section id="running-multiple-sandboxes-simultaneously">
+<h3>Running multiple sandboxes simultaneously<a class="headerlink" href="#running-multiple-sandboxes-simultaneously" title="Link to this heading">#</a></h3>
+<p>Each sandbox requires its own dashboard port.
+If you onboard a second sandbox without overriding the port, onboarding fails because port <code class="docutils literal notranslate"><span class="pre">18789</span></code> is already claimed by the first sandbox.</p>
+<p>Assign a distinct port to each sandbox at onboard time:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>nemoclaw<span class="w"> </span>onboard<span class="w">                              </span><span class="c1"># first sandbox — uses default 18789</span>
+<span class="gp">$ </span><span class="nv">NEMOCLAW_DASHBOARD_PORT</span><span class="o">=</span><span class="m">19000</span><span class="w"> </span>nemoclaw<span class="w"> </span>onboard<span class="w">  </span><span class="c1"># second sandbox — uses 19000</span>
+</pre></div>
+</div>
+<p>Each sandbox then has its own SSH tunnel and its own dashboard URL:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>http://localhost:18789   ← first sandbox
+http://localhost:19000   ← second sandbox
+</pre></div>
+</div>
+<p>You can verify which tunnel belongs to which sandbox with:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>openshell<span class="w"> </span>forward<span class="w"> </span>list
+</pre></div>
+</div>
+</section>
 </section>
 <section id="onboarding">
 <h2>Onboarding<a class="headerlink" href="#onboarding" title="Link to this heading">#</a></h2>
@@ -870,6 +889,23 @@ Open the TUI to see blocked requests and approve them:</p>
 <p>To permanently allow an endpoint, add it to the network policy.
 Refer to <a class="reference internal" href="../network-policy/customize-network-policy.html"><span class="std std-doc">Customize the Network Policy</span></a> for details.</p>
 </section>
+<section id="dashboard-not-reachable-after-setting-nemoclaw-dashboard-port">
+<h3>Dashboard not reachable after setting <code class="docutils literal notranslate"><span class="pre">NEMOCLAW_DASHBOARD_PORT</span></code><a class="headerlink" href="#dashboard-not-reachable-after-setting-nemoclaw-dashboard-port" title="Link to this heading">#</a></h3>
+<p>If you ran <code class="docutils literal notranslate"><span class="pre">NEMOCLAW_DASHBOARD_PORT=&lt;port&gt;</span> <span class="pre">nemoclaw</span> <span class="pre">onboard</span></code> and onboarding completed
+but the dashboard URL is unreachable (browser shows connection refused or the page fails
+to load), the sandbox was most likely created with an older NemoClaw version that had a
+bug where <code class="docutils literal notranslate"><span class="pre">NEMOCLAW_DASHBOARD_PORT</span></code> was parsed on the host but not passed into the sandbox
+at startup. The gateway inside the sandbox continued listening on the default port 18789
+while the SSH tunnel forwarded the custom port — leaving nothing at the other end of the
+tunnel.</p>
+<p>Re-run onboarding on the current NemoClaw release with the desired port. This rebuilds
+the sandbox image with the gateway bound to the configured port:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span><span class="nv">NEMOCLAW_DASHBOARD_PORT</span><span class="o">=</span><span class="m">19000</span><span class="w"> </span>nemoclaw<span class="w"> </span>onboard
+</pre></div>
+</div>
+<p>If you need to run multiple sandboxes at different ports at the same time, see
+<a class="reference internal" href="#running-multiple-sandboxes-simultaneously">Running multiple sandboxes simultaneously</a>.</p>
+</section>
 <section id="blueprint-run-failed">
 <h3>Blueprint run failed<a class="headerlink" href="#blueprint-run-failed" title="Link to this heading">#</a></h3>
 <p>View the error output for the failed blueprint run:</p>
@@ -1001,6 +1037,7 @@ If you encounter issues with Podman, switch to a tested runtime (Docker Engine, 
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#npm-install-fails-with-permission-errors">npm install fails with permission errors</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#installer-fails-on-nvidia-jetson">Installer fails on NVIDIA Jetson</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#port-already-in-use">Port already in use</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#running-multiple-sandboxes-simultaneously">Running multiple sandboxes simultaneously</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#onboarding">Onboarding</a><ul class="nav section-nav flex-column">
@@ -1026,6 +1063,7 @@ If you encounter issues with Podman, switch to a tested runtime (Docker Engine, 
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#sandbox-lost-after-gateway-restart">Sandbox lost after gateway restart</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#agent-cannot-reach-external-hosts-through-a-proxy">Agent cannot reach external hosts through a proxy</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#agent-cannot-reach-an-external-host">Agent cannot reach an external host</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dashboard-not-reachable-after-setting-nemoclaw-dashboard-port">Dashboard not reachable after setting <code class="docutils literal notranslate"><span class="pre">NEMOCLAW_DASHBOARD_PORT</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#blueprint-run-failed">Blueprint run failed</a></li>
 </ul>
 </li>
