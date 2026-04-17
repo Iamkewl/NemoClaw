@@ -20,9 +20,7 @@ describe("fetch-guard patch regression guard", () => {
     // for memory/IO reasons and may need more).
     expect(src).toMatch(/npm install -g .*"openclaw@\$\{MIN_VER\}"/);
     // The "current" branch must fire when MIN_VER is the smallest (= not !=)
-    expect(src).toContain(
-      '| sort -V | head -n1)" = "$MIN_VER" ]; then',
-    );
+    expect(src).toContain('| sort -V | head -n1)" = "$MIN_VER" ]; then');
   });
 
   it("Patch 1 rewrites withStrictGuardedFetchMode export with fail-close", () => {
