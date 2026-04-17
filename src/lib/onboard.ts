@@ -1244,7 +1244,10 @@ function shouldRequireResponsesToolCalling(provider) {
 // Per-validation-probe curl timing. Tighter than the default 60s in
 // getCurlTimingArgs() because validation must not hang the wizard for a
 // minute on a misbehaving model. See issue #1601 (Bug 3).
-function getValidationProbeCurlArgs() {
+function getValidationProbeCurlArgs(opts) {
+  if (isWsl(opts)) {
+    return ["--connect-timeout", "20", "--max-time", "30"];
+  }
   return ["--connect-timeout", "10", "--max-time", "15"];
 }
 
@@ -1419,6 +1422,35 @@ function probeOpenAiLikeEndpoint(endpointUrl, model, apiKey, options = {}) {
     });
   }
 
+  // Single retry with doubled timeouts on timeout/connection failure.
+  // WSL2's virtualized network stack can cause the initial probe to time out
+  // before the TLS handshake completes. See issue #987.
+  const isTimeoutOrConnFailure = (cs) => cs === 28 || cs === 6 || cs === 7;
+  let retriedAfterTimeout = false;
+  if (failures.length > 0 && isTimeoutOrConnFailure(failures[0].curlStatus)) {
+    retriedAfterTimeout = true;
+    const baseArgs = getValidationProbeCurlArgs();
+    const doubledArgs = baseArgs.map((arg) =>
+      /^\d+$/.test(arg) ? String(Number(arg) * 2) : arg,
+    );
+    const retryResult = runCurlProbe([
+      "-sS",
+      ...doubledArgs,
+      "-H",
+      "Content-Type: application/json",
+      ...(apiKey ? ["-H", `Authorization: Bearer ${normalizeCredentialValue(apiKey)}`] : []),
+      "-d",
+      JSON.stringify({
+        model,
+        messages: [{ role: "user", content: "Reply with exactly: OK" }],
+      }),
+      `${String(endpointUrl).replace(/\/+$/, "")}/chat/completions`,
+    ]);
+    if (retryResult.ok) {
+      return { ok: true, api: "openai-completions", label: "Chat Completions API" };
+    }
+  }
+
   // Detect the NVCF "Function not found for account" error and reframe it
   // with an actionable next step instead of dumping the raw NVCF body.
   // See issue #1601 (Bug 2).
@@ -1435,9 +1467,15 @@ function probeOpenAiLikeEndpoint(endpointUrl, model, apiKey, options = {}) {
     };
   }
 
+  const baseMessage = failures.map((failure) => `${failure.name}: ${failure.message}`).join(" | ");
+  const wslHint =
+    isWsl() && retriedAfterTimeout
+      ? " · WSL2 detected \u2014 network verification may be slower than expected. " +
+        "Run `nemoclaw onboard` with the `--skip-verify` flag if this endpoint is known to be reachable."
+      : "";
   return {
     ok: false,
-    message: failures.map((failure) => `${failure.name}: ${failure.message}`).join(" | "),
+    message: baseMessage + wslHint,
     failures,
   };
 }
@@ -6059,4 +6097,5 @@ module.exports = {
   writeSandboxConfigSyncFile,
   patchStagedDockerfile,
   ensureOllamaAuthProxy,
+  getValidationProbeCurlArgs,
 };
