@@ -52,9 +52,8 @@ RUN npm ci --omit=dev
 # The minimum required version comes from nemoclaw-blueprint/blueprint.yaml
 # (already COPYed to /opt/nemoclaw-blueprint/ above).
 # hadolint ignore=DL3059,DL4006
-RUN --mount=type=bind,source=nemoclaw-blueprint/blueprint.yaml,target=/tmp/blueprint.yaml \
-    set -eu; \
-    MIN_VER=$(grep 'min_openclaw_version' /tmp/blueprint.yaml | awk '{print $2}' | tr -d '"'); \
+RUN set -eu; \
+    MIN_VER=$(grep 'min_openclaw_version' /opt/nemoclaw-blueprint/blueprint.yaml | awk '{print $2}' | tr -d '"'); \
     [ -n "$MIN_VER" ] || { echo "ERROR: Could not parse min_openclaw_version from blueprint.yaml" >&2; exit 1; }; \
     CUR_VER=$(openclaw --version 2>/dev/null | awk '{print $2}' || echo "0.0.0"); \
     if [ "$(printf '%s\n%s' "$MIN_VER" "$CUR_VER" | sort -V | head -n1)" = "$MIN_VER" ]; then \
