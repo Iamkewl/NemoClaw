@@ -46,6 +46,11 @@ const {
   getProviderSelectionConfig,
   parseGatewayInference,
 } = require("./inference-config");
+
+// Providers that run on the host and need the local-inference policy preset.
+// Shared constant so getSuggestedPolicyPresets() and setupPoliciesWithSelection()
+// stay in sync.
+const LOCAL_INFERENCE_PROVIDERS = ["ollama-local", "vllm-local"];
 const { inferContainerRuntime, isWsl, shouldPatchCoredns } = require("./platform");
 const { resolveOpenshell } = require("./resolve-openshell");
 const {
@@ -4502,8 +4507,13 @@ async function setupMessagingChannels() {
   return selected;
 }
 
-function getSuggestedPolicyPresets({ enabledChannels = null, webSearchConfig = null } = {}) {
+function getSuggestedPolicyPresets({ enabledChannels = null, webSearchConfig = null, provider = null } = {}) {
   const suggestions = ["pypi", "npm"];
+
+  // Auto-suggest local-inference preset when a local provider is selected
+  if (provider && LOCAL_INFERENCE_PROVIDERS.includes(provider)) {
+    suggestions.push("local-inference");
+  }
   const usesExplicitMessagingSelection = Array.isArray(enabledChannels);
 
   const maybeSuggestMessagingPreset = (channel, envKey) => {
@@ -5118,6 +5128,7 @@ async function setupPoliciesWithSelection(sandboxName, options = {}) {
   const onSelection = typeof options.onSelection === "function" ? options.onSelection : null;
   const webSearchConfig = options.webSearchConfig || null;
   const enabledChannels = Array.isArray(options.enabledChannels) ? options.enabledChannels : null;
+  const provider = options.provider || null;
 
   step(8, 8, "Policy presets");
 
@@ -5147,6 +5158,10 @@ async function setupPoliciesWithSelection(sandboxName, options = {}) {
   const suggestions = tiers.resolveTierPresets(tierName).map((p) => p.name);
   // Allow credential-based overrides on top of the tier (additive only).
   if (webSearchConfig && !suggestions.includes("brave")) suggestions.push("brave");
+  // Auto-suggest local-inference preset when a local provider is selected
+  if (provider && LOCAL_INFERENCE_PROVIDERS.includes(provider) && !suggestions.includes("local-inference")) {
+    suggestions.push("local-inference");
+  }
 
   if (isNonInteractive()) {
     const policyMode = (process.env.NEMOCLAW_POLICY_MODE || "suggested").trim().toLowerCase();
@@ -5966,6 +5981,7 @@ async function onboard(opts = {}) {
               : null,
           enabledChannels: selectedMessagingChannels,
           webSearchConfig,
+          provider,
           onSelection: (policyPresets) => {
             onboardSession.updateSession((current) => {
               current.policyPresets = policyPresets;
@@ -6049,6 +6065,7 @@ module.exports = {
   isOpenclawReady,
   arePolicyPresetsApplied,
   getSuggestedPolicyPresets,
+  LOCAL_INFERENCE_PROVIDERS,
   presetsCheckboxSelector,
   selectPolicyTier,
   selectTierPresetsAndAccess,
