@@ -4411,6 +4411,55 @@ const MESSAGING_CHANNELS = [
   },
 ];
 
+// Curl exit codes that indicate a network-level failure (not a token problem).
+const TELEGRAM_NETWORK_CURL_CODES = new Set([6, 7, 28, 52, 56]);
+
+async function checkTelegramReachability(token) {
+  const result = runCurlProbe([
+    "-sS",
+    "--connect-timeout", "5",
+    "--max-time", "10",
+    `https://api.telegram.org/bot${token}/getMe`,
+  ]);
+
+  // HTTP 200 with "ok":true — Telegram is reachable and token is valid.
+  if (result.ok) return;
+
+  // HTTP 401 or 404 — token was rejected by Telegram (not a network issue).
+  if (result.httpStatus === 401 || result.httpStatus === 404) {
+    console.log(
+      "  ⚠ Bot token was rejected by Telegram — verify the token is correct.",
+    );
+    return;
+  }
+
+  // Network-level failure — Telegram is unreachable from this host.
+  if (result.curlStatus && TELEGRAM_NETWORK_CURL_CODES.has(result.curlStatus)) {
+    console.log("");
+    console.log("  ⚠ api.telegram.org is not reachable from this host.");
+    console.log("    Telegram integration requires outbound HTTPS access to api.telegram.org.");
+    console.log("    This is commonly blocked by corporate network proxies.");
+
+    if (!isNonInteractive()) {
+      const answer = (await promptOrDefault("    Continue anyway? [y/N]: ", null, "n"))
+        .trim()
+        .toLowerCase();
+      if (answer !== "y" && answer !== "yes") {
+        console.log("  Aborting onboarding.");
+        process.exit(1);
+      }
+    }
+    return;
+  }
+
+  // Unexpected HTTP error — warn but don't block.
+  if (!result.ok && result.httpStatus > 0) {
+    console.log(
+      `  ⚠ Telegram API returned HTTP ${result.httpStatus} — the bot may not work correctly.`,
+    );
+  }
+}
+
 async function setupMessagingChannels() {
   step(5, 8, "Messaging channels");
 
@@ -4422,6 +4471,9 @@ async function setupMessagingChannels() {
     const found = MESSAGING_CHANNELS.filter((c) => getMessagingToken(c.envKey)).map((c) => c.name);
     if (found.length > 0) {
       note(`  [non-interactive] Messaging tokens detected: ${found.join(", ")}`);
+      if (found.includes("telegram")) {
+        await checkTelegramReachability(getMessagingToken("TELEGRAM_BOT_TOKEN"));
+      }
     } else {
       note("  [non-interactive] No messaging tokens configured. Skipping.");
     }
@@ -4594,6 +4646,12 @@ async function setupMessagingChannels() {
     }
   }
   console.log("");
+
+  // Preflight: verify Telegram API is reachable from the host before sandbox creation.
+  if (selected.includes("telegram") && getMessagingToken("TELEGRAM_BOT_TOKEN")) {
+    await checkTelegramReachability(getMessagingToken("TELEGRAM_BOT_TOKEN"));
+  }
+
   return selected;
 }
 
@@ -6174,4 +6232,6 @@ module.exports = {
   ensureOllamaAuthProxy,
   getProbeAuthMode,
   getValidationProbeCurlArgs,
+  checkTelegramReachability,
+  TELEGRAM_NETWORK_CURL_CODES,
 };
