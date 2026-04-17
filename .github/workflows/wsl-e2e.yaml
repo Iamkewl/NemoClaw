@@ -52,13 +52,27 @@ jobs:
       - name: Ensure Ubuntu WSL exists
         shell: powershell
         run: |
-          wsl --list --verbose
-          try {
-            wsl -d $env:WSL_DISTRO -- bash -lc "echo Ubuntu already available"
-          } catch {
-            wsl --install -d $env:WSL_DISTRO --no-launch
+          wsl --list --verbose 2>&1 | Out-Default
+          # Native commands don't throw in PowerShell; check $LASTEXITCODE.
+          wsl -d $env:WSL_DISTRO -- echo "ok" 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Ubuntu not found — installing via wsl --install …"
+            wsl --install -d $env:WSL_DISTRO --no-launch --web-download
+            if ($LASTEXITCODE -ne 0) {
+              throw "wsl --install failed (exit $LASTEXITCODE)"
+            }
+            # The first launch initialises the distro with the default root user.
+            wsl -d $env:WSL_DISTRO -- bash -c "echo 'distro initialised'"
+            if ($LASTEXITCODE -ne 0) {
+              throw "distro first-launch failed (exit $LASTEXITCODE)"
+            }
+          } else {
+            Write-Host "Ubuntu already available"
           }
           wsl --set-default $env:WSL_DISTRO
+          if ($LASTEXITCODE -ne 0) {
+            throw "wsl --set-default failed (exit $LASTEXITCODE)"
+          }
 
       - name: Verify WSL
         shell: powershell
@@ -105,7 +119,7 @@ jobs:
         run: |
           wsl -d $env:WSL_DISTRO -- bash -lc "
             set -euo pipefail
-            cd '$WSL_WORKDIR'
+            cd '$env:WSL_WORKDIR'
             npm install --ignore-scripts
             cd nemoclaw
             npm install --ignore-scripts
@@ -136,7 +150,7 @@ jobs:
         run: |
           wsl -d $env:WSL_DISTRO -- bash -lc "
             set -euo pipefail
-            cd '$WSL_WORKDIR'
+            cd '$env:WSL_WORKDIR'
             npm test
           "
 
@@ -149,9 +163,9 @@ jobs:
         run: |
           wsl -d $env:WSL_DISTRO -- bash -lc "
             set -euo pipefail
-            cd '$WSL_WORKDIR'
-            export NVIDIA_API_KEY='${{ secrets.NVIDIA_API_KEY }}'
-            export GITHUB_TOKEN='${{ github.token }}'
+            cd '$env:WSL_WORKDIR'
+            export NVIDIA_API_KEY='$env:NVIDIA_API_KEY'
+            export GITHUB_TOKEN='$env:GITHUB_TOKEN'
             export NEMOCLAW_NON_INTERACTIVE='$env:NEMOCLAW_NON_INTERACTIVE'
             export NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE='$env:NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE'
             export NEMOCLAW_RECREATE_SANDBOX='$env:NEMOCLAW_RECREATE_SANDBOX'
