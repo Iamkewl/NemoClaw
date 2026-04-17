@@ -30,11 +30,6 @@ jobs:
   macos-e2e:
     runs-on: macos-26
     timeout-minutes: 30
-    env:
-      NEMOCLAW_NON_INTERACTIVE: "1"
-      NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE: "1"
-      NEMOCLAW_RECREATE_SANDBOX: "1"
-      NEMOCLAW_SANDBOX_NAME: "e2e-macos"
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -87,6 +82,10 @@ jobs:
         env:
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
+          NEMOCLAW_NON_INTERACTIVE: "1"
+          NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE: "1"
+          NEMOCLAW_RECREATE_SANDBOX: "1"
+          NEMOCLAW_SANDBOX_NAME: "e2e-macos"
         run: bash test/e2e/test-full-e2e.sh
 
       - name: Explain skipped full E2E
