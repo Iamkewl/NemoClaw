@@ -15,8 +15,10 @@ describe("fetch-guard patch regression guard", () => {
     expect(src).toContain("min_openclaw_version");
     // Must check installed version against minimum
     expect(src).toContain("openclaw --version");
-    // Must upgrade when stale
-    expect(src).toContain('npm install -g "openclaw@${MIN_VER}"');
+    // Must upgrade when stale (any npm flags between `-g` and the target
+    // are fine — we've needed to add --no-audit/--no-fund/--no-progress
+    // for memory/IO reasons and may need more).
+    expect(src).toMatch(/npm install -g .*"openclaw@\$\{MIN_VER\}"/);
     // The "current" branch must fire when MIN_VER is the smallest (= not !=)
     expect(src).toContain(
       '| sort -V | head -n1)" = "$MIN_VER" ]; then',
