@@ -3953,6 +3953,64 @@ const { checkTelegramReachability } = require(${onboardPath});
     }
   });
 
+  it("checkTelegramReachability reports token error on HTTP 404", () => {
+    const repoRoot = path.join(import.meta.dirname, "..");
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-telegram-404-"));
+    try {
+      const fakeBin = path.join(tmpDir, "bin");
+      const scriptPath = path.join(tmpDir, "telegram-404.js");
+      const onboardPath = JSON.stringify(path.join(repoRoot, "dist", "lib", "onboard.js"));
+      const httpProbePath = JSON.stringify(path.join(repoRoot, "dist", "lib", "http-probe.js"));
+
+      fs.mkdirSync(fakeBin, { recursive: true });
+      fs.writeFileSync(path.join(fakeBin, "openshell"), "#!/usr/bin/env bash\nexit 0\n", {
+        mode: 0o755,
+      });
+
+      const script = `
+const httpProbe = require(${httpProbePath});
+httpProbe.runCurlProbe = () => ({
+  ok: false,
+  httpStatus: 404,
+  curlStatus: 0,
+  body: '{"ok":false,"error_code":404,"description":"Not Found"}',
+  stderr: "",
+  message: "HTTP 404: Not Found",
+});
+process.env.NEMOCLAW_NON_INTERACTIVE = "1";
+const { checkTelegramReachability } = require(${onboardPath});
+(async () => {
+  const logs = [];
+  const origLog = console.log;
+  console.log = (...args) => logs.push(args.join(" "));
+  await checkTelegramReachability("bad-token");
+  console.log = origLog;
+  origLog(JSON.stringify({ logs }));
+})();
+`;
+      fs.writeFileSync(scriptPath, script);
+
+      const result = spawnSync(process.execPath, [scriptPath], {
+        cwd: repoRoot,
+        encoding: "utf-8",
+        env: { ...process.env, HOME: tmpDir, PATH: `${fakeBin}:${process.env.PATH || ""}` },
+      });
+
+      assert.equal(result.status, 0, result.stderr);
+      const payload = JSON.parse(result.stdout.trim().split("\n").pop());
+      assert.ok(
+        payload.logs.some((l) => l.includes("Bot token was rejected by Telegram")),
+        "should report token-specific error, not network error",
+      );
+      assert.ok(
+        !payload.logs.some((l) => l.includes("not reachable")),
+        "should not report network error for token rejection",
+      );
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
   it("checkTelegramReachability surfaces unexpected probe failure (httpStatus 0, unknown curl code)", () => {
     const repoRoot = path.join(import.meta.dirname, "..");
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-telegram-unknown-"));

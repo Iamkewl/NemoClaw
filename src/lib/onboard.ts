@@ -4415,7 +4415,7 @@ const MESSAGING_CHANNELS = [
 // 35 (TLS handshake failure) covers corporate proxies that MITM HTTPS.
 const TELEGRAM_NETWORK_CURL_CODES = new Set([6, 7, 28, 35, 52, 56]);
 
-async function checkTelegramReachability(token) {
+async function checkTelegramReachability(token: string) {
   const result = runCurlProbe([
     "-sS",
     "--connect-timeout", "5",
@@ -4654,7 +4654,14 @@ async function setupMessagingChannels() {
   console.log("");
 
   // Preflight: verify Telegram API is reachable from the host before sandbox creation.
-  if (selected.includes("telegram") && getMessagingToken("TELEGRAM_BOT_TOKEN")) {
+  // The non-interactive branch above already ran this probe and returned early,
+  // so this second call only fires on the interactive path — guard explicitly
+  // to make the no-double-probe invariant visible at the call site.
+  if (
+    !isNonInteractive() &&
+    selected.includes("telegram") &&
+    getMessagingToken("TELEGRAM_BOT_TOKEN")
+  ) {
     await checkTelegramReachability(getMessagingToken("TELEGRAM_BOT_TOKEN"));
   }
 
