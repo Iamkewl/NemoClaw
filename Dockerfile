@@ -111,6 +111,13 @@ RUN set -eu; \
 #   target hostname allowlist for the proxy hostname check (or exposes config
 #   to disable the check).
 #
+# SYNC WITH OPENCLAW: these patches grep for specific exports and function
+# definitions in the compiled OpenClaw dist (withStrictGuardedFetchMode,
+# assertExplicitProxyAllowed). If OpenClaw renames, removes, or restructures
+# either symbol in a future release, the grep will fail and the build will
+# abort. When bumping OPENCLAW_VERSION, verify both symbols still exist in
+# the new dist and update the regex / sed replacement accordingly.
+#
 # Both patches fail-close: if grep finds no targets, the build aborts so
 # the next maintainer reviewing an OPENCLAW_VERSION bump knows to revisit.
 # hadolint ignore=SC2016,DL3059,DL4006
