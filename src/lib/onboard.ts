@@ -126,7 +126,7 @@ const BACK_TO_SELECTION = "__NEMOCLAW_BACK_TO_SELECTION__";
  *
  * Returns "running" | "missing" | "unknown".
  * - "running"  — container exists and State.Running is true
- * - "missing"  — docker reports "No such object" (container was removed)
+ * - "missing"  — container was removed or exists but is stopped (not reusable)
  * - "unknown"  — any other failure (daemon down, timeout, etc.)
  *
  * Callers should only trigger stale-metadata cleanup on "missing", not on
@@ -141,6 +141,10 @@ function verifyGatewayContainerRunning() {
   );
   if (result.status === 0 && (result.stdout || "").trim() === "true") {
     return "running";
+  }
+  // Container exists but is stopped (exit 0, Running !== "true")
+  if (result.status === 0) {
+    return "missing";
   }
   const stderr = (result.stderr || "").toString();
   if (stderr.includes("No such object") || stderr.includes("No such container")) {
