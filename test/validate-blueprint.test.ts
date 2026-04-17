@@ -41,6 +41,51 @@ describe("blueprint.yaml", () => {
     expect(Object.keys(defined!).length).toBeGreaterThan(0);
   });
 
+  it("regression #1438: sandbox image is pinned by digest, not by mutable tag", () => {
+    // The blueprint MUST NOT pull a sandbox image by a mutable tag like
+    // ":latest" — a registry compromise or accidental force-push could
+    // silently swap the image. Pin via @sha256:... so the image cannot
+    // change without a corresponding blueprint update.
+    const sandbox = (bp.components as Record<string, unknown> | undefined)?.sandbox as
+      | { image?: unknown }
+      | undefined;
+    const image = typeof sandbox?.image === "string" ? sandbox.image : "";
+    expect(image.length).toBeGreaterThan(0);
+    expect(image).toContain("@sha256:");
+    // Belt and braces: explicitly forbid the ":latest" tag form even if the
+    // image string has been rearranged.
+    expect(image).not.toMatch(/:latest$/);
+    expect(image).not.toMatch(/:latest@/);
+    // The digest itself must be a 64-hex sha256.
+    const digestMatch = image.match(/@sha256:([0-9a-f]{64})$/);
+    expect(digestMatch).not.toBeNull();
+  });
+
+  it("regression #1438: top-level digest field is populated and matches the image digest", () => {
+    // The top-level `digest:` field at the top of blueprint.yaml is
+    // documented as "Computed at release time" and was empty on main,
+    // which left blueprint-level integrity unverifiable. Mirror the
+    // sandbox image manifest digest into the top-level field so any
+    // consumer can read a single field to know what's pinned, and so
+    // a future contributor can't bump one without bumping the other.
+    const topLevelDigest = typeof bp.digest === "string" ? bp.digest : "";
+    expect(topLevelDigest.length).toBeGreaterThan(0);
+    // Must be a sha256:<64-hex> string.
+    expect(topLevelDigest).toMatch(/^sha256:[0-9a-f]{64}$/);
+
+    const sandbox = (bp.components as Record<string, unknown> | undefined)?.sandbox as
+      | { image?: unknown }
+      | undefined;
+    const image = typeof sandbox?.image === "string" ? sandbox.image : "";
+    const imageDigestMatch = image.match(/@sha256:([0-9a-f]{64})$/);
+    expect(imageDigestMatch).not.toBeNull();
+    const imageDigest = `sha256:${imageDigestMatch?.[1] ?? ""}`;
+
+    // The two digests must agree. If a future bump touches one but not
+    // the other, this assertion catches it before merge.
+    expect(topLevelDigest).toBe(imageDigest);
+  });
+
   for (const name of declared) {
     describe(`profile '${name}'`, () => {
       it("has a definition", () => {
@@ -207,6 +252,19 @@ describe("base sandbox policy", () => {
       (h) => h === "github.com" || h === "api.github.com",
     );
     expect(githubHosts).toEqual([]);
+  });
+
+  it("regression #1458: baseline npm_registry must not include npm or node binaries", () => {
+    const np = policy.network_policies as Record<string, Record<string, unknown>>;
+    const npmRegistry = np.npm_registry;
+    expect(npmRegistry).toBeDefined();
+    const binaries = npmRegistry.binaries as Array<{ path: string }> | undefined;
+    expect(Array.isArray(binaries)).toBe(true);
+    const paths = (binaries ?? []).map((b) => b.path).sort();
+    // Only openclaw CLI should reach the npm registry by default.
+    // npm/node being in this list lets the agent bypass 'none' policy preset.
+    // Exact allowlist — adding any binary here requires a deliberate review.
+    expect(paths).toEqual(["/usr/local/bin/openclaw"]);
   });
 });
 
