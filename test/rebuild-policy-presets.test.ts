@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -41,39 +41,26 @@ afterEach(() => {
   } else {
     process.env.HOME = originalHome;
   }
+  vi.restoreAllMocks();
 });
 
 /**
- * These tests verify the preset-merge logic that sandboxRebuild() performs
- * before deleting the sandbox. The merge step reads applied presets from
- * the registry (via policies.getAppliedPresets) and merges them into the
- * onboard session so the resume path replays the full set.
- *
- * We exercise the merge inline rather than calling sandboxRebuild() directly,
- * because the function orchestrates sandbox lifecycle operations (openshell
- * calls, backup/restore) that require a live environment. The logic under
- * test is the session-update block added in the fix for #1952.
+ * These tests exercise the production `mergePresetsIntoSession()` helper
+ * exported from `src/lib/policies.ts`, which is the same function called
+ * by `sandboxRebuild()`. We set up registry sandbox entries so that
+ * `getAppliedPresets` (called internally) reads real data.
  */
 describe("rebuild preserves policy presets added after onboard", () => {
   it("merges applied presets into session presets with deduplication", () => {
-    // Simulate: onboard saved ["web-search"], user later ran `policy-add telegram`
     session.saveSession(session.createSession());
     session.updateSession((s) => {
       s.policyPresets = ["web-search"];
       return s;
     });
 
-    // Registry has both the original and the manually added preset
-    const appliedPresets = ["web-search", "telegram"];
+    registry.registerSandbox({ name: "test-sandbox", policies: ["web-search", "telegram"] });
 
-    // --- This is the merge logic from sandboxRebuild() ---
-    if (appliedPresets.length > 0) {
-      session.updateSession((s) => {
-        const sessionPresets = Array.isArray(s.policyPresets) ? s.policyPresets : [];
-        s.policyPresets = [...new Set([...sessionPresets, ...appliedPresets])];
-        return s;
-      });
-    }
+    policies.mergePresetsIntoSession("test-sandbox", session);
 
     const updated = session.loadSession();
     expect(updated.policyPresets).toEqual(["web-search", "telegram"]);
@@ -81,17 +68,10 @@ describe("rebuild preserves policy presets added after onboard", () => {
 
   it("handles session with no prior policyPresets", () => {
     session.saveSession(session.createSession());
-    // No policyPresets set in session (undefined/null)
 
-    const appliedPresets = ["slack", "discord"];
+    registry.registerSandbox({ name: "test-sandbox", policies: ["slack", "discord"] });
 
-    if (appliedPresets.length > 0) {
-      session.updateSession((s) => {
-        const sessionPresets = Array.isArray(s.policyPresets) ? s.policyPresets : [];
-        s.policyPresets = [...new Set([...sessionPresets, ...appliedPresets])];
-        return s;
-      });
-    }
+    policies.mergePresetsIntoSession("test-sandbox", session);
 
     const updated = session.loadSession();
     expect(updated.policyPresets).toEqual(["slack", "discord"]);
@@ -104,16 +84,9 @@ describe("rebuild preserves policy presets added after onboard", () => {
       return s;
     });
 
-    const appliedPresets = [];
+    registry.registerSandbox({ name: "test-sandbox", policies: [] });
 
-    // The merge block is guarded by appliedPresets.length > 0
-    if (appliedPresets.length > 0) {
-      session.updateSession((s) => {
-        const sessionPresets = Array.isArray(s.policyPresets) ? s.policyPresets : [];
-        s.policyPresets = [...new Set([...sessionPresets, ...appliedPresets])];
-        return s;
-      });
-    }
+    policies.mergePresetsIntoSession("test-sandbox", session);
 
     const updated = session.loadSession();
     expect(updated.policyPresets).toEqual(["web-search"]);
@@ -126,28 +99,23 @@ describe("rebuild preserves policy presets added after onboard", () => {
       return s;
     });
 
-    // Simulate getAppliedPresets throwing (degraded sandbox)
-    const getAppliedPresets = () => {
-      throw new Error("sandbox not responding");
-    };
+    // Make the registry file unreadable to trigger a ConfigPermissionError
+    registry.registerSandbox({ name: "test-sandbox", policies: ["telegram"] });
+    const registryPath = path.join(tmpDir, ".nemoclaw", "sandboxes.json");
+    fs.chmodSync(registryPath, 0o000);
 
-    // --- This is the try/catch from sandboxRebuild() ---
-    try {
-      const appliedPresets = getAppliedPresets();
-      if (appliedPresets.length > 0) {
-        session.updateSession((s) => {
-          const sessionPresets = Array.isArray(s.policyPresets) ? s.policyPresets : [];
-          s.policyPresets = [...new Set([...sessionPresets, ...appliedPresets])];
-          return s;
-        });
-      }
-    } catch {
-      // Fall back to whatever the session already has
-    }
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    // Session presets should be unchanged
+    policies.mergePresetsIntoSession("test-sandbox", session);
+
+    // Restore permissions for cleanup
+    fs.chmodSync(path.join(tmpDir, ".nemoclaw", "sandboxes.json"), 0o644);
+
     const updated = session.loadSession();
     expect(updated.policyPresets).toEqual(["web-search"]);
+    expect(errSpy).toHaveBeenCalledWith(
+      expect.stringContaining("could not read applied presets"),
+    );
   });
 
   it("does not duplicate presets that exist in both session and applied", () => {
@@ -157,16 +125,9 @@ describe("rebuild preserves policy presets added after onboard", () => {
       return s;
     });
 
-    // Applied has overlap: web-search already in session, telegram is new
-    const appliedPresets = ["web-search", "npm", "telegram"];
+    registry.registerSandbox({ name: "test-sandbox", policies: ["web-search", "npm", "telegram"] });
 
-    if (appliedPresets.length > 0) {
-      session.updateSession((s) => {
-        const sessionPresets = Array.isArray(s.policyPresets) ? s.policyPresets : [];
-        s.policyPresets = [...new Set([...sessionPresets, ...appliedPresets])];
-        return s;
-      });
-    }
+    policies.mergePresetsIntoSession("test-sandbox", session);
 
     const updated = session.loadSession();
     expect(updated.policyPresets).toEqual(["web-search", "npm", "telegram"]);

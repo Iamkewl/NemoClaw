@@ -474,6 +474,38 @@ function getAppliedPresets(sandboxName) {
   return sandbox ? sandbox.policies || [] : [];
 }
 
+/**
+ * Reads applied presets from the registry for `sandboxName` and merges them
+ * (with dedup) into the onboard session's `policyPresets`.  This preserves
+ * presets added via `policy-add` after the initial onboard — they live only
+ * in the registry's sandbox entry, which is deleted during rebuild.
+ *
+ * @param sandboxName  Name of the sandbox being rebuilt.
+ * @param sessionMod   The onboard-session module (must expose updateSession / loadSession).
+ * @param log          Verbose-only logger (e.g. the `log()` helper in nemoclaw.ts).
+ */
+function mergePresetsIntoSession(sandboxName, sessionMod, log = () => {}) {
+  try {
+    const appliedPresets = getAppliedPresets(sandboxName);
+    log(`Applied presets before rebuild: ${appliedPresets.join(", ") || "(none)"}`);
+    if (appliedPresets.length > 0) {
+      sessionMod.updateSession((s) => {
+        const sessionPresets = Array.isArray(s.policyPresets) ? s.policyPresets : [];
+        s.policyPresets = [...new Set([...sessionPresets, ...appliedPresets])];
+        return s;
+      });
+      log(`Session policyPresets updated: ${sessionMod.loadSession()?.policyPresets?.join(", ")}`);
+    }
+  } catch (err) {
+    const reason = err && err.message ? err.message : String(err);
+    console.error(
+      `  Warning: could not read applied presets; continuing rebuild with session presets only (${reason}).`,
+    );
+    log(`Applied preset lookup failed: ${reason}`);
+    // Fall back to whatever the session already has — don't block rebuild.
+  }
+}
+
 function selectFromList(items, { applied = [] } = {}) {
   return new Promise((resolve) => {
     process.stderr.write("\n  Available presets:\n");
@@ -586,6 +618,7 @@ export {
   removePreset,
   applyPermissivePolicy,
   getAppliedPresets,
+  mergePresetsIntoSession,
   selectFromList,
   selectForRemoval,
 };
