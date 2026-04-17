@@ -56,6 +56,14 @@ const mockMemoryConfig = vi.hoisted(() => ({
 
 vi.mock("../memory/config.js", () => mockMemoryConfig);
 
+vi.mock("./shields-status.js", () => ({
+  slashShieldsStatus: vi.fn(() => ({ text: "**Shields: UP**" })),
+}));
+
+vi.mock("./config-show.js", () => ({
+  slashConfigShow: vi.fn(() => ({ text: "**NemoClaw Config**" })),
+}));
+
 // ---------------------------------------------------------------------------
 // Mock node:fs for slashMemoryMigrate
 // ---------------------------------------------------------------------------
@@ -118,6 +126,14 @@ function blankState(): NemoClawState {
     hostBackupPath: null,
     createdAt: null,
     updatedAt: new Date().toISOString(),
+    lastRebuildAt: null,
+    lastRebuildBackupPath: null,
+    shieldsDown: false,
+    shieldsDownAt: null,
+    shieldsDownTimeout: null,
+    shieldsDownReason: null,
+    shieldsDownPolicy: null,
+    shieldsPolicySnapshotPath: null,
   };
 }
 
@@ -159,6 +175,8 @@ describe("commands/slash", () => {
       expect(result.text).toContain("NemoClaw");
       expect(result.text).toContain("Subcommands:");
       expect(result.text).toContain("status");
+      expect(result.text).toContain("shields");
+      expect(result.text).toContain("config");
       expect(result.text).toContain("eject");
       expect(result.text).toContain("onboard");
       expect(result.text).toContain("memory");
@@ -175,6 +193,28 @@ describe("commands/slash", () => {
   });
 
   // -------------------------------------------------------------------------
+  // shields (routing)
+  // -------------------------------------------------------------------------
+
+  describe("shields", () => {
+    it("routes to shields status handler", () => {
+      const result = handleSlashCommand(makeCtx("shields"), makeApi());
+      expect(result.text).toContain("Shields");
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // config (routing)
+  // -------------------------------------------------------------------------
+
+  describe("config", () => {
+    it("routes to config show handler", () => {
+      const result = handleSlashCommand(makeCtx("config"), makeApi());
+      expect(result.text).toContain("Config");
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // status
   // -------------------------------------------------------------------------
 
@@ -186,12 +226,11 @@ describe("commands/slash", () => {
 
     it("reports state when last action exists", () => {
       mockedLoadState.mockReturnValue({
+        ...blankState(),
         lastRunId: "run-123",
         lastAction: "deploy",
         blueprintVersion: "1.0.0",
         sandboxName: "test-sandbox",
-        migrationSnapshot: null,
-        hostBackupPath: null,
         createdAt: "2026-03-01T00:00:00.000Z",
         updatedAt: "2026-03-01T00:00:00.000Z",
       });
@@ -202,14 +241,31 @@ describe("commands/slash", () => {
       expect(result.text).toContain("Sandbox: test-sandbox");
     });
 
+    it("includes rebuild info when present", () => {
+      mockedLoadState.mockReturnValue({
+        ...blankState(),
+        lastRunId: "run-789",
+        lastAction: "rebuild",
+        blueprintVersion: "2.0.0",
+        sandboxName: "sb",
+        lastRebuildAt: "2026-04-15T10:00:00Z",
+        lastRebuildBackupPath: "/backups/rebuild-001",
+        createdAt: "2026-03-01T00:00:00.000Z",
+        updatedAt: "2026-03-01T00:00:00.000Z",
+      });
+      const result = handleSlashCommand(makeCtx("status"), makeApi());
+      expect(result.text).toContain("Last rebuild: 2026-04-15T10:00:00Z");
+      expect(result.text).toContain("Rebuild backup: /backups/rebuild-001");
+    });
+
     it("includes rollback snapshot when present", () => {
       mockedLoadState.mockReturnValue({
+        ...blankState(),
         lastRunId: "run-456",
         lastAction: "migrate",
         blueprintVersion: "2.0.0",
         sandboxName: "sb",
         migrationSnapshot: "/snapshots/snap-001",
-        hostBackupPath: null,
         createdAt: "2026-03-01T00:00:00.000Z",
         updatedAt: "2026-03-01T00:00:00.000Z",
       });
@@ -230,12 +286,11 @@ describe("commands/slash", () => {
 
     it("reports manual rollback required when no snapshot exists", () => {
       mockedLoadState.mockReturnValue({
+        ...blankState(),
         lastRunId: "run-1",
         lastAction: "deploy",
         blueprintVersion: "1.0.0",
         sandboxName: "sb",
-        migrationSnapshot: null,
-        hostBackupPath: null,
         createdAt: "2026-03-01T00:00:00.000Z",
         updatedAt: "2026-03-01T00:00:00.000Z",
       });
@@ -245,12 +300,12 @@ describe("commands/slash", () => {
 
     it("shows eject instructions when migration snapshot exists", () => {
       mockedLoadState.mockReturnValue({
+        ...blankState(),
         lastRunId: "run-1",
         lastAction: "migrate",
         blueprintVersion: "1.0.0",
         sandboxName: "sb",
         migrationSnapshot: "/snapshots/snap-001",
-        hostBackupPath: null,
         createdAt: "2026-03-01T00:00:00.000Z",
         updatedAt: "2026-03-01T00:00:00.000Z",
       });
@@ -262,11 +317,11 @@ describe("commands/slash", () => {
 
     it("uses hostBackupPath when migrationSnapshot is absent", () => {
       mockedLoadState.mockReturnValue({
+        ...blankState(),
         lastRunId: "run-1",
         lastAction: "deploy",
         blueprintVersion: "1.0.0",
         sandboxName: "sb",
-        migrationSnapshot: null,
         hostBackupPath: "/backups/backup-001",
         createdAt: "2026-03-01T00:00:00.000Z",
         updatedAt: "2026-03-01T00:00:00.000Z",
