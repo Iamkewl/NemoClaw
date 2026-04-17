@@ -1404,6 +1404,10 @@ function sandboxPolicyList(sandboxName) {
   console.log("");
 }
 
+/**
+ * Install or update a local skill directory into a live sandbox and perform
+ * any agent-specific post-install refresh needed for the new content to load.
+ */
 async function sandboxSkillInstall(sandboxName, args = []) {
   const sub = args[0];
   if (!sub || sub === "help" || sub === "--help" || sub === "-h") {
@@ -1525,9 +1529,9 @@ async function sandboxSkillInstall(sandboxName, args = []) {
     console.log(`  ${G}✓${R} Uploaded ${uploaded} file(s) to sandbox`);
 
     // 7. Post-install (OpenClaw mirror + refresh, or restart hint).
-    //    Skip session refresh on updates — the agent already knows the skill;
-    //    clearing sessions would destroy chat history unnecessarily.
-    const post = skillInstall.postInstall(ctx, paths, skillDir, { skipRefresh: isUpdate });
+    //    OpenClaw caches skill content per session, so always refresh the
+    //    session index after an install/update to avoid stale SKILL.md data.
+    const post = skillInstall.postInstall(ctx, paths, skillDir);
     for (const msg of post.messages) {
       if (msg.startsWith("Warning:")) {
         console.error(`  ${YW}${msg}${R}`);
