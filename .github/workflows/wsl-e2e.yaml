@@ -159,7 +159,7 @@ jobs:
           $script = @"
           set -euo pipefail
           cd '$env:WSL_WORKDIR'
-          npm test
+          npx vitest run --testTimeout 30000
           "@
           $tmp = "$env:RUNNER_TEMP\wsl-step.sh"
           [IO.File]::WriteAllText($tmp, ($script -replace "`r",""), (New-Object System.Text.UTF8Encoding $false))
