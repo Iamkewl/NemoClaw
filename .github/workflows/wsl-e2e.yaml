@@ -116,6 +116,7 @@ jobs:
           set -euo pipefail
           cd '$env:WSL_WORKDIR'
           npm install --ignore-scripts
+          npm run build:cli
           cd nemoclaw
           npm install --ignore-scripts
           npm run build
