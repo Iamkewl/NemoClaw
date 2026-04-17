@@ -2374,7 +2374,7 @@ async function preflight() {
   if (gatewayReuseState === "healthy" && !verifyGatewayContainerRunning()) {
     console.log("  Gateway metadata is stale (container not running). Cleaning up...");
     runOpenshell(["forward", "stop", String(DASHBOARD_PORT)], { ignoreError: true });
-    runOpenshell(["gateway", "destroy", "-g", GATEWAY_NAME], { ignoreError: true });
+    destroyGateway();
     registry.clearAll();
     gatewayReuseState = "missing";
     console.log("  ✓ Stale gateway metadata cleaned up");
@@ -5925,7 +5925,7 @@ async function onboard(opts = {}) {
     if (gatewayReuseState === "healthy" && !verifyGatewayContainerRunning()) {
       console.log("  Gateway metadata is stale (container not running). Cleaning up...");
       runOpenshell(["forward", "stop", String(DASHBOARD_PORT)], { ignoreError: true });
-      runOpenshell(["gateway", "destroy", "-g", GATEWAY_NAME], { ignoreError: true });
+      destroyGateway();
       registry.clearAll();
       gatewayReuseState = "missing";
       console.log("  ✓ Stale gateway metadata cleaned up");

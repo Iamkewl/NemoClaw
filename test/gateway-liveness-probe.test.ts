@@ -37,7 +37,9 @@ describe("gateway liveness probe (#2020)", () => {
 
   it("main onboard flow probes the container before canReuseHealthyGateway", () => {
     // The main onboard flow must also probe before setting canReuseHealthyGateway.
-    const mainFlowProbe = content.match(
+    // Scope to the onboard() function so the regex can't accidentally match the preflight block.
+    const onboardSection = content.slice(content.indexOf("async function onboard("));
+    const mainFlowProbe = onboardSection.match(
       /let gatewayReuseState = getGatewayReuseState[\s\S]*?verifyGatewayContainerRunning\(\)[\s\S]*?const canReuseHealthyGateway/,
     );
     expect(mainFlowProbe).toBeTruthy();
@@ -52,21 +54,27 @@ describe("gateway liveness probe (#2020)", () => {
 
   it("cleans up stale metadata when container is not running", () => {
     // After detecting a stale container, the code must clean up forwarding
-    // and destroy the gateway — same as the existing stale path.
+    // and destroy the gateway via the shared destroyGateway() helper.
     const cleanupAfterProbe = content.match(
-      /!verifyGatewayContainerRunning\(\)[\s\S]*?forward.*stop[\s\S]*?gateway.*destroy/,
+      /!verifyGatewayContainerRunning\(\)[\s\S]*?forward.*stop[\s\S]*?destroyGateway\(\)/,
     );
     expect(cleanupAfterProbe).toBeTruthy();
   });
 
   it("does not modify isGatewayHealthy() in gateway-state.ts", () => {
-    // isGatewayHealthy() must remain a pure function — no I/O
+    // isGatewayHealthy() must remain a pure function — no I/O.
+    // Scope the check to the function body so unrelated helpers don't cause false failures.
     const gsContent = fs.readFileSync(
       path.join(ROOT, "src/lib/gateway-state.ts"),
       "utf-8",
     );
-    expect(gsContent).not.toContain("docker");
-    expect(gsContent).not.toContain("spawn");
-    expect(gsContent).not.toContain("exec");
+    const fnMatch = gsContent.match(
+      /(?:function isGatewayHealthy|const isGatewayHealthy\b)[\s\S]*?\n\}/,
+    );
+    expect(fnMatch).toBeTruthy();
+    const fnBody = fnMatch[0];
+    expect(fnBody).not.toContain("docker");
+    expect(fnBody).not.toContain("spawn");
+    expect(fnBody).not.toContain("exec");
   });
 });
