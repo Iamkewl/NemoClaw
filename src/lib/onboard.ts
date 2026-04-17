@@ -1271,7 +1271,7 @@ function probeResponsesToolCalling(endpointUrl, model, apiKey, options = {}) {
     ? ["-H", `Authorization: Bearer ${normalizedKey}`]
     : [];
   const url = useQueryParam && normalizedKey
-    ? `${baseUrl}/responses?key=${normalizedKey}`
+    ? `${baseUrl}/responses?key=${encodeURIComponent(normalizedKey)}`
     : `${baseUrl}/responses`;
   const result = runCurlProbe([
     "-sS",
@@ -1327,7 +1327,7 @@ function probeOpenAiLikeEndpoint(endpointUrl, model, apiKey, options = {}) {
     ? ["-H", `Authorization: Bearer ${normalizedKey}`]
     : [];
   const appendKey = (path) =>
-    useQueryParam && normalizedKey ? `${baseUrl}${path}?key=${normalizedKey}` : `${baseUrl}${path}`;
+    useQueryParam && normalizedKey ? `${baseUrl}${path}?key=${encodeURIComponent(normalizedKey)}` : `${baseUrl}${path}`;
 
   const responsesProbe =
     options.requireResponsesToolCalling === true
