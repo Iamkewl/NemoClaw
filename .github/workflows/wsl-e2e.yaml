@@ -53,25 +53,25 @@ jobs:
         shell: powershell
         run: |
           wsl --list --verbose 2>&1 | Out-Default
-          # Native commands don't throw in PowerShell; check $LASTEXITCODE.
-          wsl -d $env:WSL_DISTRO -- echo "ok" 2>$null
+          # Native commands do not throw in PowerShell; check LASTEXITCODE.
+          $null = wsl -d $env:WSL_DISTRO -- echo ok 2>&1
           if ($LASTEXITCODE -ne 0) {
-            Write-Host "Ubuntu not found — installing via wsl --install …"
+            Write-Host 'Ubuntu not found - installing via wsl --install'
             wsl --install -d $env:WSL_DISTRO --no-launch --web-download
             if ($LASTEXITCODE -ne 0) {
-              throw "wsl --install failed (exit $LASTEXITCODE)"
+              throw ('wsl --install failed with exit code ' + $LASTEXITCODE)
             }
             # The first launch initialises the distro with the default root user.
-            wsl -d $env:WSL_DISTRO -- bash -c "echo 'distro initialised'"
+            wsl -d $env:WSL_DISTRO -- bash -c 'echo distro initialised'
             if ($LASTEXITCODE -ne 0) {
-              throw "distro first-launch failed (exit $LASTEXITCODE)"
+              throw ('distro first-launch failed with exit code ' + $LASTEXITCODE)
             }
           } else {
-            Write-Host "Ubuntu already available"
+            Write-Host 'Ubuntu already available'
           }
           wsl --set-default $env:WSL_DISTRO
           if ($LASTEXITCODE -ne 0) {
-            throw "wsl --set-default failed (exit $LASTEXITCODE)"
+            throw ('wsl --set-default failed with exit code ' + $LASTEXITCODE)
           }
 
       - name: Verify WSL
