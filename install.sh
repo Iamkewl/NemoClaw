@@ -109,14 +109,14 @@ bootstrap_usage() {
 bootstrap_main() {
   for arg in "$@"; do
     case "$arg" in
-    --help | -h)
-      bootstrap_usage
-      return 0
-      ;;
-    --version | -v)
-      bootstrap_version
-      return 0
-      ;;
+      --help | -h)
+        bootstrap_usage
+        return 0
+        ;;
+      --version | -v)
+        bootstrap_version
+        return 0
+        ;;
     esac
   done
 

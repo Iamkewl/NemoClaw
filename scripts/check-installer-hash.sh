@@ -18,11 +18,11 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 case "${1:-}" in
-"" | --update) ;;
-*)
-  echo "Usage: scripts/check-installer-hash.sh [--update]" >&2
-  exit 2
-  ;;
+  "" | --update) ;;
+  *)
+    echo "Usage: scripts/check-installer-hash.sh [--update]" >&2
+    exit 2
+    ;;
 esac
 
 # ---------------------------------------------------------------------------
