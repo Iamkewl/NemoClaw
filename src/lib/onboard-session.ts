@@ -660,73 +660,96 @@ export function updateSession(mutator: (session: Session) => Session | void): Se
   return saveSession(next);
 }
 
-export function markStepStarted(stepName: OnboardStepName): Session {
-  return updateSession((session) => {
-    const step = session.steps[stepName];
-    if (!step) return session;
-    step.status = "in_progress";
-    step.startedAt = new Date().toISOString();
-    step.completedAt = null;
-    step.error = null;
-    session.lastStepStarted = stepName;
-    session.failure = null;
-    session.status = "in_progress";
-    return session;
+export function applyStepStarted(session: Session, stepName: OnboardStepName): Session {
+  const step = session.steps[stepName];
+  if (!step) return session;
+  step.status = "in_progress";
+  step.startedAt = new Date().toISOString();
+  step.completedAt = null;
+  step.error = null;
+  session.lastStepStarted = stepName;
+  session.failure = null;
+  session.status = "in_progress";
+  synchronizeRuntimeSteps(session);
+  return session;
+}
+
+export function applyStepComplete(
+  session: Session,
+  stepName: OnboardStepName,
+  updates: SessionUpdates = {},
+): Session {
+  const step = session.steps[stepName];
+  if (!step) return session;
+  step.status = "complete";
+  step.completedAt = new Date().toISOString();
+  step.error = null;
+  session.lastCompletedStep = stepName;
+  session.failure = null;
+  Object.assign(session, filterSafeUpdates(updates));
+  synchronizeRuntimeSteps(session);
+  return session;
+}
+
+export function applyStepSkipped(session: Session, stepName: OnboardStepName): Session {
+  const step = session.steps[stepName];
+  if (!step) return session;
+  if (step.status === "complete" || step.status === "failed") return session;
+  step.status = "skipped";
+  step.startedAt = null;
+  step.completedAt = null;
+  step.error = null;
+  synchronizeRuntimeSteps(session);
+  return session;
+}
+
+export function applyStepFailed(
+  session: Session,
+  stepName: OnboardStepName,
+  message: string | null = null,
+): Session {
+  const step = session.steps[stepName];
+  if (!step) return session;
+  step.status = "failed";
+  step.completedAt = null;
+  step.error = redactSensitiveText(message);
+  session.failure = sanitizeFailure({
+    step: stepName,
+    message,
+    recordedAt: new Date().toISOString(),
   });
+  session.status = "failed";
+  synchronizeRuntimeSteps(session);
+  return session;
+}
+
+export function applySessionComplete(session: Session, updates: SessionUpdates = {}): Session {
+  Object.assign(session, filterSafeUpdates(updates));
+  session.status = "complete";
+  session.resumable = false;
+  session.failure = null;
+  synchronizeRuntimeSteps(session);
+  return session;
+}
+
+export function markStepStarted(stepName: OnboardStepName): Session {
+  return updateSession((session) => applyStepStarted(session, stepName));
 }
 
 export function markStepComplete(stepName: OnboardStepName, updates: SessionUpdates = {}): Session {
-  return updateSession((session) => {
-    const step = session.steps[stepName];
-    if (!step) return session;
-    step.status = "complete";
-    step.completedAt = new Date().toISOString();
-    step.error = null;
-    session.lastCompletedStep = stepName;
-    session.failure = null;
-    Object.assign(session, filterSafeUpdates(updates));
-    return session;
-  });
+  return updateSession((session) => applyStepComplete(session, stepName, updates));
 }
 
 export function markStepSkipped(stepName: OnboardStepName): Session {
-  return updateSession((session) => {
-    const step = session.steps[stepName];
-    if (!step) return session;
-    if (step.status === "complete" || step.status === "failed") return session;
-    step.status = "skipped";
-    step.startedAt = null;
-    step.completedAt = null;
-    step.error = null;
-    return session;
-  });
+  return updateSession((session) => applyStepSkipped(session, stepName));
 }
 
 export function markStepFailed(stepName: OnboardStepName, message: string | null = null): Session {
-  return updateSession((session) => {
-    const step = session.steps[stepName];
-    if (!step) return session;
-    step.status = "failed";
-    step.completedAt = null;
-    step.error = redactSensitiveText(message);
-    session.failure = sanitizeFailure({
-      step: stepName,
-      message,
-      recordedAt: new Date().toISOString(),
-    });
-    session.status = "failed";
-    return session;
-  });
+  return updateSession((session) => applyStepFailed(session, stepName, message));
 }
 
 export function completeSession(updates: SessionUpdates = {}): Session {
-  return updateSession((session) => {
-    Object.assign(session, filterSafeUpdates(updates));
-    session.status = "complete";
-    session.resumable = false;
-    session.failure = null;
-    return session;
-  });
+  return updateSession((session) => applySessionComplete(session, updates));
 }
 
 export function summarizeForDebug(session: Session | null = loadSession()): Record<
