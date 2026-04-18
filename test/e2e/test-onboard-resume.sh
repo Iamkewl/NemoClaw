@@ -244,25 +244,25 @@ else
   fail "Resume did not skip sandbox"
 fi
 
-if echo "$resume_output" | grep -q "\[1/7\] Preflight checks"; then
+if echo "$resume_output" | grep -q "\[1/8\] Preflight checks"; then
   fail "Resume reran preflight unexpectedly"
 else
   pass "Resume did not rerun preflight"
 fi
 
-if echo "$resume_output" | grep -q "\[2/7\] Starting OpenShell gateway"; then
+if echo "$resume_output" | grep -q "\[2/8\] Starting OpenShell gateway"; then
   fail "Resume reran gateway startup unexpectedly"
 else
   pass "Resume did not rerun gateway startup"
 fi
 
-if echo "$resume_output" | grep -q "\[5/7\] Creating sandbox"; then
+if echo "$resume_output" | grep -q "\[6/8\] Creating sandbox"; then
   fail "Resume reran sandbox creation unexpectedly"
 else
   pass "Resume did not rerun sandbox creation"
 fi
 
-if echo "$resume_output" | grep -q "\[4/7\] Setting up inference provider"; then
+if echo "$resume_output" | grep -q "\[4/8\] Setting up inference provider"; then
   pass "Resume continued with inference setup"
 else
   fail "Resume did not continue with inference setup"
@@ -282,11 +282,13 @@ if (data.status !== "complete") process.exit(1);
 if (data.provider !== "nvidia-prod") process.exit(2);
 if (data.steps.preflight.status !== "complete") process.exit(3);
 if (data.steps.gateway.status !== "complete") process.exit(4);
-if (data.steps.sandbox.status !== "complete") process.exit(5);
-if (data.steps.provider_selection.status !== "complete") process.exit(6);
-if (data.steps.inference.status !== "complete") process.exit(7);
-if (data.steps.openclaw.status !== "complete") process.exit(8);
-if (data.steps.policies.status !== "complete") process.exit(9);
+if (data.steps.provider_selection.status !== "complete") process.exit(5);
+if (data.steps.inference.status !== "complete") process.exit(6);
+if (data.steps.messaging.status !== "complete") process.exit(7);
+if (data.steps.sandbox.status !== "complete") process.exit(8);
+if (data.steps.runtime_setup.status !== "complete") process.exit(9);
+if (data.steps.openclaw.status !== "complete") process.exit(10);
+if (data.steps.policies.status !== "complete") process.exit(11);
 ' "$SESSION_FILE"
 case $? in
   0) pass "Session file recorded full completion after resume" ;;
