@@ -225,6 +225,22 @@ describe("onboard-flow-state", () => {
     expect(hasCompletedOnboardStep(state, "sandbox")).toBe(false);
   });
 
+  it("treats legacy session.agent='openclaw' as the default runtime target", () => {
+    const session = createSession({
+      agent: "openclaw",
+      sandboxName: "alpha",
+      provider: "openai-api",
+      model: "gpt-5.4",
+      status: "complete",
+      resumable: false,
+    });
+    session.steps.policies.status = "complete";
+
+    const state = deriveOnboardFlowState(session);
+    expect(state.phase).toBe("complete");
+    expect(state.ctx.runtimeTarget).toEqual({ kind: "openclaw" });
+  });
+
   it("keeps agent runtime targets and completed policy state", () => {
     const session = createSession({
       status: "complete",

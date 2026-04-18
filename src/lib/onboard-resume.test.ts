@@ -71,4 +71,16 @@ describe("onboard-resume", () => {
       "  Or rerun with the original settings to continue that session.",
     ]);
   });
+
+  it("tells users to resume without --from when the recorded session omitted it", () => {
+    const lines = buildResumeConflictLines([
+      { field: "fromDockerfile", requested: "/tmp/Requested.Dockerfile", recorded: null },
+    ]);
+
+    expect(lines).toEqual([
+      "  Session was started without --from; rerun without --from to resume it.",
+      "  Run: nemoclaw onboard              # start a fresh onboarding session",
+      "  Or rerun with the original settings to continue that session.",
+    ]);
+  });
 });

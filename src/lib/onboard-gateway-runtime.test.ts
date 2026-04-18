@@ -132,7 +132,7 @@ describe("onboard-gateway-runtime", () => {
     expect(log).toHaveBeenCalledWith("  ✓ Gateway is healthy");
     expect(log).toHaveBeenCalledWith("  Patching CoreDNS DNS forwarding...");
     expect(run).toHaveBeenCalledWith(
-      'bash "/repo/scripts/fix-coredns.sh" nemoclaw 2>&1 || true',
+      ["bash", "/repo/scripts/fix-coredns.sh", "nemoclaw"],
       { ignoreError: true },
     );
     expect(runOpenshell).toHaveBeenLastCalledWith(["gateway", "select", "nemoclaw"], {
@@ -240,7 +240,7 @@ describe("onboard-gateway-runtime", () => {
       },
     );
     expect(run).toHaveBeenCalledWith(
-      'bash "/repo/scripts/fix-coredns.sh" nemoclaw 2>&1 || true',
+      ["bash", "/repo/scripts/fix-coredns.sh", "nemoclaw"],
       { ignoreError: true },
     );
     expect(processEnv.OPENSHELL_GATEWAY).toBe("nemoclaw");

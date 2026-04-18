@@ -110,7 +110,7 @@ function formatResumeConflictLine(conflict: ResumeConfigConflict): string {
   }
   if (conflict.field === "fromDockerfile") {
     if (!conflict.recorded) {
-      return `  Session was started without --from; add --from '${conflict.requested}' to resume it.`;
+      return "  Session was started without --from; rerun without --from to resume it.";
     }
     if (!conflict.requested) {
       return `  Session was started with --from '${conflict.recorded}'; rerun with that path to resume it.`;

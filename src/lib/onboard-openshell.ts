@@ -63,16 +63,17 @@ export function installOpenshell(deps: InstallOpenshellDeps): InstallOpenshellRe
 
   const localBin = deps.env.XDG_BIN_HOME || path.join(deps.env.HOME || "", ".local", "bin");
   const openshellPath = path.join(localBin, "openshell");
-  const futureShellPathHint = deps.existsSync(openshellPath)
+  const openshellExists = deps.existsSync(openshellPath);
+  const futureShellPathHint = openshellExists
     ? deps.getFutureShellPathHint(localBin, deps.env.PATH || "")
     : null;
   const updatedPathValue =
-    deps.existsSync(openshellPath) && futureShellPathHint
+    openshellExists && futureShellPathHint
       ? `${localBin}${path.delimiter}${deps.env.PATH || ""}`
       : null;
-  const openshellBinary = deps.resolveOpenshell();
+  const openshellBinary = deps.resolveOpenshell() ?? (openshellExists ? openshellPath : null);
   return {
-    installed: openshellBinary !== null,
+    installed: openshellExists || openshellBinary !== null,
     localBin,
     futureShellPathHint,
     updatedPathValue,

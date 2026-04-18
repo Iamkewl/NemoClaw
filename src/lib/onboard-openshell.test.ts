@@ -23,7 +23,7 @@ describe("onboard-openshell", () => {
       env: { HOME: "/home/test", PATH: "/usr/local/bin:/usr/bin" },
       spawnSync,
       existsSync: (filePath) => filePath === "/home/test/.local/bin/openshell",
-      resolveOpenshell: () => "/home/test/.local/bin/openshell",
+      resolveOpenshell: () => null,
       getFutureShellPathHint: (binDir, pathValue) =>
         pathValue.includes(binDir) ? null : `export PATH=\"${binDir}:$PATH\"`,
     });

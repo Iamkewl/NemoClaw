@@ -18,9 +18,10 @@ function buildContext(
   return createInitialOnboardContext({
     mode: session.mode,
     resume: options.resume ?? true,
-    runtimeTarget: session.agent
-      ? { kind: "agent", agentName: session.agent }
-      : { kind: "openclaw" },
+    runtimeTarget:
+      session.agent && session.agent !== "openclaw"
+        ? { kind: "agent", agentName: session.agent }
+        : { kind: "openclaw" },
     fromDockerfile: session.metadata.fromDockerfile,
     requestedSandboxName: options.requestedSandboxName ?? session.sandboxName,
     sandboxName: session.sandboxName,

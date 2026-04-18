@@ -62,7 +62,8 @@ describe("gateway liveness probe (#2020)", () => {
     // Both probe sites must check containerState === "missing" before cleanup.
     const preflightDowngrades = content.match(/containerState === "missing"/g) ?? [];
     const helperDowngrades = helperContent.match(/containerState === "missing"/g) ?? [];
-    expect(preflightDowngrades.length + helperDowngrades.length).toBeGreaterThanOrEqual(2);
+    expect(preflightDowngrades.length).toBeGreaterThanOrEqual(1);
+    expect(helperDowngrades.length).toBeGreaterThanOrEqual(1);
   });
 
   it("cleans up stale metadata when container is confirmed missing", () => {

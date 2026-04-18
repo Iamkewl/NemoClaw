@@ -97,6 +97,16 @@ describe("onboard-fsm", () => {
     expect(complete.ctx.policyPresets).toEqual(["npm", "pypi", "telegram"]);
   });
 
+  it("throws a clear error when a runtime transition is unsupported", () => {
+    const state = createInitialOnboardState();
+    expect(() =>
+      transitionOnboardState(
+        state as never,
+        { type: "PREFLIGHT_PASSED" } as never,
+      ),
+    ).toThrow(/Invalid onboarding transition: boot -> PREFLIGHT_PASSED/);
+  });
+
   it("captures the failed phase and supports typed reset", () => {
     const boot = createInitialOnboardState({ mode: "non-interactive" });
     const preflight = transitionOnboardState(boot, { type: "SESSION_READY" });

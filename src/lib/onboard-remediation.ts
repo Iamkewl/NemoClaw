@@ -53,12 +53,15 @@ export function getPortConflictServiceHints(
   launchAgentPlist = "",
 ): string[] {
   if (platform === "darwin") {
-    return [
+    const hints = [
       "       # or, if it's a launchctl service (macOS):",
       "       launchctl list | grep -i claw   # columns: PID | ExitStatus | Label",
-      `       launchctl unload ${launchAgentPlist}`,
       "       # or: launchctl bootout gui/$(id -u)/ai.openclaw.gateway",
     ];
+    if (launchAgentPlist) {
+      hints.splice(2, 0, `       launchctl unload ${launchAgentPlist}`);
+    }
+    return hints;
   }
   return [
     "       # or, if it's a systemd service:",

@@ -169,8 +169,10 @@ export function createOnboardingOrchestratorDeps<
       setOpenshellBinary: (binary) => {
         process.env.NEMOCLAW_OPENSHELL_BIN = binary;
       },
-      clearSensitiveEnv: () => {
-        delete process.env.NVIDIA_API_KEY;
+      clearSensitiveEnv: (credentialEnv) => {
+        if (credentialEnv) {
+          delete process.env[credentialEnv];
+        }
       },
       updateSandboxNimContainer: (nextSandboxName, nextNimContainer) => {
         input.updateSandbox(nextSandboxName, { nimContainer: nextNimContainer });

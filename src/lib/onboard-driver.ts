@@ -37,6 +37,31 @@ function sessionOverridesFromOptions(options: InMemoryOnboardDriverOptions): Par
   };
 }
 
+type ValidFailurePhase =
+  | "preflight"
+  | "gateway"
+  | "provider_selection"
+  | "inference"
+  | "messaging"
+  | "sandbox"
+  | "runtime_setup"
+  | "policies";
+
+const VALID_FAILURE_PHASES = new Set<ValidFailurePhase>([
+  "preflight",
+  "gateway",
+  "provider_selection",
+  "inference",
+  "messaging",
+  "sandbox",
+  "runtime_setup",
+  "policies",
+]);
+
+function isValidFailurePhase(phase: string): phase is ValidFailurePhase {
+  return VALID_FAILURE_PHASES.has(phase as ValidFailurePhase);
+}
+
 export class InMemoryOnboardDriver {
   #session: Session;
   #state: OnboardFlowState;
@@ -261,16 +286,7 @@ export class InMemoryOnboardDriver {
 
   fail(message: string, code = "driver_failure"): this {
     const failurePhase = this.#state.phase === "boot" ? "preflight" : this.#state.phase;
-    if (
-      failurePhase === "preflight" ||
-      failurePhase === "gateway" ||
-      failurePhase === "provider_selection" ||
-      failurePhase === "inference" ||
-      failurePhase === "messaging" ||
-      failurePhase === "sandbox" ||
-      failurePhase === "runtime_setup" ||
-      failurePhase === "policies"
-    ) {
+    if (isValidFailurePhase(failurePhase)) {
       const failureStep =
         failurePhase === "runtime_setup"
           ? this.#session.agent

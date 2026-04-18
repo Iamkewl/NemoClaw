@@ -200,18 +200,9 @@ export function createEmptyStepLedger(): OnboardStepLedger {
     completedAt: null,
     error: null,
   });
-  return {
-    preflight: emptyStep(),
-    gateway: emptyStep(),
-    provider_selection: emptyStep(),
-    inference: emptyStep(),
-    messaging: emptyStep(),
-    sandbox: emptyStep(),
-    runtime_setup: emptyStep(),
-    policies: emptyStep(),
-    openclaw: emptyStep(),
-    agent_setup: emptyStep(),
-  };
+  return Object.fromEntries(
+    ONBOARD_SESSION_STEPS.map((stepName) => [stepName, emptyStep()]),
+  ) as OnboardStepLedger;
 }
 
 export function isOnboardStepName(value: unknown): value is OnboardStepName {
@@ -417,6 +408,11 @@ export function transitionOnboardState(
     (current: OnboardFlowState, nextEvent: OnboardFlowEvent) => OnboardFlowState
   >;
   const handler = phaseTransitions[event.type];
+  if (typeof handler !== "function") {
+    throw new Error(
+      `Invalid onboarding transition: ${state.phase} -> ${event.type} (allowed: ${Object.keys(phaseTransitions).join(", ")})`,
+    );
+  }
   return handler(state, event);
 }
 

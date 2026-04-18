@@ -53,6 +53,7 @@ describe("onboard-remediation", () => {
     expect(getPortConflictServiceHints("darwin", "/tmp/agent.plist").join("\n")).not.toContain(
       "systemctl --user",
     );
+    expect(getPortConflictServiceHints("darwin").join("\n")).not.toContain("launchctl unload ");
     expect(getPortConflictServiceHints("linux").join("\n")).toContain(
       "systemctl --user stop openclaw-gateway.service",
     );

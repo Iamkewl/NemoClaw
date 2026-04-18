@@ -39,7 +39,7 @@ export interface InferenceLoopDeps<TGpu = unknown> {
   hydrateCredentialEnv: (credentialEnv: string | null) => void;
   getOpenshellBinary: () => string;
   setOpenshellBinary: (binary: string) => void;
-  clearSensitiveEnv: () => void;
+  clearSensitiveEnv: (credentialEnv: string | null) => void;
   updateSandboxNimContainer: (sandboxName: string | null, nimContainer: string) => void;
   onSkip: (stepName: "provider_selection" | "inference", detail: string) => void;
   onStartStep: (
@@ -141,7 +141,7 @@ export async function runInferenceSelectionLoop<TGpu = unknown>(
       state.endpointUrl,
       state.credentialEnv,
     );
-    deps.clearSensitiveEnv();
+    deps.clearSensitiveEnv(state.credentialEnv);
     if (inferenceResult?.retry === "selection") {
       forceProviderSelection = true;
       continue;

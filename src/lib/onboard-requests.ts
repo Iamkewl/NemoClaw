@@ -61,6 +61,15 @@ export function getNonInteractiveProvider(
   return normalized;
 }
 
+/**
+ * Resolve the requested non-interactive model id.
+ *
+ * NonInteractiveRequestDeps.isSafeModelId defaults to a permissive validator
+ * that always returns true, so getNonInteractiveModel performs no model-id
+ * validation unless the caller injects their own validator. Callers should pass
+ * a validator that enforces the allowed characters (letters, numbers, '.', '_',
+ * ':', '/', and '-') or delegate to a shared helper validator when available.
+ */
 export function getNonInteractiveModel(
   providerKey: string,
   deps: NonInteractiveRequestDeps = {},

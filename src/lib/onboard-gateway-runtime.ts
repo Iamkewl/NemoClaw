@@ -8,12 +8,12 @@ import path from "node:path";
 
 import pRetry from "p-retry";
 
+import { ANSI_RE } from "./ansi-utils";
+
 export interface GatewayStartResult {
   status: number;
   output: string;
 }
-
-const ANSI_RE = /\x1B(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1B\\)|[@-_])/g;
 
 export interface GatewayStartEnv {
   OPENSHELL_CLUSTER_IMAGE?: string;
@@ -25,9 +25,9 @@ export function getGatewayStartEnv(openshellVersion: string | null): GatewayStar
   const stableGatewayImage = openshellVersion
     ? `ghcr.io/nvidia/openshell/cluster:${openshellVersion}`
     : null;
-  if (stableGatewayImage && openshellVersion) {
+  if (stableGatewayImage) {
     gatewayEnv.OPENSHELL_CLUSTER_IMAGE = stableGatewayImage;
-    gatewayEnv.IMAGE_TAG = openshellVersion;
+    gatewayEnv.IMAGE_TAG = openshellVersion || undefined;
   }
   return gatewayEnv;
 }
@@ -70,7 +70,7 @@ export interface StartGatewayDeps<TGpu = unknown> {
   getInstalledOpenshellVersion: () => string | null;
   getContainerRuntime: () => string;
   shouldPatchCoredns: (runtime: string) => boolean;
-  run: (command: string, opts?: { ignoreError?: boolean }) => unknown;
+  run: (command: string | string[], opts?: { ignoreError?: boolean }) => unknown;
   destroyGateway: () => void;
   pruneKnownHostsEntries: (contents: string) => string;
   execFileSyncImpl?: typeof execFileSync;
@@ -243,7 +243,10 @@ export async function startGatewayWithOptions<TGpu = unknown>(
   const runtime = deps.getContainerRuntime();
   if (deps.shouldPatchCoredns(runtime)) {
     deps.log("  Patching CoreDNS DNS forwarding...");
-    deps.run(`bash "${path.join(deps.scriptsDir, "fix-coredns.sh")}" ${deps.gatewayName} 2>&1 || true`, {
+    // Pass the script path and gateway name as discrete argv entries so
+    // deps.gatewayName cannot alter shell parsing if it ever stops being a
+    // fixed internal constant.
+    deps.run(["bash", path.join(deps.scriptsDir, "fix-coredns.sh"), deps.gatewayName], {
       ignoreError: true,
     });
   }
@@ -274,7 +277,7 @@ export interface RecoverGatewayRuntimeDeps {
   compactText: (value: string) => string;
   getContainerRuntime: () => string;
   shouldPatchCoredns: (runtime: string) => boolean;
-  run: (command: string, opts?: { ignoreError?: boolean }) => unknown;
+  run: (command: string | string[], opts?: { ignoreError?: boolean }) => unknown;
   scriptsDir: string;
   error: (message?: string) => void;
 }
@@ -314,7 +317,10 @@ export async function recoverGatewayRuntime(deps: RecoverGatewayRuntimeDeps): Pr
       deps.processEnv.OPENSHELL_GATEWAY = deps.gatewayName;
       const runtime = deps.getContainerRuntime();
       if (deps.shouldPatchCoredns(runtime)) {
-        deps.run(`bash "${path.join(deps.scriptsDir, "fix-coredns.sh")}" ${deps.gatewayName} 2>&1 || true`, {
+        // Pass the script path and gateway name as discrete argv entries so
+        // deps.gatewayName cannot alter shell parsing if it ever stops being a
+        // fixed internal constant.
+        deps.run(["bash", path.join(deps.scriptsDir, "fix-coredns.sh"), deps.gatewayName], {
           ignoreError: true,
         });
       }

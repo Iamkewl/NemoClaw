@@ -12,21 +12,24 @@ const require = createRequire(import.meta.url);
 const recordersDistPath = require.resolve("../../dist/lib/onboard-recorders");
 const driverDistPath = require.resolve("../../dist/lib/onboard-persistent-driver");
 const sessionDistPath = require.resolve("../../dist/lib/onboard-session");
+const distModulePaths = [recordersDistPath, driverDistPath, sessionDistPath] as const;
 const originalHome = process.env.HOME;
 let tmpDir: string;
+
+const clearDistModuleCache = () => {
+  for (const modulePath of distModulePaths) {
+    delete require.cache[modulePath];
+  }
+};
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-recorders-"));
   process.env.HOME = tmpDir;
-  delete require.cache[recordersDistPath];
-  delete require.cache[driverDistPath];
-  delete require.cache[sessionDistPath];
+  clearDistModuleCache();
 });
 
 afterEach(() => {
-  delete require.cache[recordersDistPath];
-  delete require.cache[driverDistPath];
-  delete require.cache[sessionDistPath];
+  clearDistModuleCache();
   fs.rmSync(tmpDir, { recursive: true, force: true });
   if (originalHome === undefined) {
     delete process.env.HOME;

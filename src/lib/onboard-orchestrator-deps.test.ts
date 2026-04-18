@@ -12,27 +12,29 @@ const require = createRequire(import.meta.url);
 const bootstrapDistPath = require.resolve("../../dist/lib/onboard-bootstrap");
 const contextDistPath = require.resolve("../../dist/lib/onboard-run-context");
 const depsDistPath = require.resolve("../../dist/lib/onboard-orchestrator-deps");
-const originalHome = process.env.HOME;
+const originalEnv = { ...process.env };
 let tmpDir: string;
+
+const clearDistModuleCache = () => {
+  delete require.cache[bootstrapDistPath];
+  delete require.cache[contextDistPath];
+  delete require.cache[depsDistPath];
+};
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-orchestrator-deps-"));
+  clearDistModuleCache();
   process.env.HOME = tmpDir;
-  delete require.cache[bootstrapDistPath];
-  delete require.cache[contextDistPath];
-  delete require.cache[depsDistPath];
+  process.env.NVIDIA_API_KEY = "test-key";
 });
 
 afterEach(() => {
-  delete require.cache[bootstrapDistPath];
-  delete require.cache[contextDistPath];
-  delete require.cache[depsDistPath];
+  clearDistModuleCache();
   fs.rmSync(tmpDir, { recursive: true, force: true });
-  if (originalHome === undefined) {
-    delete process.env.HOME;
-  } else {
-    process.env.HOME = originalHome;
+  for (const key of Object.keys(process.env)) {
+    delete process.env[key];
   }
+  Object.assign(process.env, originalEnv);
 });
 
 describe("createOnboardingOrchestratorDeps", () => {
@@ -127,7 +129,7 @@ describe("createOnboardingOrchestratorDeps", () => {
     deps.host.getActiveGatewayInfo();
     deps.host.stopDashboardForward();
     deps.inference.setOpenshellBinary("/tmp/openshell");
-    deps.inference.clearSensitiveEnv();
+    deps.inference.clearSensitiveEnv("NVIDIA_API_KEY");
     deps.sandbox.persistRegistryModelProvider("alpha", { model: "gpt-5.4", provider: "openai-api" });
     await deps.runtime.handleAgentSetup("alpha", "gpt-5.4", "openai-api", { name: "hermes" }, true, { id: 1 });
     await deps.policy.setupPoliciesWithSelection("alpha", {

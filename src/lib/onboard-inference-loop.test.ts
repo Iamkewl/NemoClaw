@@ -39,7 +39,7 @@ describe("runInferenceSelectionLoop", () => {
         hydrateCredentialEnv: () => events.push("hydrate"),
         getOpenshellBinary: () => "/usr/bin/openshell",
         setOpenshellBinary: (binary) => events.push(`set-binary:${binary}`),
-        clearSensitiveEnv: () => events.push("clear-env"),
+        clearSensitiveEnv: (credentialEnv) => events.push(`clear-env:${credentialEnv}`),
         updateSandboxNimContainer: () => events.push("update-nim"),
         onSkip: (step, detail) => events.push(`skip:${step}:${detail}`),
         onStartStep: (step) => events.push(`start:${step}`),
@@ -62,7 +62,7 @@ describe("runInferenceSelectionLoop", () => {
       "complete:provider_selection",
       "set-binary:/usr/bin/openshell",
       "start:inference",
-      "clear-env",
+      "clear-env:OPENAI_API_KEY",
       "complete:inference",
     ]);
   });
@@ -95,7 +95,7 @@ describe("runInferenceSelectionLoop", () => {
         hydrateCredentialEnv: (credentialEnv) => events.push(`hydrate:${credentialEnv}`),
         getOpenshellBinary: () => "/usr/bin/openshell",
         setOpenshellBinary: (binary) => events.push(`set-binary:${binary}`),
-        clearSensitiveEnv: () => events.push("clear-env"),
+        clearSensitiveEnv: (credentialEnv) => events.push(`clear-env:${credentialEnv}`),
         updateSandboxNimContainer: (sandboxName, nimContainer) =>
           events.push(`update-nim:${sandboxName}:${nimContainer}`),
         onSkip: (step, detail) => events.push(`skip:${step}:${detail}`),

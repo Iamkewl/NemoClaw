@@ -560,13 +560,13 @@ describe("regression guards", () => {
       expect(envArgsMatch[0].includes("NVIDIA_API_KEY")).toBe(false);
     });
 
-    it("onboard clears NVIDIA_API_KEY from process.env after setupInference", () => {
+    it("onboard clears the active provider credential from process.env after setupInference", () => {
       const fs = require("fs");
       const src = fs.readFileSync(
         path.join(import.meta.dirname, "..", "src", "lib", "onboard-orchestrator-deps.ts"),
         "utf-8",
       );
-      expect(src.includes("delete process.env.NVIDIA_API_KEY")).toBeTruthy();
+      expect(src.includes("delete process.env[credentialEnv]")).toBeTruthy();
     });
 
     it("setupSpark is a compatibility alias that does not shell out to sudo", () => {

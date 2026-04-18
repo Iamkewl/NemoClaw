@@ -12,6 +12,8 @@ import { isWsl } from "./platform";
 const CONTROL_UI_PORT = DASHBOARD_PORT;
 
 function findOpenclawJsonPath(dir: string): string | null {
+  const directPath = path.join(dir, ".openclaw", "openclaw.json");
+  if (fs.existsSync(directPath)) return directPath;
   if (!fs.existsSync(dir)) return null;
   const entries = fs.readdirSync(dir, { withFileTypes: true });
   for (const entry of entries) {

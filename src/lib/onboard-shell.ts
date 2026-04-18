@@ -39,7 +39,10 @@ export function resolveOnboardShellState(
 }
 
 export function buildOnboardLockCommand(state: Pick<OnboardShellState, "resume" | "nonInteractive" | "requestedFromDockerfile">): string {
-  return `nemoclaw onboard${state.resume ? " --resume" : ""}${state.nonInteractive ? " --non-interactive" : ""}${state.requestedFromDockerfile ? ` --from ${state.requestedFromDockerfile}` : ""}`;
+  const fromArg = state.requestedFromDockerfile
+    ? ` --from ${JSON.stringify(state.requestedFromDockerfile)}`
+    : "";
+  return `nemoclaw onboard${state.resume ? " --resume" : ""}${state.nonInteractive ? " --non-interactive" : ""}${fromArg}`;
 }
 
 export function getOnboardBannerLines(
