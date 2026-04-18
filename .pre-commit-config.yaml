@@ -183,7 +183,7 @@ repos:
     hooks:
       - id: hadolint
         name: hadolint
-        entry: hadolint
+        entry: scripts/run-hadolint.sh
         language: system
         files: (Dockerfile[^/]*|.*\.dockerfile)$
         types: [file]
