@@ -431,10 +431,11 @@ try:
 except Exception as e:
     print('ERROR: ' + str(e))
 " 2>/dev/null || echo "error")
-  if [ "$MANIFEST_PRESETS" != "NONE" ] && [ "$MANIFEST_PRESETS" != "error" ]; then
+  if echo "${MANIFEST_PRESETS}" | grep -q "npm" \
+    && echo "${MANIFEST_PRESETS}" | grep -q "pypi"; then
     pass "Backup manifest contains policyPresets: ${MANIFEST_PRESETS}"
   else
-    fail "Backup manifest missing policyPresets field — issue #1952"
+    fail "Backup manifest missing expected policyPresets (npm,pypi): got '${MANIFEST_PRESETS}' — issue #1952"
   fi
 fi
 
