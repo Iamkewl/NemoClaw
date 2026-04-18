@@ -5,12 +5,70 @@ import fs from "node:fs";
 
 import type { WebSearchConfig } from "./web-search";
 
+export const SANDBOX_BASE_IMAGE = "ghcr.io/nvidia/nemoclaw/sandbox-base";
+export const SANDBOX_BASE_TAG = "latest";
+
+export interface SandboxBaseImageDeps {
+  run: (
+    command: string | string[],
+    opts?: { suppressOutput?: boolean },
+  ) => { status: number; stdout?: string; stderr?: string };
+  runCapture: (
+    command: string | string[],
+    opts?: { ignoreError?: boolean },
+  ) => string;
+}
+
 export interface SandboxBuildConfigDeps {
   sandboxBaseImage: string;
 }
 
 function encodeDockerJsonArg(value: unknown): string {
   return Buffer.from(JSON.stringify(value || {}), "utf8").toString("base64");
+}
+
+/**
+ * Pull sandbox-base:latest from GHCR and resolve its repo digest.
+ * Returns { digest, ref } on success, or null when the pull or
+ * inspect fails (offline, GHCR outage, local-only build).
+ */
+export function pullAndResolveBaseImageDigest(
+  deps: SandboxBaseImageDeps,
+): { digest: string; ref: string } | null {
+  const imageWithTag = `${SANDBOX_BASE_IMAGE}:${SANDBOX_BASE_TAG}`;
+  try {
+    deps.run(["docker", "pull", imageWithTag], { suppressOutput: true });
+  } catch {
+    // Pull failed — caller should fall back to unpin :latest
+    return null;
+  }
+
+  let inspectOutput;
+  try {
+    inspectOutput = deps.runCapture(
+      ["docker", "inspect", "--format", "{{json .RepoDigests}}", imageWithTag],
+      { ignoreError: false },
+    );
+  } catch {
+    return null;
+  }
+
+  // RepoDigests is a JSON array like ["ghcr.io/nvidia/nemoclaw/sandbox-base@sha256:abc..."].
+  // Filter to the entry matching our registry — index ordering is not guaranteed.
+  let repoDigests;
+  try {
+    repoDigests = JSON.parse(inspectOutput || "[]");
+  } catch {
+    return null;
+  }
+  const repoDigest = Array.isArray(repoDigests)
+    ? repoDigests.find((entry) => entry.startsWith(`${SANDBOX_BASE_IMAGE}@sha256:`))
+    : null;
+  if (!repoDigest) return null;
+
+  const digest = repoDigest.slice(repoDigest.indexOf("@") + 1);
+  const ref = `${SANDBOX_BASE_IMAGE}@${digest}`;
+  return { digest, ref };
 }
 
 export function getSandboxInferenceConfig(

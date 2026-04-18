@@ -62,6 +62,7 @@ const nim = require("./nim");
 const onboardSession = require("./onboard-session");
 const { ONBOARD_STEP_META, isOnboardStepName, toVisibleStepName } = require("./onboard-fsm");
 const { initializeOnboardRun } = require("./onboard-bootstrap");
+const { streamGatewayStart: streamGatewayStartWithDeps } = require("./onboard-gateway-start-stream");
 const {
   getGatewayStartEnv: buildGatewayStartEnv,
   recoverGatewayRuntime: recoverGatewayRuntimeWithDeps,
@@ -81,9 +82,18 @@ const {
   validateOpenAiLikeSelection: validateOpenAiLikeSelectionWithDeps,
 } = require("./onboard-inference-validation");
 const {
+  SANDBOX_BASE_IMAGE,
+  SANDBOX_BASE_TAG,
   getSandboxInferenceConfig: getSandboxInferenceConfigWithDeps,
   patchStagedDockerfile: patchStagedDockerfileWithDeps,
+  pullAndResolveBaseImageDigest: pullAndResolveBaseImageDigestWithDeps,
 } = require("./onboard-sandbox-build-config");
+const {
+  ensureOllamaAuthProxy: ensureOllamaAuthProxyWithDeps,
+  getOllamaProxyToken: getOllamaProxyTokenWithDeps,
+  persistProxyToken: persistProxyTokenWithDeps,
+  startOllamaAuthProxy: startOllamaAuthProxyWithDeps,
+} = require("./onboard-ollama-proxy");
 const { runCreateSandbox } = require("./onboard-sandbox-create");
 const { runSetupInference } = require("./onboard-inference-provider");
 const {
@@ -386,149 +396,13 @@ const { streamSandboxCreate } = sandboxCreateStream;
 
 /** Spawn `openshell gateway start` and stream its output with progress heartbeats. */
 function streamGatewayStart(command, env = process.env) {
-  const child = spawn("bash", ["-lc", command], {
-    cwd: ROOT,
-    env,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-
-  const lines = [];
-  let pending = "";
-  let settled = false;
-  let resolvePromise;
-  let lastPrintedLine = "";
-  let currentPhase = "cluster";
-  let lastHeartbeatBucket = -1;
-  let lastOutputAt = Date.now();
-  const startedAt = Date.now();
-
-  function getDisplayWidth() {
-    return Math.max(60, Number(process.stdout.columns || 100));
-  }
-
-  function trimDisplayLine(line) {
-    const width = getDisplayWidth();
-    const maxLen = Math.max(40, width - 4);
-    if (line.length <= maxLen) return line;
-    return `${line.slice(0, Math.max(0, maxLen - 3))}...`;
-  }
-
-  function printProgressLine(line) {
-    const display = trimDisplayLine(line);
-    if (display !== lastPrintedLine) {
-      console.log(display);
-      lastPrintedLine = display;
-    }
-  }
-
-  function elapsedSeconds() {
-    return Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
-  }
-
-  function setPhase(nextPhase) {
-    if (!nextPhase || nextPhase === currentPhase) return;
-    currentPhase = nextPhase;
-    const phaseLine =
-      nextPhase === "install"
-        ? "  Installing OpenShell components..."
-        : nextPhase === "pod"
-          ? "  Starting OpenShell gateway pod..."
-          : nextPhase === "health"
-            ? "  Waiting for gateway health..."
-            : "  Starting gateway cluster...";
-    printProgressLine(phaseLine);
-  }
-
-  function classifyLine(line) {
-    if (/ApplyJob|helm-install-openshell|Applying HelmChart/i.test(line)) return "install";
-    if (
-      /openshell-0|Observed pod startup duration|MountVolume\.MountDevice succeeded/i.test(line)
-    ) {
-      return "pod";
-    }
-    if (/Gateway .* ready\.?$/i.test(line)) return "health";
-    return null;
-  }
-
-  function flushLine(rawLine) {
-    const line = rawLine.replace(/\r/g, "").trimEnd();
-    if (!line) return;
-    lines.push(line);
-    lastOutputAt = Date.now();
-    const nextPhase = classifyLine(line);
-    if (nextPhase) setPhase(nextPhase);
-  }
-
-  function onChunk(chunk) {
-    pending += chunk.toString();
-    const parts = pending.split("\n");
-    pending = parts.pop();
-    parts.forEach(flushLine);
-  }
-
-  function finish(result) {
-    if (settled) return;
-    settled = true;
-    if (pending) flushLine(pending);
-    clearInterval(heartbeatTimer);
-    resolvePromise(result);
-  }
-
-  child.stdout.on("data", onChunk);
-  child.stderr.on("data", onChunk);
-
-  printProgressLine("  Starting gateway cluster...");
-  const heartbeatTimer = setInterval(() => {
-    if (settled) return;
-    const elapsed = elapsedSeconds();
-    const bucket = Math.floor(elapsed / 10);
-    if (bucket === lastHeartbeatBucket) return;
-    if (Date.now() - lastOutputAt < 3000 && elapsed < 10) return;
-    const heartbeatLine =
-      currentPhase === "install"
-        ? `  Still installing OpenShell components... (${elapsed}s elapsed)`
-        : currentPhase === "pod"
-          ? `  Still starting OpenShell gateway pod... (${elapsed}s elapsed)`
-          : currentPhase === "health"
-            ? `  Still waiting for gateway health... (${elapsed}s elapsed)`
-            : `  Still starting gateway cluster... (${elapsed}s elapsed)`;
-    printProgressLine(heartbeatLine);
-    lastHeartbeatBucket = bucket;
-  }, 5000);
-  heartbeatTimer.unref?.();
-
-  // Hard timeout to prevent indefinite hangs if the openshell process
-  // never exits (e.g. Docker daemon unresponsive, k3s restart loop). (#1830)
-  // On timeout, send SIGTERM and let the `close` event resolve the promise
-  // so the child has actually exited before the caller proceeds to retry.
-  const GATEWAY_START_TIMEOUT = envInt("NEMOCLAW_GATEWAY_START_TIMEOUT", 600) * 1000;
-  let killedByTimeout = false;
-  const killTimer = setTimeout(() => {
-    killedByTimeout = true;
-    lines.push("[NemoClaw] Gateway start timed out — killing process.");
-    child.kill("SIGTERM");
-    // If SIGTERM is ignored, force-kill after 10s.
-    setTimeout(() => {
-      if (!settled) child.kill("SIGKILL");
-    }, 10_000).unref?.();
-  }, GATEWAY_START_TIMEOUT);
-  killTimer.unref?.();
-
-  return new Promise((resolve) => {
-    resolvePromise = resolve;
-    child.on("error", (error) => {
-      clearTimeout(killTimer);
-      const detail = error?.message || String(error);
-      lines.push(detail);
-      finish({ status: 1, output: lines.join("\n") });
-    });
-    child.on("close", (code) => {
-      clearTimeout(killTimer);
-      const exitCode = killedByTimeout ? 1 : (code ?? 1);
-      finish({ status: exitCode, output: lines.join("\n") });
-    });
+  return streamGatewayStartWithDeps(command, env, {
+    spawn,
+    root: ROOT,
+    envInt,
   });
 }
+
 
 function step(n, total, msg) {
   console.log("");
@@ -604,49 +478,11 @@ function getBlueprintMaxOpenshellVersion(rootDir = ROOT) {
 // e2e tests in #1937 — the digest always comes from the same registry
 // we're pinning to. See #1904.
 
-const SANDBOX_BASE_IMAGE = "ghcr.io/nvidia/nemoclaw/sandbox-base";
-const SANDBOX_BASE_TAG = "latest";
-
-/**
- * Pull sandbox-base:latest from GHCR and resolve its repo digest.
- * Returns { digest, ref } on success, or null when the pull or
- * inspect fails (offline, GHCR outage, local-only build).
- */
 function pullAndResolveBaseImageDigest() {
-  const imageWithTag = `${SANDBOX_BASE_IMAGE}:${SANDBOX_BASE_TAG}`;
-  try {
-    run(["docker", "pull", imageWithTag], { suppressOutput: true });
-  } catch {
-    // Pull failed — caller should fall back to unpin :latest
-    return null;
-  }
-
-  let inspectOutput;
-  try {
-    inspectOutput = runCapture(
-      ["docker", "inspect", "--format", "{{json .RepoDigests}}", imageWithTag],
-      { ignoreError: false },
-    );
-  } catch {
-    return null;
-  }
-
-  // RepoDigests is a JSON array like ["ghcr.io/nvidia/nemoclaw/sandbox-base@sha256:abc..."].
-  // Filter to the entry matching our registry — index ordering is not guaranteed.
-  let repoDigests;
-  try {
-    repoDigests = JSON.parse(inspectOutput || "[]");
-  } catch {
-    return null;
-  }
-  const repoDigest = Array.isArray(repoDigests)
-    ? repoDigests.find((entry) => entry.startsWith(`${SANDBOX_BASE_IMAGE}@sha256:`))
-    : null;
-  if (!repoDigest) return null;
-
-  const digest = repoDigest.slice(repoDigest.indexOf("@") + 1);
-  const ref = `${SANDBOX_BASE_IMAGE}@${digest}`;
-  return { digest, ref };
+  return pullAndResolveBaseImageDigestWithDeps({
+    run,
+    runCapture,
+  });
 }
 
 function getStableGatewayImageRef(versionOutput = null) {
@@ -1137,132 +973,24 @@ const { shouldIncludeBuildContextPath, copyBuildContextDir, printSandboxCreateRe
   buildContext;
 // classifySandboxCreateFailure — see validation import above
 
-// ---------------------------------------------------------------------------
-// Ollama auth proxy — keeps Ollama on localhost, exposes a token-gated proxy
-// on 0.0.0.0 so containers can reach it without exposing Ollama to the network.
-// Token is persisted to ~/.nemoclaw/ollama-proxy-token so the proxy can be
-// restarted after a host reboot without re-running onboard.
-// ---------------------------------------------------------------------------
-
-const PROXY_STATE_DIR = path.join(os.homedir(), ".nemoclaw");
-const PROXY_TOKEN_PATH = path.join(PROXY_STATE_DIR, "ollama-proxy-token");
-const PROXY_PID_PATH = path.join(PROXY_STATE_DIR, "ollama-auth-proxy.pid");
-
-let ollamaProxyToken: string | null = null;
-
-function ensureProxyStateDir(): void {
-  if (!fs.existsSync(PROXY_STATE_DIR)) {
-    fs.mkdirSync(PROXY_STATE_DIR, { recursive: true });
-  }
+function getOllamaProxyDeps() {
+  return {
+    runCapture,
+    run,
+    spawn,
+    sleep,
+    scriptsDir: SCRIPTS,
+    ollamaProxyPort: OLLAMA_PROXY_PORT,
+    ollamaPort: OLLAMA_PORT,
+  };
 }
 
 function persistProxyToken(token: string): void {
-  ensureProxyStateDir();
-  fs.writeFileSync(PROXY_TOKEN_PATH, token, { mode: 0o600 });
-  // mode only applies on creation; ensure permissions on existing files too
-  fs.chmodSync(PROXY_TOKEN_PATH, 0o600);
-}
-
-function loadPersistedProxyToken(): string | null {
-  try {
-    if (fs.existsSync(PROXY_TOKEN_PATH)) {
-      const token = fs.readFileSync(PROXY_TOKEN_PATH, "utf-8").trim();
-      return token || null;
-    }
-  } catch {
-    /* ignore */
-  }
-  return null;
-}
-
-function persistProxyPid(pid: number | null | undefined): void {
-  if (!Number.isInteger(pid) || pid <= 0) return;
-  ensureProxyStateDir();
-  fs.writeFileSync(PROXY_PID_PATH, `${pid}\n`, { mode: 0o600 });
-  fs.chmodSync(PROXY_PID_PATH, 0o600);
-}
-
-function loadPersistedProxyPid(): number | null {
-  try {
-    if (!fs.existsSync(PROXY_PID_PATH)) return null;
-    const raw = fs.readFileSync(PROXY_PID_PATH, "utf-8").trim();
-    const pid = Number.parseInt(raw, 10);
-    return Number.isInteger(pid) && pid > 0 ? pid : null;
-  } catch {
-    return null;
-  }
-}
-
-function clearPersistedProxyPid(): void {
-  try {
-    if (fs.existsSync(PROXY_PID_PATH)) {
-      fs.unlinkSync(PROXY_PID_PATH);
-    }
-  } catch {
-    /* ignore */
-  }
-}
-
-function isOllamaProxyProcess(pid: number | null | undefined): boolean {
-  if (!Number.isInteger(pid) || pid <= 0) return false;
-  const cmdline = runCapture(["ps", "-p", String(pid), "-o", "args="], { ignoreError: true });
-  return Boolean(cmdline && cmdline.includes("ollama-auth-proxy.js"));
-}
-
-function spawnOllamaAuthProxy(token: string): number | null {
-  const child = spawn(process.execPath, [path.join(SCRIPTS, "ollama-auth-proxy.js")], {
-    detached: true,
-    stdio: "ignore",
-    env: {
-      ...process.env,
-      OLLAMA_PROXY_TOKEN: token,
-      OLLAMA_PROXY_PORT: String(OLLAMA_PROXY_PORT),
-      OLLAMA_BACKEND_PORT: String(OLLAMA_PORT),
-    },
-  });
-  child.unref();
-  persistProxyPid(child.pid);
-  return child.pid ?? null;
-}
-
-function killStaleProxy(): void {
-  try {
-    const persistedPid = loadPersistedProxyPid();
-    if (isOllamaProxyProcess(persistedPid)) {
-      run(["kill", String(persistedPid)], { ignoreError: true, suppressOutput: true });
-    }
-    clearPersistedProxyPid();
-
-    // Best-effort cleanup for older proxy processes created before the PID file
-    // existed. Only kill processes that are actually the auth proxy, not
-    // unrelated services that happen to use the same port.
-    const pidOutput = runCapture(["lsof", "-ti", `:${OLLAMA_PROXY_PORT}`], { ignoreError: true });
-    if (pidOutput && pidOutput.trim()) {
-      for (const pid of pidOutput.trim().split(/\s+/)) {
-        if (isOllamaProxyProcess(Number.parseInt(pid, 10))) {
-          run(["kill", pid], { ignoreError: true, suppressOutput: true });
-        }
-      }
-      sleep(1);
-    }
-  } catch {
-    /* ignore */
-  }
+  return persistProxyTokenWithDeps(token);
 }
 
 function startOllamaAuthProxy(): void {
-  const crypto = require("crypto");
-  killStaleProxy();
-
-  ollamaProxyToken = crypto.randomBytes(24).toString("hex");
-  // Don't persist yet — wait until provider is confirmed in setupInference.
-  // If the user backs out to a different provider, the token stays in memory
-  // only and is discarded.
-  const pid = spawnOllamaAuthProxy(ollamaProxyToken);
-  sleep(1);
-  if (!isOllamaProxyProcess(pid)) {
-    console.error(`  Warning: Ollama auth proxy did not start on :${OLLAMA_PROXY_PORT}`);
-  }
+  return startOllamaAuthProxyWithDeps(getOllamaProxyDeps());
 }
 
 /**
@@ -1270,29 +998,13 @@ function startOllamaAuthProxy(): void {
  * from host reboots where the background proxy process was lost.
  */
 function ensureOllamaAuthProxy(): void {
-  // Try to load persisted token first — if none, this isn't an Ollama setup.
-  const token = loadPersistedProxyToken();
-  if (!token) return;
-
-  const pid = loadPersistedProxyPid();
-  if (isOllamaProxyProcess(pid)) {
-    ollamaProxyToken = token;
-    return;
-  }
-
-  // Proxy not running — restart it with the persisted token.
-  killStaleProxy();
-  ollamaProxyToken = token;
-  spawnOllamaAuthProxy(token);
-  sleep(1);
+  return ensureOllamaAuthProxyWithDeps(getOllamaProxyDeps());
 }
 
 function getOllamaProxyToken(): string | null {
-  if (ollamaProxyToken) return ollamaProxyToken;
-  // Fall back to persisted token (resume / reconnect scenario)
-  ollamaProxyToken = loadPersistedProxyToken();
-  return ollamaProxyToken;
+  return getOllamaProxyTokenWithDeps();
 }
+
 
 async function promptOllamaModel(gpu = null) {
   const installed = getOllamaModelOptions();
