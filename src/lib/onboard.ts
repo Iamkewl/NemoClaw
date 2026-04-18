@@ -63,6 +63,7 @@ const registry = require("./registry");
 const nim = require("./nim");
 const onboardSession = require("./onboard-session");
 const { ONBOARD_STEP_META, isOnboardStepName, toVisibleStepName } = require("./onboard-fsm");
+const { deriveOnboardFlowState, hasCompletedOnboardStep } = require("./onboard-flow-state");
 const policies = require("./policies");
 const tiers = require("./tiers");
 const { ensureUsageNoticeConsent } = require("./usage-notice");
@@ -5955,10 +5956,13 @@ async function onboard(opts = {}) {
         s.agent = agent.name;
         return s;
       });
+      session = onboardSession.loadSession();
     }
 
+    const resumeFlowState = resume ? deriveOnboardFlowState(session, { resume: true }) : null;
+
     let gpu;
-    const resumePreflight = resume && session?.steps?.preflight?.status === "complete";
+    const resumePreflight = resume && resumeFlowState && hasCompletedOnboardStep(resumeFlowState, "preflight");
     if (resumePreflight) {
       skippedStepMessage("preflight", "cached");
       gpu = nim.detectGpu();
@@ -5992,15 +5996,16 @@ async function onboard(opts = {}) {
     }
 
     const canReuseHealthyGateway = gatewayReuseState === "healthy";
-    const resumeGateway =
-      resume && session?.steps?.gateway?.status === "complete" && canReuseHealthyGateway;
+    const recordedGatewayComplete =
+      resume && resumeFlowState && hasCompletedOnboardStep(resumeFlowState, "gateway");
+    const resumeGateway = recordedGatewayComplete && canReuseHealthyGateway;
     if (resumeGateway) {
       skippedStepMessage("gateway", "running");
     } else if (!resume && canReuseHealthyGateway) {
       skippedStepMessage("gateway", "running", "reuse");
       note("  Reusing healthy NemoClaw gateway.");
     } else {
-      if (resume && session?.steps?.gateway?.status === "complete") {
+      if (recordedGatewayComplete) {
         if (gatewayReuseState === "active-unnamed") {
           note("  [resume] Gateway is active but named metadata is missing; recreating it safely.");
         } else if (gatewayReuseState === "foreign-active") {
@@ -6032,7 +6037,8 @@ async function onboard(opts = {}) {
       const resumeProviderSelection =
         !forceProviderSelection &&
         resume &&
-        session?.steps?.provider_selection?.status === "complete" &&
+        resumeFlowState &&
+        hasCompletedOnboardStep(resumeFlowState, "provider_selection") &&
         typeof provider === "string" &&
         typeof model === "string";
       if (resumeProviderSelection) {
@@ -6062,6 +6068,8 @@ async function onboard(opts = {}) {
       const resumeInference =
         !forceProviderSelection &&
         resume &&
+        resumeFlowState &&
+        hasCompletedOnboardStep(resumeFlowState, "inference") &&
         typeof provider === "string" &&
         typeof model === "string" &&
         isInferenceRouteReady(provider, model);
@@ -6101,10 +6109,11 @@ async function onboard(opts = {}) {
 
     const sandboxReuseState = getSandboxReuseState(sandboxName);
     const webSearchConfigChanged = Boolean(session?.webSearchConfig) !== Boolean(webSearchConfig);
+    const recordedSandboxComplete =
+      resume && resumeFlowState && hasCompletedOnboardStep(resumeFlowState, "sandbox");
     const resumeSandbox =
-      resume &&
+      recordedSandboxComplete &&
       !webSearchConfigChanged &&
-      session?.steps?.sandbox?.status === "complete" &&
       sandboxReuseState === "ready";
     if (resumeSandbox) {
       if (webSearchConfig) {
@@ -6112,7 +6121,7 @@ async function onboard(opts = {}) {
       }
       skippedStepMessage("sandbox", sandboxName);
     } else {
-      if (resume && session?.steps?.sandbox?.status === "complete") {
+      if (recordedSandboxComplete) {
         if (webSearchConfigChanged) {
           note("  [resume] Web Search configuration changed; recreating sandbox.");
           if (sandboxName) {
@@ -6144,9 +6153,8 @@ async function onboard(opts = {}) {
       const resumeMessaging =
         resume &&
         Array.isArray(session?.messagingChannels) &&
-        (session?.steps?.messaging?.status === "complete" ||
-          session?.steps?.sandbox?.status === "in_progress" ||
-          session?.steps?.sandbox?.status === "failed");
+        resumeFlowState &&
+        hasCompletedOnboardStep(resumeFlowState, "messaging");
       if (resumeMessaging) {
         selectedMessagingChannels = [...session.messagingChannels];
         skippedStepMessage("messaging", selectedMessagingChannels.join(", "));
@@ -6200,7 +6208,9 @@ async function onboard(opts = {}) {
       });
       onboardSession.markStepSkipped("openclaw");
     } else {
-      const resumeOpenclaw = resume && sandboxName && isOpenclawReady(sandboxName);
+      const recordedRuntimeSetupComplete =
+        resume && resumeFlowState && hasCompletedOnboardStep(resumeFlowState, "runtime_setup");
+      const resumeOpenclaw = recordedRuntimeSetupComplete && sandboxName && isOpenclawReady(sandboxName);
       if (resumeOpenclaw) {
         skippedStepMessage("openclaw", sandboxName);
         onboardSession.markStepComplete("openclaw", { sandboxName, provider, model });
@@ -6230,8 +6240,12 @@ async function onboard(opts = {}) {
         policyPresets: [],
       });
     } else {
+      const recordedPoliciesComplete =
+        resume && resumeFlowState && hasCompletedOnboardStep(resumeFlowState, "policies");
       const resumePolicies =
-        resume && sandboxName && arePolicyPresetsApplied(sandboxName, recordedPolicyPresets || []);
+        recordedPoliciesComplete &&
+        sandboxName &&
+        arePolicyPresetsApplied(sandboxName, recordedPolicyPresets || []);
       if (resumePolicies) {
         skippedStepMessage("policies", (recordedPolicyPresets || []).join(", "));
         onboardSession.markStepComplete("policies", {

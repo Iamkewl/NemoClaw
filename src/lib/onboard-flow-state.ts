@@ -7,6 +7,7 @@ import {
   type OnboardBaseContext,
   type OnboardFlowState,
   type OnboardStepState,
+  type OnboardVisibleStep,
 } from "./onboard-fsm";
 import type { Session } from "./onboard-session";
 
@@ -34,6 +35,30 @@ function buildContext(
     policyPresets: session.policyPresets ?? [],
   });
 }
+
+const PHASE_ORDER = [
+  "boot",
+  "preflight",
+  "gateway",
+  "provider_selection",
+  "inference",
+  "messaging",
+  "sandbox",
+  "runtime_setup",
+  "policies",
+  "complete",
+] as const satisfies readonly OnboardFlowState["phase"][];
+
+const STEP_TO_NEXT_PHASE = {
+  preflight: "gateway",
+  gateway: "provider_selection",
+  provider_selection: "inference",
+  inference: "messaging",
+  messaging: "sandbox",
+  sandbox: "runtime_setup",
+  runtime_setup: "policies",
+  policies: "complete",
+} as const satisfies Record<OnboardVisibleStep, (typeof PHASE_ORDER)[number]>;
 
 function cloneStepState(step: OnboardStepState): OnboardStepState {
   return {
@@ -87,6 +112,26 @@ function getFailureOrigin(session: Session):
     return step;
   }
   return null;
+}
+
+export function getResumeExecutablePhase(state: OnboardFlowState): (typeof PHASE_ORDER)[number] {
+  return state.phase === "failed" ? state.failedFrom : state.phase;
+}
+
+export function hasReachedOnboardPhase(
+  state: OnboardFlowState,
+  phase: (typeof PHASE_ORDER)[number],
+): boolean {
+  return (
+    PHASE_ORDER.indexOf(getResumeExecutablePhase(state)) >= PHASE_ORDER.indexOf(phase)
+  );
+}
+
+export function hasCompletedOnboardStep(
+  state: OnboardFlowState,
+  step: OnboardVisibleStep,
+): boolean {
+  return hasReachedOnboardPhase(state, STEP_TO_NEXT_PHASE[step]);
 }
 
 export function deriveOnboardFlowState(

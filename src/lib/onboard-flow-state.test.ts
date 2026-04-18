@@ -3,7 +3,13 @@
 
 import { describe, expect, it } from "vitest";
 
-import { deriveOnboardFlowState, getEffectiveMessagingStepState } from "./onboard-flow-state";
+import {
+  deriveOnboardFlowState,
+  getEffectiveMessagingStepState,
+  getResumeExecutablePhase,
+  hasCompletedOnboardStep,
+  hasReachedOnboardPhase,
+} from "./onboard-flow-state";
 import { createSession } from "./onboard-session";
 
 describe("onboard-flow-state", () => {
@@ -188,6 +194,34 @@ describe("onboard-flow-state", () => {
     expect(state.failedFrom).toBe("runtime_setup");
     expect(state.error.code).toBe("persisted_runtime_setup_failure");
     expect(state.error.recoverable).toBe(true);
+  });
+
+  it("reports canonical phase progress and completed steps for resumable failures", () => {
+    const session = createSession({
+      status: "failed",
+      resumable: true,
+      provider: "openai-api",
+      model: "gpt-5.4",
+      sandboxName: "alpha",
+      failure: {
+        step: "sandbox",
+        message: "sandbox creation failed",
+        recordedAt: "2026-04-17T00:00:00.000Z",
+      },
+    });
+    session.steps.preflight.status = "complete";
+    session.steps.gateway.status = "complete";
+    session.steps.provider_selection.status = "complete";
+    session.steps.inference.status = "complete";
+    session.steps.messaging.status = "complete";
+    session.steps.sandbox.status = "failed";
+
+    const state = deriveOnboardFlowState(session);
+    expect(getResumeExecutablePhase(state)).toBe("sandbox");
+    expect(hasReachedOnboardPhase(state, "messaging")).toBe(true);
+    expect(hasReachedOnboardPhase(state, "runtime_setup")).toBe(false);
+    expect(hasCompletedOnboardStep(state, "messaging")).toBe(true);
+    expect(hasCompletedOnboardStep(state, "sandbox")).toBe(false);
   });
 
   it("keeps agent runtime targets and completed policy state", () => {
