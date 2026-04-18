@@ -5771,18 +5771,6 @@ function printDashboard(sandboxName, model, provider, nimContainer = null, agent
   console.log("");
 }
 
-function startRecordedStep(stepName, updates = {}) {
-  onboardSession.markStepStarted(stepName);
-  if (Object.keys(updates).length > 0) {
-    onboardSession.updateSession((session) => {
-      if (typeof updates.sandboxName === "string") session.sandboxName = updates.sandboxName;
-      if (typeof updates.provider === "string") session.provider = updates.provider;
-      if (typeof updates.model === "string") session.model = updates.model;
-      return session;
-    });
-  }
-}
-
 const TOTAL_ONBOARD_STEPS = 8;
 
 function skippedStepMessage(stepName, detail, reason = "resume") {
