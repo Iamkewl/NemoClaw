@@ -64,6 +64,7 @@ const nim = require("./nim");
 const onboardSession = require("./onboard-session");
 const { ONBOARD_STEP_META, isOnboardStepName, toVisibleStepName } = require("./onboard-fsm");
 const { initializeOnboardRun } = require("./onboard-bootstrap");
+const { runOnboardingEntry } = require("./onboard-entry");
 const { createOnboardingOrchestratorDeps } = require("./onboard-orchestrator-deps");
 const { runOnboardingOrchestrator } = require("./onboard-orchestrator");
 const { createOnboardRunContext } = require("./onboard-run-context");
@@ -5742,104 +5743,41 @@ function skippedStepMessage(stepName, detail, reason = "resume") {
 
 // eslint-disable-next-line complexity
 async function onboard(opts = {}) {
-  const shellState = resolveOnboardShellState(opts, process.env);
-  NON_INTERACTIVE = shellState.nonInteractive;
-  RECREATE_SANDBOX = shellState.recreateSandbox;
-  const { dangerouslySkipPermissions, requestedFromDockerfile, resume } = shellState;
-  if (dangerouslySkipPermissions) {
-    for (const line of getDangerouslySkipPermissionsWarningLines()) {
-      console.error(line);
-    }
-  }
-  delete process.env.OPENSHELL_GATEWAY;
-  const noticeAccepted = await ensureUsageNoticeConsent({
-    nonInteractive: isNonInteractive(),
-    acceptedByFlag: opts.acceptThirdPartySoftware === true,
-    writeLine: console.error,
-  });
-  if (!noticeAccepted) {
-    process.exit(1);
-  }
-  // Validate NEMOCLAW_PROVIDER early so invalid values fail before
-  // preflight (Docker/OpenShell checks). Without this, users see a
-  // misleading 'Docker is not reachable' error instead of the real
-  // problem: an unsupported provider value.
-  getRequestedProviderHint();
-  const lockResult = onboardSession.acquireOnboardLock(
-    buildOnboardLockCommand({
-      resume,
-      nonInteractive: shellState.nonInteractive,
-      requestedFromDockerfile,
-    }),
-  );
-  if (!lockResult.acquired) {
-    for (const line of getOnboardLockConflictLines(lockResult)) {
-      console.error(line);
-    }
-    process.exit(1);
-  }
-
-  let lockReleased = false;
-  const releaseOnboardLock = () => {
-    if (lockReleased) return;
-    lockReleased = true;
-    onboardSession.releaseOnboardLock();
-  };
-  process.once("exit", releaseOnboardLock);
-
-  try {
-    // Merged, absolute fromDockerfile: explicit flag/env takes precedence; on
-    // resume falls back to what the original session recorded so the same image
-    // is used even when --from is omitted from the resume invocation.
-    const initializedRun = initializeOnboardRun({
-      resume,
-      mode: isNonInteractive() ? "non-interactive" : "interactive",
-      requestedFromDockerfile,
-      requestedAgent: opts.agent || null,
-      getResumeConflicts: (currentSession) =>
-        getResumeConfigConflicts(currentSession, {
-          nonInteractive: isNonInteractive(),
-          fromDockerfile: requestedFromDockerfile,
-          agent: opts.agent || null,
-        }),
-    });
-    if (!initializedRun.ok) {
-      for (const line of initializedRun.lines) {
-        console.error(line);
-      }
-      process.exit(1);
-    }
-    const runContext = createOnboardRunContext(initializedRun.value);
-
-    let completed = false;
-    process.once("exit", (code) => {
-      if (!completed && code !== 0) {
-        const failedStep = runContext.driver.session?.lastStepStarted;
-        if (failedStep) {
-          runContext.failStep(failedStep, "Onboarding exited before the step completed.");
-        }
-      }
-    });
-
-    for (const line of getOnboardBannerLines({
-      nonInteractive: shellState.nonInteractive,
-      resume,
-    })) {
-      if (line.length === 0) {
-        console.log("");
-      } else if (line.startsWith("  (")) {
-        note(line);
-      } else {
-        console.log(line);
-      }
-    }
-
-    const orchestrationResult = await runOnboardingOrchestrator(
-      runContext,
+  return runOnboardingEntry(opts, {
+    env: process.env,
+    resolveShellState: resolveOnboardShellState,
+    applyShellState: (shellState) => {
+      NON_INTERACTIVE = shellState.nonInteractive;
+      RECREATE_SANDBOX = shellState.recreateSandbox;
+    },
+    getDangerouslySkipPermissionsWarningLines,
+    ensureUsageNoticeConsent,
+    validateRequestedProviderHint: () => {
+      getRequestedProviderHint();
+    },
+    acquireOnboardLock: (command) => onboardSession.acquireOnboardLock(command),
+    buildOnboardLockCommand,
+    getOnboardLockConflictLines,
+    releaseOnboardLock: () => {
+      onboardSession.releaseOnboardLock();
+    },
+    clearGatewayEnv: () => {
+      delete process.env.OPENSHELL_GATEWAY;
+    },
+    initializeOnboardRun,
+    getResumeConflicts: (session, shellState, requestedAgent) =>
+      getResumeConfigConflicts(session, {
+        nonInteractive: shellState.nonInteractive,
+        fromDockerfile: shellState.requestedFromDockerfile,
+        agent: requestedAgent,
+      }),
+    createOnboardRunContext,
+    getOnboardBannerLines,
+    buildOrchestratorDeps: (runContext, shellState, requestedAgent) =>
       createOnboardingOrchestratorDeps(runContext, {
-        resume,
-        dangerouslySkipPermissions,
-        requestedAgent: opts.agent || null,
+        resume: shellState.resume,
+        dangerouslySkipPermissions: shellState.dangerouslySkipPermissions,
+        requestedAgent,
         gatewayName: GATEWAY_NAME,
         dashboardPort: DASHBOARD_PORT,
         resolveAgent: agentOnboard.resolveAgent,
@@ -5889,23 +5827,16 @@ async function onboard(opts = {}) {
         arePolicyPresetsApplied,
         setupPoliciesWithSelection,
       }),
-    );
-    if (orchestrationResult.policyResult.kind === "sandbox_not_ready") {
-      console.error(`\n${orchestrationResult.policyResult.message}`);
-      process.exit(1);
-    }
-
-    completed = true;
-    printDashboard(
-      orchestrationResult.sandboxName,
-      orchestrationResult.model,
-      orchestrationResult.provider,
-      orchestrationResult.nimContainer,
-      orchestrationResult.agent,
-    );
-  } finally {
-    releaseOnboardLock();
-  }
+    runOnboardingOrchestrator,
+    printDashboard,
+    note,
+    log: console.log,
+    error: console.error,
+    exit: (code) => process.exit(code),
+    onceProcessExit: (handler) => {
+      process.once("exit", handler);
+    },
+  });
 }
 
 module.exports = {
