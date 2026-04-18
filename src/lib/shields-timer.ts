@@ -7,23 +7,33 @@
 // restores the captured policy snapshot.
 //
 // Usage (internal — called by shields.ts via fork()):
-//   node shields-timer.js <sandbox-name> <snapshot-path> <restore-at-iso>
+//   node shields-timer.js <sandbox-name> <snapshot-path> <restore-at-iso> <config-path> <config-dir>
 
 const fs = require("fs");
 const path = require("path");
+const { execFileSync } = require("child_process");
 const { run } = require("./runner");
 const { buildPolicySetCommand } = require("./policies");
 
 const STATE_DIR = path.join(process.env.HOME ?? "/tmp", ".nemoclaw", "state");
 const AUDIT_FILE = path.join(STATE_DIR, "shields-audit.jsonl");
+const K3S_CONTAINER = "openshell-cluster-nemoclaw";
 
-const [sandboxName, snapshotPath, restoreAtIso] = process.argv.slice(2);
+const [sandboxName, snapshotPath, restoreAtIso, configPath, configDir] = process.argv.slice(2);
 const STATE_FILE = path.join(STATE_DIR, `shields-${sandboxName}.json`);
 const restoreAtMs = new Date(restoreAtIso).getTime();
 const delayMs = Math.max(0, restoreAtMs - Date.now());
 
 if (!sandboxName || !snapshotPath || !restoreAtIso || isNaN(restoreAtMs)) {
   process.exit(1);
+}
+
+function kubectlExec(cmd) {
+  execFileSync("docker", [
+    "exec", K3S_CONTAINER,
+    "kubectl", "exec", "-n", "openshell", sandboxName, "-c", "agent", "--",
+    ...cmd,
+  ], { stdio: ["ignore", "pipe", "pipe"], timeout: 15000 });
 }
 
 function appendAudit(entry) {
@@ -101,6 +111,28 @@ setTimeout(() => {
       });
       cleanupMarker();
       process.exit(1);
+    }
+
+    // Re-lock config file (each operation independent)
+    if (configPath) {
+      const lockErrors = [];
+      try { kubectlExec(["chmod", "444", configPath]); } catch { lockErrors.push("chmod 444"); }
+      try { kubectlExec(["chown", "root:root", configPath]); } catch { lockErrors.push("chown file"); }
+      if (configDir) {
+        try { kubectlExec(["chmod", "755", configDir]); } catch { lockErrors.push("chmod dir"); }
+        try { kubectlExec(["chown", "root:root", configDir]); } catch { lockErrors.push("chown dir"); }
+      }
+      try { kubectlExec(["chattr", "+i", configPath]); } catch { lockErrors.push("chattr +i"); }
+
+      if (lockErrors.length > 0) {
+        appendAudit({
+          action: "shields_auto_restore_lock_warning",
+          sandbox: sandboxName,
+          timestamp: now,
+          restored_by: "auto_timer",
+          warning: `Some lock operations failed: ${lockErrors.join(", ")}`,
+        });
+      }
     }
 
     // Audit

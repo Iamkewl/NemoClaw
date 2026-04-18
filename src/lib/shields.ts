@@ -44,6 +44,14 @@ function kubectlExec(sandboxName: string, cmd: string[]): void {
   ], { stdio: ["ignore", "pipe", "pipe"], timeout: 15000 });
 }
 
+function kubectlExecCapture(sandboxName: string, cmd: string[]): string {
+  return execFileSync("docker", [
+    "exec", K3S_CONTAINER,
+    "kubectl", "exec", "-n", "openshell", sandboxName, "-c", "agent", "--",
+    ...cmd,
+  ], { stdio: ["ignore", "pipe", "pipe"], timeout: 15000 }).toString().trim();
+}
+
 // Re-export for tests and external consumers
 const MAX_TIMEOUT_SECONDS = MAX_SECONDS;
 const DEFAULT_TIMEOUT_SECONDS = DEFAULT_SECONDS;
@@ -141,6 +149,70 @@ function unlockAgentConfig(sandboxName: string, target: { configPath: string; co
     kubectlExec(sandboxName, ["chmod", "700", target.configDir]);
   } catch {
     console.error("  Warning: Could not unlock config file. Config may remain read-only.");
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Config lock — shared between shields-up, auto-restore timer, and rollback
+//
+// Each operation runs independently so a single failure does not skip the
+// rest. After all attempts, we verify the actual on-disk state and throw
+// if the config is not properly locked.
+// ---------------------------------------------------------------------------
+
+function lockAgentConfig(sandboxName: string, target: { configPath: string; configDir: string }): void {
+  const errors: string[] = [];
+
+  try { kubectlExec(sandboxName, ["chmod", "444", target.configPath]); }
+  catch { errors.push("chmod 444 config file"); }
+
+  try { kubectlExec(sandboxName, ["chown", "root:root", target.configPath]); }
+  catch { errors.push("chown root:root config file"); }
+
+  try { kubectlExec(sandboxName, ["chmod", "755", target.configDir]); }
+  catch { errors.push("chmod 755 config dir"); }
+
+  try { kubectlExec(sandboxName, ["chown", "root:root", target.configDir]); }
+  catch { errors.push("chown root:root config dir"); }
+
+  try { kubectlExec(sandboxName, ["chattr", "+i", target.configPath]); }
+  catch { errors.push("chattr +i config file"); }
+
+  if (errors.length > 0) {
+    console.error(`  Some lock operations failed: ${errors.join(", ")}`);
+  }
+
+  // Verify the lock actually took effect
+  const issues: string[] = [];
+  try {
+    const perms = kubectlExecCapture(sandboxName, ["stat", "-c", "%a %U:%G", target.configPath]);
+    const [mode, owner] = perms.split(" ");
+    if (!/^4[0-4][0-4]$/.test(mode)) issues.push(`file mode=${mode} (expected 444)`);
+    if (owner !== "root:root") issues.push(`file owner=${owner} (expected root:root)`);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    issues.push(`file stat failed: ${msg}`);
+  }
+
+  try {
+    const dirPerms = kubectlExecCapture(sandboxName, ["stat", "-c", "%a %U:%G", target.configDir]);
+    const [dirMode, dirOwner] = dirPerms.split(" ");
+    if (dirMode !== "755") issues.push(`dir mode=${dirMode} (expected 755)`);
+    if (dirOwner !== "root:root") issues.push(`dir owner=${dirOwner} (expected root:root)`);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    issues.push(`dir stat failed: ${msg}`);
+  }
+
+  try {
+    const attrs = kubectlExecCapture(sandboxName, ["lsattr", "-d", target.configPath]);
+    if (!attrs.includes("i")) issues.push("immutable bit not set");
+  } catch {
+    // lsattr may not be available on all images — skip
+  }
+
+  if (issues.length > 0) {
+    throw new Error(`Config not locked: ${issues.join(", ")}`);
   }
 }
 
@@ -250,7 +322,7 @@ function shieldsDown(sandboxName: string, opts: ShieldsDownOpts = {}): void {
   const actualScript = fs.existsSync(timerScriptJs) ? timerScriptJs : timerScript;
 
   try {
-    const child = fork(actualScript, [sandboxName, snapshotPath, restoreAt.toISOString()], {
+    const child = fork(actualScript, [sandboxName, snapshotPath, restoreAt.toISOString(), target.configPath, target.configDir], {
       detached: true,
       stdio: ["ignore", "ignore", "ignore", "ipc"],
     });
@@ -273,13 +345,11 @@ function shieldsDown(sandboxName: string, opts: ShieldsDownOpts = {}): void {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`  Cannot start auto-restore timer: ${message}`);
     console.error("  Rolling back — restoring policy from snapshot...");
+    run(buildPolicySetCommand(snapshotPath, sandboxName), { ignoreError: true });
     try {
-      run(buildPolicySetCommand(snapshotPath, sandboxName), { ignoreError: true });
-      kubectlExec(sandboxName, ["chmod", "444", target.configPath]);
-      kubectlExec(sandboxName, ["chown", "root:root", target.configPath]);
-      kubectlExec(sandboxName, ["chattr", "+i", target.configPath]);
+      lockAgentConfig(sandboxName, target);
     } catch {
-      // Best effort rollback
+      console.error("  Warning: Rollback re-lock could not be verified. Check config manually.");
     }
     saveShieldsState(sandboxName, {
       shieldsDown: false,
@@ -351,16 +421,18 @@ function shieldsUp(sandboxName: string): void {
   // 2b. Re-lock config file to read-only.
   //     Restore the Dockerfile's original permissions and immutable bit.
   //     Uses kubectl exec to bypass Landlock (same as shields down).
+  //     Each operation runs independently and the result is verified.
+  //     If verification fails, shields remain DOWN — we do not lie about state.
   const target = resolveAgentConfig(sandboxName);
   console.log(`  Locking ${target.agentName} config (${target.configPath})...`);
   try {
-    kubectlExec(sandboxName, ["chmod", "444", target.configPath]);
-    kubectlExec(sandboxName, ["chown", "root:root", target.configPath]);
-    kubectlExec(sandboxName, ["chmod", "755", target.configDir]);
-    kubectlExec(sandboxName, ["chown", "root:root", target.configDir]);
-    kubectlExec(sandboxName, ["chattr", "+i", target.configPath]);
-  } catch {
-    console.error("  Warning: Could not re-lock config file.");
+    lockAgentConfig(sandboxName, target);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`  ERROR: ${message}`);
+    console.error("  Shields remain DOWN — manual intervention required.");
+    console.error(`  Re-lock manually via kubectl exec, then run: nemoclaw ${sandboxName} shields up`);
+    process.exit(1);
   }
 
   // 3. Calculate duration
