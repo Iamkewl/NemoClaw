@@ -75,7 +75,22 @@ const {
   getOnboardLockConflictLines,
   resolveOnboardShellState,
 } = require("./onboard-shell");
-const { collectResumeConfigConflicts, detectResumeSandboxConflict } = require("./onboard-resume");
+const {
+  getEffectiveProviderName: resolveEffectiveProviderName,
+  getNonInteractiveModel: resolveNonInteractiveModel,
+  getNonInteractiveProvider: resolveNonInteractiveProvider,
+  getRequestedModelHint: resolveRequestedModelHint,
+  getRequestedProviderHint: resolveRequestedProviderHint,
+  getRequestedSandboxNameHint: resolveRequestedSandboxNameHint,
+  getResumeConfigConflicts: collectRequestedResumeConfigConflicts,
+  getResumeSandboxConflict: detectRequestedResumeSandboxConflict,
+} = require("./onboard-requests");
+const {
+  getContainerRuntime: resolveContainerRuntime,
+  getFutureShellPathHint: resolveFutureShellPathHint,
+  getPortConflictServiceHints: resolvePortConflictServiceHints,
+  printRemediationActions: renderRemediationActions,
+} = require("./onboard-remediation");
 const policies = require("./policies");
 const tiers = require("./tiers");
 const { ensureUsageNoticeConsent } = require("./usage-notice");
@@ -2016,75 +2031,53 @@ function prepareOllamaModel(model, installedModels = []) {
 }
 
 function getRequestedSandboxNameHint() {
-  const raw = process.env.NEMOCLAW_SANDBOX_NAME;
-  if (typeof raw !== "string") return null;
-  const normalized = raw.trim().toLowerCase();
-  return normalized || null;
+  return resolveRequestedSandboxNameHint(process.env);
 }
 
 function getResumeSandboxConflict(session) {
-  return detectResumeSandboxConflict(session, getRequestedSandboxNameHint());
+  return detectRequestedResumeSandboxConflict(session, process.env);
 }
 
 function getRequestedProviderHint(nonInteractive = isNonInteractive()) {
-  return nonInteractive ? getNonInteractiveProvider() : null;
+  return resolveRequestedProviderHint(nonInteractive, {
+    env: process.env,
+    error: console.error,
+    exit: (code) => process.exit(code),
+  });
 }
 
 function getRequestedModelHint(nonInteractive = isNonInteractive()) {
-  if (!nonInteractive) return null;
-  const providerKey = getRequestedProviderHint(nonInteractive) || "cloud";
-  return getNonInteractiveModel(providerKey);
+  return resolveRequestedModelHint(nonInteractive, {
+    env: process.env,
+    error: console.error,
+    exit: (code) => process.exit(code),
+    isSafeModelId,
+  });
 }
 
 function getEffectiveProviderName(providerKey) {
-  if (!providerKey) return null;
-  if (REMOTE_PROVIDER_CONFIG[providerKey]) {
-    return REMOTE_PROVIDER_CONFIG[providerKey].providerName;
-  }
-
-  switch (providerKey) {
-    case "nim-local":
-      return "nvidia-nim";
-    case "ollama":
-      return "ollama-local";
-    case "vllm":
-      return "vllm-local";
-    default:
-      return providerKey;
-  }
+  return resolveEffectiveProviderName(providerKey, REMOTE_PROVIDER_CONFIG);
 }
 
 function getResumeConfigConflicts(session, opts = {}) {
-  const nonInteractive = opts.nonInteractive ?? isNonInteractive();
-  const requestedProvider = getRequestedProviderHint(nonInteractive);
-  return collectResumeConfigConflicts(session, {
-    requestedSandboxName: getRequestedSandboxNameHint(),
-    requestedProvider: getEffectiveProviderName(requestedProvider),
-    requestedModel: getRequestedModelHint(nonInteractive),
-    requestedFromDockerfile: opts.fromDockerfile || null,
-    requestedAgent: opts.agent || process.env.NEMOCLAW_AGENT || null,
+  return collectRequestedResumeConfigConflicts(session, {
+    nonInteractive: opts.nonInteractive ?? isNonInteractive(),
+    fromDockerfile: opts.fromDockerfile || null,
+    agent: opts.agent || null,
+    env: process.env,
+    error: console.error,
+    exit: (code) => process.exit(code),
+    isSafeModelId,
+    remoteProviderConfig: REMOTE_PROVIDER_CONFIG,
   });
 }
 
 function getContainerRuntime() {
-  const info = runCapture("docker info 2>/dev/null", { ignoreError: true });
-  return inferContainerRuntime(info);
+  return resolveContainerRuntime({ runCapture, inferContainerRuntime });
 }
 
 function printRemediationActions(actions) {
-  if (!Array.isArray(actions) || actions.length === 0) {
-    return;
-  }
-
-  console.error("");
-  console.error("  Suggested fix:");
-  console.error("");
-  for (const action of actions) {
-    console.error(`  - ${action.title}: ${action.reason}`);
-    for (const command of action.commands || []) {
-      console.error(`    ${command}`);
-    }
-  }
+  return renderRemediationActions(actions, console.error);
 }
 
 function isOpenshellInstalled() {
@@ -2092,25 +2085,11 @@ function isOpenshellInstalled() {
 }
 
 function getFutureShellPathHint(binDir, pathValue = process.env.PATH || "") {
-  if (String(pathValue).split(path.delimiter).includes(binDir)) {
-    return null;
-  }
-  return `export PATH="${binDir}:$PATH"`;
+  return resolveFutureShellPathHint(binDir, pathValue);
 }
 
 function getPortConflictServiceHints(platform = process.platform) {
-  if (platform === "darwin") {
-    return [
-      "       # or, if it's a launchctl service (macOS):",
-      "       launchctl list | grep -i claw   # columns: PID | ExitStatus | Label",
-      `       launchctl unload ${OPENCLAW_LAUNCH_AGENT_PLIST}`,
-      "       # or: launchctl bootout gui/$(id -u)/ai.openclaw.gateway",
-    ];
-  }
-  return [
-    "       # or, if it's a systemd service:",
-    "       systemctl --user stop openclaw-gateway.service",
-  ];
+  return resolvePortConflictServiceHints(platform, OPENCLAW_LAUNCH_AGENT_PLIST);
 }
 
 function installOpenshell() {
@@ -2201,46 +2180,20 @@ function waitForSandboxReady(sandboxName, attempts = 10, delaySeconds = 2) {
 // isSafeModelId — see validation import above
 
 function getNonInteractiveProvider() {
-  const providerKey = (process.env.NEMOCLAW_PROVIDER || "").trim().toLowerCase();
-  if (!providerKey) return null;
-  const aliases = {
-    cloud: "build",
-    nim: "nim-local",
-    vllm: "vllm",
-    anthropiccompatible: "anthropicCompatible",
-  };
-  const normalized = aliases[providerKey] || providerKey;
-  const validProviders = new Set([
-    "build",
-    "openai",
-    "anthropic",
-    "anthropicCompatible",
-    "gemini",
-    "ollama",
-    "custom",
-    "nim-local",
-    "vllm",
-  ]);
-  if (!validProviders.has(normalized)) {
-    console.error(`  Unsupported NEMOCLAW_PROVIDER: ${providerKey}`);
-    console.error(
-      "  Valid values: build, openai, anthropic, anthropicCompatible, gemini, ollama, custom, nim-local, vllm",
-    );
-    process.exit(1);
-  }
-
-  return normalized;
+  return resolveNonInteractiveProvider({
+    env: process.env,
+    error: console.error,
+    exit: (code) => process.exit(code),
+  });
 }
 
 function getNonInteractiveModel(providerKey) {
-  const model = (process.env.NEMOCLAW_MODEL || "").trim();
-  if (!model) return null;
-  if (!isSafeModelId(model)) {
-    console.error(`  Invalid NEMOCLAW_MODEL for provider '${providerKey}': ${model}`);
-    console.error("  Model values may only contain letters, numbers, '.', '_', ':', '/', and '-'.");
-    process.exit(1);
-  }
-  return model;
+  return resolveNonInteractiveModel(providerKey, {
+    env: process.env,
+    error: console.error,
+    exit: (code) => process.exit(code),
+    isSafeModelId,
+  });
 }
 
 // ── Step 1: Preflight ────────────────────────────────────────────
