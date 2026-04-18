@@ -469,23 +469,23 @@ ensure_nvm_loaded() {
 detect_shell_profile() {
   local profile="$HOME/.bashrc"
   case "$(basename "${SHELL:-}")" in
-    zsh)
-      profile="$HOME/.zshrc"
-      ;;
-    fish)
-      profile="$HOME/.config/fish/config.fish"
-      ;;
-    tcsh)
-      profile="$HOME/.tcshrc"
-      ;;
-    csh)
-      profile="$HOME/.cshrc"
-      ;;
-    *)
-      if [[ ! -f "$HOME/.bashrc" && -f "$HOME/.profile" ]]; then
-        profile="$HOME/.profile"
-      fi
-      ;;
+  zsh)
+    profile="$HOME/.zshrc"
+    ;;
+  fish)
+    profile="$HOME/.config/fish/config.fish"
+    ;;
+  tcsh)
+    profile="$HOME/.tcshrc"
+    ;;
+  csh)
+    profile="$HOME/.cshrc"
+    ;;
+  *)
+    if [[ ! -f "$HOME/.bashrc" && -f "$HOME/.profile" ]]; then
+      profile="$HOME/.profile"
+    fi
+    ;;
   esac
   printf "%s" "$profile"
 }
@@ -582,39 +582,39 @@ ensure_local_bin_in_profile() {
   local local_bin="$NEMOCLAW_SHIM_DIR"
 
   case "$shell_name" in
-    fish)
-      # fish needs both ~/.local/bin and the nvm node bin (nvm doesn't support fish).
-      local node_bin=""
-      node_bin="$(command -v node 2>/dev/null)" || true
+  fish)
+    # fish needs both ~/.local/bin and the nvm node bin (nvm doesn't support fish).
+    local node_bin=""
+    node_bin="$(command -v node 2>/dev/null)" || true
+    if [[ -n "$node_bin" ]]; then
+      node_bin="$(dirname "$node_bin")"
+    fi
+    {
+      printf '\n# NemoClaw PATH setup\n'
+      printf 'fish_add_path --path --append "%s"\n' "$local_bin"
       if [[ -n "$node_bin" ]]; then
-        node_bin="$(dirname "$node_bin")"
+        printf 'fish_add_path --path --append "%s"\n' "$node_bin"
       fi
-      {
-        printf '\n# NemoClaw PATH setup\n'
-        printf 'fish_add_path --path --append "%s"\n' "$local_bin"
-        if [[ -n "$node_bin" ]]; then
-          printf 'fish_add_path --path --append "%s"\n' "$node_bin"
-        fi
-        printf '# end NemoClaw PATH setup\n'
-      } >>"$profile"
-      ;;
-    tcsh | csh)
-      {
-        printf '\n# NemoClaw PATH setup\n'
-        # shellcheck disable=SC2016
-        printf 'setenv PATH "%s:${PATH}"\n' "$local_bin"
-        printf '# end NemoClaw PATH setup\n'
-      } >>"$profile"
-      ;;
-    *)
-      # bash, zsh, and others — nvm already handles node PATH for these shells.
-      {
-        printf '\n# NemoClaw PATH setup\n'
-        # shellcheck disable=SC2016
-        printf 'export PATH="%s:$PATH"\n' "$local_bin"
-        printf '# end NemoClaw PATH setup\n'
-      } >>"$profile"
-      ;;
+      printf '# end NemoClaw PATH setup\n'
+    } >>"$profile"
+    ;;
+  tcsh | csh)
+    {
+      printf '\n# NemoClaw PATH setup\n'
+      # shellcheck disable=SC2016
+      printf 'setenv PATH "%s:${PATH}"\n' "$local_bin"
+      printf '# end NemoClaw PATH setup\n'
+    } >>"$profile"
+    ;;
+  *)
+    # bash, zsh, and others — nvm already handles node PATH for these shells.
+    {
+      printf '\n# NemoClaw PATH setup\n'
+      # shellcheck disable=SC2016
+      printf 'export PATH="%s:$PATH"\n' "$local_bin"
+      printf '# end NemoClaw PATH setup\n'
+    } >>"$profile"
+    ;;
   esac
 }
 
@@ -650,9 +650,9 @@ install_nodejs() {
     local current_version current_npm_major
     current_version="$(node --version 2>/dev/null || true)"
     current_npm_major="$(version_major "$(npm --version 2>/dev/null || echo 0)")"
-    if version_gte "${current_version#v}" "$MIN_NODE_VERSION" \
-      && [[ "$current_npm_major" =~ ^[0-9]+$ ]] \
-      && ((current_npm_major >= MIN_NPM_MAJOR)); then
+    if version_gte "${current_version#v}" "$MIN_NODE_VERSION" &&
+      [[ "$current_npm_major" =~ ^[0-9]+$ ]] &&
+      ((current_npm_major >= MIN_NPM_MAJOR)); then
       info "Node.js found: ${current_version}"
       return
     fi
@@ -665,8 +665,8 @@ install_nodejs() {
   local NVM_SHA256="4b7412c49960c7d31e8df72da90c1fb5b8cccb419ac99537b737028d497aba4f"
   local nvm_tmp
   nvm_tmp="$(mktemp)"
-  curl -fsSL "https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh" -o "$nvm_tmp" \
-    || {
+  curl -fsSL "https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh" -o "$nvm_tmp" ||
+    {
       rm -f "$nvm_tmp"
       error "Failed to download nvm installer"
     }
@@ -718,8 +718,8 @@ detect_gpu() {
 get_vram_mb() {
   # Returns total VRAM in MiB (NVIDIA only). Falls back to 0.
   if command_exists nvidia-smi; then
-    nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null \
-      | awk '{s += $1} END {print s+0}'
+    nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null |
+      awk '{s += $1} END {print s+0}'
     return
   fi
   # macOS — report unified memory as VRAM
@@ -845,8 +845,8 @@ pre_extract_openclaw() {
     local tgz
     tgz="$(find "$tmpdir" -maxdepth 1 -name 'openclaw-*.tgz' -print -quit)"
     if [[ -n "$tgz" && -f "$tgz" ]]; then
-      if mkdir -p "${install_dir}/node_modules/openclaw" \
-        && tar xzf "$tgz" -C "${install_dir}/node_modules/openclaw" --strip-components=1; then
+      if mkdir -p "${install_dir}/node_modules/openclaw" &&
+        tar xzf "$tgz" -C "${install_dir}/node_modules/openclaw" --strip-components=1; then
         info "openclaw pre-extracted successfully"
       else
         warn "Failed to extract openclaw tarball"
@@ -927,8 +927,8 @@ install_nemoclaw() {
     info "NemoClaw package.json found in the selected source checkout — installing from source…"
     NEMOCLAW_SOURCE_ROOT="$repo_root"
     if [[ -z "${NEMOCLAW_AGENT:-}" || "${NEMOCLAW_AGENT}" == "openclaw" ]]; then
-      spin "Preparing OpenClaw package" bash -c "$(declare -f info warn resolve_openclaw_version pre_extract_openclaw); pre_extract_openclaw \"\$1\"" _ "$NEMOCLAW_SOURCE_ROOT" \
-        || warn "Pre-extraction failed — npm install may fail if openclaw tarball is broken"
+      spin "Preparing OpenClaw package" bash -c "$(declare -f info warn resolve_openclaw_version pre_extract_openclaw); pre_extract_openclaw \"\$1\"" _ "$NEMOCLAW_SOURCE_ROOT" ||
+        warn "Pre-extraction failed — npm install may fail if openclaw tarball is broken"
     fi
     spin "Installing NemoClaw dependencies" bash -c "cd \"$NEMOCLAW_SOURCE_ROOT\" && npm install --ignore-scripts"
     spin "Building NemoClaw CLI modules" bash -c "cd \"$NEMOCLAW_SOURCE_ROOT\" && npm run --if-present build:cli"
@@ -957,11 +957,11 @@ install_nemoclaw() {
     git -C "$nemoclaw_src" fetch --depth=1 origin 'refs/tags/v*:refs/tags/v*' 2>/dev/null || true
     # Also stamp .version as a fallback for environments where git is
     # unavailable or tags are pruned later.
-    git -C "$nemoclaw_src" describe --tags --match 'v*' 2>/dev/null \
-      | sed 's/^v//' >"$nemoclaw_src/.version" || true
+    git -C "$nemoclaw_src" describe --tags --match 'v*' 2>/dev/null |
+      sed 's/^v//' >"$nemoclaw_src/.version" || true
     if [[ -z "${NEMOCLAW_AGENT:-}" || "${NEMOCLAW_AGENT}" == "openclaw" ]]; then
-      spin "Preparing OpenClaw package" bash -c "$(declare -f info warn resolve_openclaw_version pre_extract_openclaw); pre_extract_openclaw \"\$1\"" _ "$nemoclaw_src" \
-        || warn "Pre-extraction failed — npm install may fail if openclaw tarball is broken"
+      spin "Preparing OpenClaw package" bash -c "$(declare -f info warn resolve_openclaw_version pre_extract_openclaw); pre_extract_openclaw \"\$1\"" _ "$nemoclaw_src" ||
+        warn "Pre-extraction failed — npm install may fail if openclaw tarball is broken"
     fi
     spin "Installing NemoClaw dependencies" bash -c "cd \"$nemoclaw_src\" && npm install --ignore-scripts"
     spin "Building NemoClaw CLI modules" bash -c "cd \"$nemoclaw_src\" && npm run --if-present build:cli"
@@ -1195,22 +1195,22 @@ main() {
   ACCEPT_THIRD_PARTY_SOFTWARE=""
   for arg in "$@"; do
     case "$arg" in
-      --non-interactive) NON_INTERACTIVE=1 ;;
-      --yes-i-accept-third-party-software) ACCEPT_THIRD_PARTY_SOFTWARE=1 ;;
-      --version | -v)
-        local version_suffix
-        version_suffix="$(installer_version_for_display)"
-        printf "nemoclaw-installer%s\n" "${version_suffix# }"
-        exit 0
-        ;;
-      --help | -h)
-        usage
-        exit 0
-        ;;
-      *)
-        usage
-        error "Unknown option: $arg"
-        ;;
+    --non-interactive) NON_INTERACTIVE=1 ;;
+    --yes-i-accept-third-party-software) ACCEPT_THIRD_PARTY_SOFTWARE=1 ;;
+    --version | -v)
+      local version_suffix
+      version_suffix="$(installer_version_for_display)"
+      printf "nemoclaw-installer%s\n" "${version_suffix# }"
+      exit 0
+      ;;
+    --help | -h)
+      usage
+      exit 0
+      ;;
+    *)
+      usage
+      error "Unknown option: $arg"
+      ;;
     esac
   done
   # Also honor env var
