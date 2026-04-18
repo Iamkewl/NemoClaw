@@ -103,20 +103,55 @@ export async function runInferenceSelectionLoop<TGpu = unknown>(
       });
     }
 
-    if (!hasResolvedSelection(state)) {
-      throw new Error("Provider selection did not produce a provider/model pair.");
-    }
+    const hydratedCredentialEnv = resumeProviderSelection ? state.credentialEnv : null;
+    try {
+      if (!hasResolvedSelection(state)) {
+        throw new Error("Provider selection did not produce a provider/model pair.");
+      }
 
-    deps.setOpenshellBinary(deps.getOpenshellBinary());
+      deps.setOpenshellBinary(deps.getOpenshellBinary());
 
-    const resumeInference =
-      !forceProviderSelection &&
-      deps.resume &&
-      deps.hasCompletedInference &&
-      deps.isInferenceRouteReady(state.provider, state.model);
+      const resumeInference =
+        !forceProviderSelection &&
+        deps.resume &&
+        deps.hasCompletedInference &&
+        deps.isInferenceRouteReady(state.provider, state.model);
 
-    if (resumeInference) {
-      deps.onSkip("inference", `${state.provider} / ${state.model}`);
+      if (resumeInference) {
+        deps.onSkip("inference", `${state.provider} / ${state.model}`);
+        if (state.nimContainer) {
+          deps.updateSandboxNimContainer(state.sandboxName, state.nimContainer);
+        }
+        deps.onCompleteStep("inference", {
+          sandboxName: state.sandboxName,
+          provider: state.provider,
+          model: state.model,
+          nimContainer: state.nimContainer,
+        });
+        break;
+      }
+
+      deps.onStartStep("inference", {
+        sandboxName: state.sandboxName,
+        provider: state.provider,
+        model: state.model,
+      });
+      let inferenceResult: { retry?: "selection" } | void;
+      try {
+        inferenceResult = await deps.setupInference(
+          state.sandboxName,
+          state.model,
+          state.provider,
+          state.endpointUrl,
+          state.credentialEnv,
+        );
+      } finally {
+        deps.clearSensitiveEnv(state.credentialEnv);
+      }
+      if (inferenceResult?.retry === "selection") {
+        forceProviderSelection = true;
+        continue;
+      }
       if (state.nimContainer) {
         deps.updateSandboxNimContainer(state.sandboxName, state.nimContainer);
       }
@@ -127,35 +162,11 @@ export async function runInferenceSelectionLoop<TGpu = unknown>(
         nimContainer: state.nimContainer,
       });
       break;
+    } finally {
+      if (hydratedCredentialEnv !== null) {
+        deps.clearSensitiveEnv(hydratedCredentialEnv);
+      }
     }
-
-    deps.onStartStep("inference", {
-      sandboxName: state.sandboxName,
-      provider: state.provider,
-      model: state.model,
-    });
-    const inferenceResult = await deps.setupInference(
-      state.sandboxName,
-      state.model,
-      state.provider,
-      state.endpointUrl,
-      state.credentialEnv,
-    );
-    deps.clearSensitiveEnv(state.credentialEnv);
-    if (inferenceResult?.retry === "selection") {
-      forceProviderSelection = true;
-      continue;
-    }
-    if (state.nimContainer) {
-      deps.updateSandboxNimContainer(state.sandboxName, state.nimContainer);
-    }
-    deps.onCompleteStep("inference", {
-      sandboxName: state.sandboxName,
-      provider: state.provider,
-      model: state.model,
-      nimContainer: state.nimContainer,
-    });
-    break;
   }
 
   return state;

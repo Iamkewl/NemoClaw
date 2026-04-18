@@ -62,6 +62,20 @@ function isValidFailurePhase(phase: string): phase is ValidFailurePhase {
   return VALID_FAILURE_PHASES.has(phase as ValidFailurePhase);
 }
 
+function deepFreeze<T>(value: T): T {
+  if (typeof value !== "object" || value === null) {
+    return value;
+  }
+  if (Object.isFrozen(value)) {
+    return value;
+  }
+  Object.freeze(value);
+  for (const child of Object.values(value as Record<string, unknown>)) {
+    deepFreeze(child);
+  }
+  return value;
+}
+
 export class InMemoryOnboardDriver {
   #session: Session;
   #state: OnboardFlowState;
@@ -103,7 +117,7 @@ export class InMemoryOnboardDriver {
   }
 
   get state(): OnboardFlowState {
-    return this.#state;
+    return deepFreeze(structuredClone(this.#state));
   }
 
   enterWorkflow(): this {
@@ -196,16 +210,17 @@ export class InMemoryOnboardDriver {
   }
 
   finishMessaging(messagingChannels: string[]): this {
+    const channels = [...messagingChannels];
     applyStepComplete(this.#session, "messaging", {
       sandboxName: this.#session.sandboxName ?? undefined,
       provider: this.#session.provider ?? undefined,
       model: this.#session.model ?? undefined,
-      messagingChannels,
+      messagingChannels: channels,
     });
     if (this.#state.phase === "messaging") {
       this.#state = transitionOnboardState(this.#state, {
         type: "MESSAGING_CONFIGURED",
-        messagingChannels,
+        messagingChannels: channels,
       });
     } else {
       this.#state = deriveOnboardFlowState(this.#session, {
@@ -258,22 +273,23 @@ export class InMemoryOnboardDriver {
   }
 
   finishPolicies(policyPresets: string[]): this {
+    const presets = [...policyPresets];
     applyStepComplete(this.#session, "policies", {
       sandboxName: this.#session.sandboxName ?? undefined,
       provider: this.#session.provider ?? undefined,
       model: this.#session.model ?? undefined,
-      policyPresets,
+      policyPresets: presets,
     });
     applySessionComplete(this.#session, {
       sandboxName: this.#session.sandboxName ?? undefined,
       provider: this.#session.provider ?? undefined,
       model: this.#session.model ?? undefined,
-      policyPresets,
+      policyPresets: presets,
     });
     if (this.#state.phase === "policies") {
       this.#state = transitionOnboardState(this.#state, {
         type: "POLICIES_APPLIED",
-        policyPresets,
+        policyPresets: presets,
       });
     } else {
       this.#state = deriveOnboardFlowState(this.#session, {
@@ -303,7 +319,7 @@ export class InMemoryOnboardDriver {
           ...this.#state,
           error: {
             code,
-            message,
+            message: this.#session.failure?.message ?? message,
             recoverable: this.#session.resumable,
           },
         };

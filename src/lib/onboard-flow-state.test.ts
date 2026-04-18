@@ -241,6 +241,41 @@ describe("onboard-flow-state", () => {
     expect(state.ctx.runtimeTarget).toEqual({ kind: "openclaw" });
   });
 
+  it("rewinds a malformed completed session instead of manufacturing empty sandbox/provider/model fields", () => {
+    const session = createSession({
+      status: "complete",
+      resumable: false,
+      provider: "openai-api",
+      model: "gpt-5.4",
+      sandboxName: null,
+      messagingChannels: ["telegram"],
+      policyPresets: ["npm"],
+    });
+    session.steps.preflight.status = "complete";
+    session.steps.gateway.status = "complete";
+    session.steps.provider_selection.status = "complete";
+    session.steps.inference.status = "complete";
+    session.steps.messaging.status = "complete";
+    session.steps.sandbox.status = "complete";
+    session.steps.runtime_setup.status = "complete";
+    session.steps.policies.status = "complete";
+
+    const state = deriveOnboardFlowState(session);
+    expect(state.phase).toBe("sandbox");
+    expect(state.ctx.provider).toBe("openai-api");
+    expect(state.ctx.model).toBe("gpt-5.4");
+  });
+
+  it("rewinds malformed selection checkpoints instead of promoting empty provider/model placeholders", () => {
+    const session = createSession({ sandboxName: "alpha", provider: null, model: null });
+    session.steps.preflight.status = "complete";
+    session.steps.gateway.status = "complete";
+    session.steps.provider_selection.status = "complete";
+
+    const state = deriveOnboardFlowState(session);
+    expect(state.phase).toBe("provider_selection");
+  });
+
   it("keeps agent runtime targets and completed policy state", () => {
     const session = createSession({
       status: "complete",

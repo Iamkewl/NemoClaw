@@ -160,7 +160,7 @@ export function getDashboardAccessInfo(
   const chatUiUrl =
     options.chatUiUrl || process.env.CHAT_UI_URL || `http://127.0.0.1:${CONTROL_UI_PORT}`;
   const dashboardPort = Number(getDashboardForwardPort(chatUiUrl));
-  const dashboardAccess = buildControlUiUrls(token, dashboardPort).map((url, index) => ({
+  const dashboardAccess = buildControlUiUrls(token, dashboardPort, chatUiUrl).map((url, index) => ({
     label: index === 0 ? "Dashboard" : `Alt ${index}`,
     url: buildAuthenticatedDashboardUrl(url, null),
   }));
@@ -215,7 +215,8 @@ export function ensureDashboardForward(
     warningWriter?: (message?: string) => void;
   },
 ): void {
-  const chatUiUrl = deps.chatUiUrl || `http://127.0.0.1:${CONTROL_UI_PORT}`;
+  const chatUiUrl =
+    deps.chatUiUrl || process.env.CHAT_UI_URL || `http://127.0.0.1:${CONTROL_UI_PORT}`;
   const portToStop = getDashboardForwardPort(chatUiUrl);
   const forwardTarget = getDashboardForwardTarget(chatUiUrl);
   deps.runOpenshell(["forward", "stop", portToStop], { ignoreError: true });

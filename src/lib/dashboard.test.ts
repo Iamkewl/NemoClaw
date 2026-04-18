@@ -120,4 +120,13 @@ describe("buildControlUiUrls", () => {
     const urls = buildControlUiUrls("my-token", 19000);
     expect(urls).toEqual(["http://127.0.0.1:19000/#token=my-token"]);
   });
+
+  it("honors an explicit chatUiUrl override instead of reading only CHAT_UI_URL from the environment", () => {
+    process.env.CHAT_UI_URL = "https://env-dashboard.example.com";
+    const urls = buildControlUiUrls("tok", 19999, "https://override.example.com");
+    expect(urls).toEqual([
+      "http://127.0.0.1:19999/#token=tok",
+      "https://override.example.com/#token=tok",
+    ]);
+  });
 });

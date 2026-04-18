@@ -94,6 +94,18 @@ export function getEffectiveMessagingStepState(session: Session): OnboardStepSta
   return cloneStepState(recorded);
 }
 
+function hasSelectionContext(
+  session: Session,
+): session is Session & { provider: string; model: string } {
+  return typeof session.provider === "string" && typeof session.model === "string";
+}
+
+function hasSandboxContext(
+  session: Session,
+): session is Session & { provider: string; model: string; sandboxName: string } {
+  return hasSelectionContext(session) && typeof session.sandboxName === "string";
+}
+
 function getFailureOrigin(session: Session):
   | Exclude<OnboardFlowState["phase"], "boot" | "complete" | "failed">
   | null {
@@ -149,8 +161,20 @@ export function deriveOnboardFlowState(
   const ctx = buildContext(session, options);
   const messagingState = getEffectiveMessagingStepState(session);
 
-  if (session.status === "complete" || session.steps.policies.status === "complete") {
-    return { phase: "complete", ctx: { ...ctx, sandboxName: session.sandboxName ?? "", provider: session.provider ?? "", model: session.model ?? "", policyPresets: session.policyPresets ?? [] } };
+  if (
+    (session.status === "complete" || session.steps.policies.status === "complete") &&
+    hasSandboxContext(session)
+  ) {
+    return {
+      phase: "complete",
+      ctx: {
+        ...ctx,
+        sandboxName: session.sandboxName,
+        provider: session.provider,
+        model: session.model,
+        policyPresets: session.policyPresets ?? [],
+      },
+    };
   }
 
   if (session.status === "failed") {
@@ -167,59 +191,59 @@ export function deriveOnboardFlowState(
     };
   }
 
-  if (session.steps.runtime_setup.status === "complete") {
+  if (session.steps.runtime_setup.status === "complete" && hasSandboxContext(session)) {
     return {
       phase: "policies",
       ctx: {
         ...ctx,
-        sandboxName: session.sandboxName ?? "",
-        provider: session.provider ?? "",
-        model: session.model ?? "",
+        sandboxName: session.sandboxName,
+        provider: session.provider,
+        model: session.model,
       },
     };
   }
 
-  if (session.steps.sandbox.status === "complete") {
+  if (session.steps.sandbox.status === "complete" && hasSandboxContext(session)) {
     return {
       phase: "runtime_setup",
       ctx: {
         ...ctx,
-        sandboxName: session.sandboxName ?? "",
-        provider: session.provider ?? "",
-        model: session.model ?? "",
+        sandboxName: session.sandboxName,
+        provider: session.provider,
+        model: session.model,
       },
     };
   }
 
-  if (messagingState.status === "complete") {
+  if (messagingState.status === "complete" && hasSelectionContext(session)) {
     return {
       phase: "sandbox",
       ctx: {
         ...ctx,
-        provider: session.provider ?? "",
-        model: session.model ?? "",
+        provider: session.provider,
+        model: session.model,
       },
     };
   }
 
-  if (session.steps.inference.status === "complete") {
+  if (session.steps.inference.status === "complete" && hasSelectionContext(session)) {
     return {
       phase: "messaging",
       ctx: {
         ...ctx,
-        provider: session.provider ?? "",
-        model: session.model ?? "",
+        provider: session.provider,
+        model: session.model,
       },
     };
   }
 
-  if (session.steps.provider_selection.status === "complete") {
+  if (session.steps.provider_selection.status === "complete" && hasSelectionContext(session)) {
     return {
       phase: "inference",
       ctx: {
         ...ctx,
-        provider: session.provider ?? "",
-        model: session.model ?? "",
+        provider: session.provider,
+        model: session.model,
       },
     };
   }

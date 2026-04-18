@@ -104,4 +104,59 @@ describe("InMemoryOnboardDriver", () => {
     expect(resumed.session.steps.runtime_setup.status).toBe("complete");
     expect(resumed.state.ctx.runtimeTarget).toEqual({ kind: "agent", agentName: "hermes" });
   });
+
+  it("returns an immutable cloned state snapshot", () => {
+    const driver = InMemoryOnboardDriver.fresh({ requestedSandboxName: "alpha" });
+    driver.enterWorkflow().finishPreflight();
+
+    const state = driver.state as { phase: string };
+    expect(Object.isFrozen(state)).toBe(true);
+    try {
+      state.phase = "boot";
+    } catch {
+      // expected in strict mode
+    }
+    expect(driver.state.phase).toBe("gateway");
+  });
+
+  it("defensively copies messaging channels and policy presets before storing them", () => {
+    const driver = InMemoryOnboardDriver.fresh({ requestedSandboxName: "alpha" });
+    const channels = ["telegram"];
+    const presets = ["npm"];
+
+    driver
+      .enterWorkflow()
+      .finishPreflight()
+      .finishGateway()
+      .finishProviderSelection({ provider: "openai-api", model: "gpt-5.4" })
+      .finishInference()
+      .finishMessaging(channels)
+      .finishSandbox("alpha")
+      .finishRuntimeSetup()
+      .finishPolicies(presets);
+
+    channels.push("slack");
+    presets.push("pypi");
+
+    expect(driver.session.messagingChannels).toEqual(["telegram"]);
+    expect(driver.session.policyPresets).toEqual(["npm"]);
+    if (driver.state.phase !== "complete") {
+      throw new Error("expected complete state");
+    }
+    expect(driver.state.ctx.messagingChannels).toEqual(["telegram"]);
+    expect(driver.state.ctx.policyPresets).toEqual(["npm"]);
+  });
+
+  it("uses the sanitized failure message in the public state", () => {
+    const driver = InMemoryOnboardDriver.fresh({ requestedSandboxName: "alpha" });
+    driver.fail("NVIDIA_API_KEY=nvapi-secret Bearer topsecret");
+
+    if (driver.state.phase !== "failed") {
+      throw new Error("expected failed state");
+    }
+    expect(driver.state.error.message).toContain("NVIDIA_API_KEY=<REDACTED>");
+    expect(driver.state.error.message).toContain("Bearer <REDACTED>");
+    expect(driver.state.error.message).not.toContain("nvapi-secret");
+    expect(driver.state.error.message).not.toContain("topsecret");
+  });
 });

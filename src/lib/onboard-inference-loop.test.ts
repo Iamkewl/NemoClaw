@@ -112,6 +112,55 @@ describe("runInferenceSelectionLoop", () => {
       "skip:inference:nvidia-prod / meta/llama-3.3-70b-instruct",
       "update-nim:alpha:nim-123",
       "complete:inference",
+      "clear-env:NVIDIA_API_KEY",
+    ]);
+  });
+
+  it("clears hydrated credentials even when setupInference throws", async () => {
+    const events: string[] = [];
+
+    await expect(
+      runInferenceSelectionLoop(
+        {
+          sandboxName: "alpha",
+          model: "gpt-5.4",
+          provider: "openai-api",
+          endpointUrl: "https://api.openai.com/v1",
+          credentialEnv: "OPENAI_API_KEY",
+          preferredInferenceApi: "responses",
+          nimContainer: null,
+        },
+        {
+          gpu: null,
+          resume: true,
+          hasCompletedProviderSelection: true,
+          hasCompletedInference: false,
+          setupNim: async () => {
+            throw new Error("should not rerun selection");
+          },
+          setupInference: async () => {
+            throw new Error("boom");
+          },
+          isInferenceRouteReady: () => false,
+          hydrateCredentialEnv: (credentialEnv) => events.push(`hydrate:${credentialEnv}`),
+          getOpenshellBinary: () => "/usr/bin/openshell",
+          setOpenshellBinary: (binary) => events.push(`set-binary:${binary}`),
+          clearSensitiveEnv: (credentialEnv) => events.push(`clear-env:${credentialEnv}`),
+          updateSandboxNimContainer: () => events.push("update-nim"),
+          onSkip: (step, detail) => events.push(`skip:${step}:${detail}`),
+          onStartStep: (step) => events.push(`start:${step}`),
+          onCompleteStep: (step) => events.push(`complete:${step}`),
+        },
+      ),
+    ).rejects.toThrow("boom");
+
+    expect(events).toEqual([
+      "skip:provider_selection:openai-api / gpt-5.4",
+      "hydrate:OPENAI_API_KEY",
+      "set-binary:/usr/bin/openshell",
+      "start:inference",
+      "clear-env:OPENAI_API_KEY",
+      "clear-env:OPENAI_API_KEY",
     ]);
   });
 

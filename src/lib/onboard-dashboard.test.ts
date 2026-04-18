@@ -68,6 +68,7 @@ describe("onboard-dashboard", () => {
   });
 
   it("builds dashboard access info and WSL guidance", () => {
+    process.env.CHAT_UI_URL = "https://env-dashboard.example.com";
     const access = getDashboardAccessInfo("the-crucible", {
       token: "secret-token",
       chatUiUrl: "http://127.0.0.1:19999",
@@ -77,6 +78,7 @@ describe("onboard-dashboard", () => {
       runCapture: (command) => (command.includes("hostname -I") ? "172.24.240.1\n" : ""),
     });
 
+    // Explicit chatUiUrl must override process.env.CHAT_UI_URL when building URLs.
     expect(access).toEqual([
       { label: "Dashboard", url: "http://127.0.0.1:19999/#token=secret-token" },
       { label: "VS Code/WSL", url: "http://172.24.240.1:19999/#token=secret-token" },
@@ -128,6 +130,22 @@ describe("onboard-dashboard", () => {
       "! Port 18789 forward did not start — port may be in use by another process.",
       "  Check: docker ps --format 'table {{.Names}}\\t{{.Ports}}' | grep 18789",
       "  Free the port, then reconnect: nemoclaw the-crucible connect",
+    ]);
+  });
+
+  it("uses CHAT_UI_URL as the fallback forward source when chatUiUrl is omitted", () => {
+    process.env.CHAT_UI_URL = "https://chat.example.com";
+    const calls: string[] = [];
+    ensureDashboardForward("the-crucible", {
+      runOpenshell: (args) => {
+        calls.push(args.join(" "));
+        return { status: 0 };
+      },
+    });
+
+    expect(calls).toEqual([
+      "forward stop 18789",
+      "forward start --background 0.0.0.0:18789 the-crucible",
     ]);
   });
 
