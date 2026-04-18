@@ -62,6 +62,7 @@ const {
 const registry = require("./registry");
 const nim = require("./nim");
 const onboardSession = require("./onboard-session");
+const { ONBOARD_STEP_META, isOnboardStepName, toVisibleStepName } = require("./onboard-fsm");
 const policies = require("./policies");
 const tiers = require("./tiers");
 const { ensureUsageNoticeConsent } = require("./usage-notice");
@@ -5780,21 +5781,13 @@ function startRecordedStep(stepName, updates = {}) {
   }
 }
 
-const ONBOARD_STEP_INDEX = {
-  preflight: { number: 1, title: "Preflight checks" },
-  gateway: { number: 2, title: "Starting OpenShell gateway" },
-  provider_selection: { number: 3, title: "Configuring inference (NIM)" },
-  inference: { number: 4, title: "Setting up inference provider" },
-  messaging: { number: 5, title: "Messaging channels" },
-  sandbox: { number: 6, title: "Creating sandbox" },
-  openclaw: { number: 7, title: "Setting up OpenClaw inside sandbox" },
-  policies: { number: 8, title: "Policy presets" },
-};
+const TOTAL_ONBOARD_STEPS = 8;
 
 function skippedStepMessage(stepName, detail, reason = "resume") {
-  const stepInfo = ONBOARD_STEP_INDEX[stepName];
+  const visibleStepName = isOnboardStepName(stepName) ? toVisibleStepName(stepName) : null;
+  const stepInfo = visibleStepName ? ONBOARD_STEP_META[visibleStepName] : null;
   if (stepInfo) {
-    step(stepInfo.number, 8, stepInfo.title);
+    step(stepInfo.number, TOTAL_ONBOARD_STEPS, stepInfo.title);
   }
   const prefix = reason === "reuse" ? "[reuse]" : "[resume]";
   console.log(`  ${prefix} Skipping ${stepName}${detail ? ` (${detail})` : ""}`);

@@ -2134,9 +2134,13 @@ const { setupInference } = require(${onboardPath});
       "utf-8",
     );
 
-    assert.match(source, /const ONBOARD_STEP_INDEX = \{/);
+    assert.match(source, /const TOTAL_ONBOARD_STEPS = 8;/);
     assert.match(source, /function skippedStepMessage\(stepName, detail, reason = "resume"\)/);
-    assert.match(source, /step\(stepInfo\.number, 8, stepInfo\.title\);/);
+    assert.match(
+      source,
+      /const visibleStepName = isOnboardStepName\(stepName\) \? toVisibleStepName\(stepName\) : null;/,
+    );
+    assert.match(source, /step\(stepInfo\.number, TOTAL_ONBOARD_STEPS, stepInfo\.title\);/);
     assert.match(source, /skippedStepMessage\("openclaw", sandboxName\)/);
     assert.match(
       source,
