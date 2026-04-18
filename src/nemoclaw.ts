@@ -1162,10 +1162,14 @@ async function sandboxConnect(sandboxName, { dangerouslySkipPermissions = false 
     /* non-fatal — don't block connect on version check failure */
   }
 
-  if (dangerouslySkipPermissions) {
+  // Check both the CLI flag and the registry for dangerously-skip-permissions.
+  // The registry flag persists from onboard, so subsequent connects without
+  // the CLI flag still enter permanent shields-down state.
+  const sb = registry.getSandbox(sandboxName);
+  const effectiveSkipPerms = dangerouslySkipPermissions || sb?.dangerouslySkipPermissions;
+  if (effectiveSkipPerms) {
     printDangerouslySkipPermissionsWarning();
-    const policies = require("./lib/policies");
-    policies.applyPermissivePolicy(sandboxName);
+    shields.shieldsDownPermanent(sandboxName);
   }
   checkAndRecoverSandboxProcesses(sandboxName);
   // Ensure Ollama auth proxy is running (recovers from host reboots)
@@ -1251,7 +1255,9 @@ async function sandboxStatus(sandboxName) {
     console.log(`    GPU:      ${sb.gpuEnabled ? "yes" : "no"}`);
     console.log(`    Policies: ${(sb.policies || []).join(", ") || "none"}`);
     if (sb.dangerouslySkipPermissions) {
-      console.log(`    Permissions: dangerously-skip-permissions (open)`);
+      console.log(`    Permissions: dangerously-skip-permissions (shields permanently down)`);
+    } else if (shields.isShieldsDown(sandboxName)) {
+      console.log(`    Permissions: shields down (check \`shields status\` for details)`);
     }
 
     // Agent version check
