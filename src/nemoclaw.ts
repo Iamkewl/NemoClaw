@@ -1147,10 +1147,7 @@ function backfillAndFindOverlaps() {
   // Non-critical path: status must remain usable even if the gateway probe or
   // registry write throws, so any failure yields an empty overlap list.
   try {
-    const {
-      backfillMessagingChannels,
-      findAllOverlaps,
-    } = require("./lib/messaging-conflict");
+    const { backfillMessagingChannels, findAllOverlaps } = require("./lib/messaging-conflict");
     backfillMessagingChannels(registry, makeConflictProbe());
     return findAllOverlaps(registry);
   } catch {
@@ -1643,10 +1640,72 @@ function sandboxLogs(sandboxName, follow) {
   exitWithSpawnResult(result);
 }
 
+/**
+ * Handle `nemoclaw <sandbox> policy-add [flags]`. Supports three mutually
+ * exclusive modes: interactive preset picker (default), `--from-file <path>`
+ * for a single custom preset YAML, and `--from-dir <path>` for every
+ * `.yaml`/`.yml` file in a directory. `--dry-run` previews without applying,
+ * `--yes`/`-y` (or `NEMOCLAW_NON_INTERACTIVE=1`) skips the confirmation
+ * prompt. `--from-dir` applies files in lexicographic order and aborts at
+ * the first failure (already-applied presets are not rolled back).
+ */
 async function sandboxPolicyAdd(sandboxName, args = []) {
   const dryRun = args.includes("--dry-run");
   const skipConfirm =
-    args.includes("--yes") || args.includes("--force") || process.env.NEMOCLAW_NON_INTERACTIVE === "1";
+    args.includes("--yes") ||
+    args.includes("-y") ||
+    args.includes("--force") ||
+    process.env.NEMOCLAW_NON_INTERACTIVE === "1";
+
+  const fromFileIdx = args.indexOf("--from-file");
+  const fromDirIdx = args.indexOf("--from-dir");
+
+  if (fromFileIdx >= 0 && fromDirIdx >= 0) {
+    console.error("  --from-file and --from-dir are mutually exclusive.");
+    process.exit(1);
+  }
+
+  if (fromFileIdx >= 0) {
+    const filePath = args[fromFileIdx + 1];
+    if (!filePath || filePath.startsWith("--")) {
+      console.error("  --from-file requires a path argument.");
+      process.exit(1);
+    }
+    const ok = await applyExternalPreset(sandboxName, filePath, { dryRun, yes: skipConfirm });
+    if (!ok) process.exit(1);
+    return;
+  }
+
+  if (fromDirIdx >= 0) {
+    const dirPath = args[fromDirIdx + 1];
+    if (!dirPath || dirPath.startsWith("--")) {
+      console.error("  --from-dir requires a directory path.");
+      process.exit(1);
+    }
+    const absDir = path.resolve(dirPath);
+    if (!fs.existsSync(absDir) || !fs.statSync(absDir).isDirectory()) {
+      console.error(`  Directory not found: ${dirPath}`);
+      process.exit(1);
+    }
+    const files = fs
+      .readdirSync(absDir)
+      .filter((f) => /\.ya?ml$/i.test(f))
+      .map((f) => path.join(absDir, f))
+      .sort();
+    if (files.length === 0) {
+      console.error(`  No .yaml/.yml preset files in ${dirPath}`);
+      process.exit(1);
+    }
+    for (const f of files) {
+      const ok = await applyExternalPreset(sandboxName, f, { dryRun, yes: skipConfirm });
+      if (!ok) {
+        console.error(`  Aborting --from-dir: ${f} failed. Remaining presets not applied.`);
+        process.exit(1);
+      }
+    }
+    return;
+  }
+
   const allPresets = policies.listPresets();
   const applied = policies.getAppliedPresets(sandboxName);
 
@@ -1690,10 +1749,46 @@ async function sandboxPolicyAdd(sandboxName, args = []) {
 
   if (!skipConfirm) {
     const confirm = await askPrompt(`  Apply '${answer}' to sandbox '${sandboxName}'? [Y/n]: `);
-    if (confirm.toLowerCase() === "n") return;
+    if (confirm.trim().toLowerCase().startsWith("n")) return;
   }
 
   policies.applyPreset(sandboxName, answer);
+}
+
+/**
+ * Apply one custom preset file (`--from-file`, or one entry of `--from-dir`)
+ * to a sandbox. Loads and validates the file via `policies.loadPresetFromFile`,
+ * prints the egress endpoints with a warning that custom targets are not
+ * vetted, honors `dryRun` and `yes`, and delegates to
+ * `policies.applyPresetContent`. Returns `true` on success, `false` on any
+ * load/apply failure so the caller can decide whether to abort.
+ */
+async function applyExternalPreset(sandboxName, filePath, { dryRun, yes }) {
+  const loaded = policies.loadPresetFromFile(filePath);
+  if (!loaded) return false;
+
+  const endpoints = policies.getPresetEndpoints(loaded.content);
+  if (endpoints.length > 0) {
+    console.log(`  [${loaded.presetName}] Endpoints that would be opened: ${endpoints.join(", ")}`);
+    console.log(
+      `  ${YW}Warning: custom preset targets are not vetted. Review hosts before applying.${R}`,
+    );
+  }
+
+  if (dryRun) {
+    console.log(`  --dry-run: '${loaded.presetName}' not applied.`);
+    return true;
+  }
+
+  if (!yes) {
+    const confirm = await askPrompt(
+      `  Apply '${loaded.presetName}' from ${filePath} to sandbox '${sandboxName}'? [Y/n]: `,
+    );
+    if (confirm.trim().toLowerCase().startsWith("n")) return true; // user-cancel counts as success (no abort)
+  }
+
+  const result = policies.applyPresetContent(sandboxName, loaded.presetName, loaded.content);
+  return result !== false;
 }
 
 function sandboxPolicyList(sandboxName) {
@@ -2985,6 +3080,8 @@ function help() {
 
   ${G}Policy Presets:${R}
     nemoclaw <name> policy-add [preset]    Add a network or filesystem policy preset ${D}(--yes, --dry-run)${R}
+                                           ${D}--from-file <path> apply a custom preset YAML${R}
+                                           ${D}--from-dir <path>  apply every .yaml preset in a directory${R}
     nemoclaw <name> policy-remove [preset] Remove an applied policy preset ${D}(--yes, --dry-run)${R}
     nemoclaw <name> policy-list      List presets ${D}(● = applied)${R}
 
@@ -3223,7 +3320,9 @@ const [cmd, ...args] = process.argv.slice(2);
                 opts.reason = shieldsFlags[++i];
               } else if (shieldsFlags[i] === "--policy") {
                 if (i + 1 >= shieldsFlags.length || shieldsFlags[i + 1].startsWith("--")) {
-                  console.error("  --policy requires a value (e.g. permissive, /path/to/policy.yaml)");
+                  console.error(
+                    "  --policy requires a value (e.g. permissive, /path/to/policy.yaml)",
+                  );
                   process.exit(1);
                 }
                 opts.policy = shieldsFlags[++i];
