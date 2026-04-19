@@ -110,9 +110,11 @@ setTimeout(() => {
         try { kubectlExec(["chmod", "755", configDir]); } catch { lockErrors.push("chmod dir"); }
         try { kubectlExec(["chown", "root:root", configDir]); } catch { lockErrors.push("chown dir"); }
       }
-      try { kubectlExec(["chattr", "+i", configPath]); } catch { lockErrors.push("chattr +i"); }
+      let chattrSupported = true;
+      try { kubectlExec(["chattr", "+i", configPath]); } catch { chattrSupported = false; lockErrors.push("chattr +i"); }
 
-      // Verify the lock took effect
+      // Verify the lock took effect.
+      // Mode + ownership are mandatory; immutable bit only checked if chattr succeeded.
       const issues = [];
       try {
         const perms = execFileSync("docker", [
@@ -127,16 +129,18 @@ setTimeout(() => {
         issues.push("file stat failed");
       }
 
-      try {
-        const attrs = execFileSync("docker", [
-          "exec", K3S_CONTAINER,
-          "kubectl", "exec", "-n", "openshell", sandboxName, "-c", "agent", "--",
-          "lsattr", "-d", configPath,
-        ], { stdio: ["ignore", "pipe", "pipe"], timeout: 15000 }).toString().trim();
-        const [flags] = attrs.split(/\s+/, 1);
-        if (!flags.includes("i")) issues.push("immutable bit not set");
-      } catch {
-        // lsattr may not be available — skip
+      if (chattrSupported) {
+        try {
+          const attrs = execFileSync("docker", [
+            "exec", K3S_CONTAINER,
+            "kubectl", "exec", "-n", "openshell", sandboxName, "-c", "agent", "--",
+            "lsattr", "-d", configPath,
+          ], { stdio: ["ignore", "pipe", "pipe"], timeout: 15000 }).toString().trim();
+          const [flags] = attrs.split(/\s+/, 1);
+          if (!flags.includes("i")) issues.push("immutable bit not set");
+        } catch {
+          // lsattr may not be available — skip
+        }
       }
 
       if (issues.length > 0 || lockErrors.length > 0) {

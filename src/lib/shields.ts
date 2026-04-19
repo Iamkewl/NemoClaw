@@ -175,14 +175,22 @@ function lockAgentConfig(sandboxName: string, target: { configPath: string; conf
   try { kubectlExec(sandboxName, ["chown", "root:root", target.configDir]); }
   catch { errors.push("chown root:root config dir"); }
 
+  // chattr +i is defense-in-depth — some filesystems don't support it.
+  // Track whether it succeeded so verification knows what to expect.
+  let chattrSupported = true;
   try { kubectlExec(sandboxName, ["chattr", "+i", target.configPath]); }
-  catch { errors.push("chattr +i config file"); }
+  catch {
+    chattrSupported = false;
+    errors.push("chattr +i config file");
+  }
 
   if (errors.length > 0) {
     console.error(`  Some lock operations failed: ${errors.join(", ")}`);
   }
 
-  // Verify the lock actually took effect
+  // Verify the lock actually took effect.
+  // Mode + ownership are mandatory; immutable bit is only checked if
+  // chattr succeeded (filesystem may not support it).
   const issues: string[] = [];
   try {
     const perms = kubectlExecCapture(sandboxName, ["stat", "-c", "%a %U:%G", target.configPath]);
@@ -204,12 +212,16 @@ function lockAgentConfig(sandboxName: string, target: { configPath: string; conf
     issues.push(`dir stat failed: ${msg}`);
   }
 
-  try {
-    const attrs = kubectlExecCapture(sandboxName, ["lsattr", "-d", target.configPath]);
-    const [flags] = attrs.trim().split(/\s+/, 1);
-    if (!flags.includes("i")) issues.push("immutable bit not set");
-  } catch {
-    // lsattr may not be available on all images — skip
+  if (chattrSupported) {
+    try {
+      const attrs = kubectlExecCapture(sandboxName, ["lsattr", "-d", target.configPath]);
+      const [flags] = attrs.trim().split(/\s+/, 1);
+      if (!flags.includes("i")) issues.push("immutable bit not set");
+    } catch {
+      // lsattr may not be available on all images — skip
+    }
+  } else {
+    console.error("  Note: Immutable bit (chattr +i) not supported — relying on mode + ownership.");
   }
 
   if (issues.length > 0) {
