@@ -65,6 +65,13 @@ const { initializeOnboardRun } = require("./onboard-bootstrap");
 const { verifyGatewayContainerRunning: verifyGatewayContainerRunningWithDeps } = require("./onboard-gateway-liveness");
 const { streamGatewayStart: streamGatewayStartWithDeps } = require("./onboard-gateway-start-stream");
 const {
+  getBlueprintMaxOpenshellVersion: getBlueprintMaxOpenshellVersionWithDeps,
+  getBlueprintMinOpenshellVersion: getBlueprintMinOpenshellVersionWithDeps,
+  getInstalledOpenshellVersion: getInstalledOpenshellVersionWithDeps,
+  getStableGatewayImageRef: getStableGatewayImageRefWithDeps,
+  versionGte: versionGteWithDeps,
+} = require("./onboard-openshell-version");
+const {
   getGatewayStartEnv: buildGatewayStartEnv,
   recoverGatewayRuntime: recoverGatewayRuntimeWithDeps,
   startGatewayWithOptions: startGatewayWithOptionsWithDeps,
@@ -396,65 +403,19 @@ function step(n, total, msg) {
 }
 
 function getInstalledOpenshellVersion(versionOutput = null) {
-  const output = String(versionOutput ?? runCapture("openshell -V", { ignoreError: true })).trim();
-  const match = output.match(/openshell\s+([0-9]+\.[0-9]+\.[0-9]+)/i);
-  if (!match) return null;
-  return match[1];
+  return getInstalledOpenshellVersionWithDeps(versionOutput, { runCapture });
 }
 
-/**
- * Compare two semver-like x.y.z strings. Returns true iff `left >= right`.
- * Non-numeric or missing components are treated as 0.
- */
 function versionGte(left = "0.0.0", right = "0.0.0") {
-  const lhs = String(left)
-    .split(".")
-    .map((part) => Number.parseInt(part, 10) || 0);
-  const rhs = String(right)
-    .split(".")
-    .map((part) => Number.parseInt(part, 10) || 0);
-  const length = Math.max(lhs.length, rhs.length);
-  for (let index = 0; index < length; index += 1) {
-    const a = lhs[index] || 0;
-    const b = rhs[index] || 0;
-    if (a > b) return true;
-    if (a < b) return false;
-  }
-  return true;
-}
-
-/**
- * Read a semver field from nemoclaw-blueprint/blueprint.yaml. Returns null if
- * the blueprint or field is missing or unparseable — callers must treat null
- * as "no constraint configured" so a malformed install does not become a hard
- * onboard blocker. See #1317.
- */
-function getBlueprintVersionField(field, rootDir = ROOT) {
-  try {
-    // Lazy require: yaml is already a dependency via the policy helpers but
-    // pulling it at module load would slow down `nemoclaw --help` for users
-    // who never reach the preflight path.
-    const YAML = require("yaml");
-    const blueprintPath = path.join(rootDir, "nemoclaw-blueprint", "blueprint.yaml");
-    if (!fs.existsSync(blueprintPath)) return null;
-    const raw = fs.readFileSync(blueprintPath, "utf8");
-    const parsed = YAML.parse(raw);
-    const value = parsed && parsed[field];
-    if (typeof value !== "string") return null;
-    const trimmed = value.trim();
-    if (!/^[0-9]+\.[0-9]+\.[0-9]+/.test(trimmed)) return null;
-    return trimmed;
-  } catch {
-    return null;
-  }
+  return versionGteWithDeps(left, right);
 }
 
 function getBlueprintMinOpenshellVersion(rootDir = ROOT) {
-  return getBlueprintVersionField("min_openshell_version", rootDir);
+  return getBlueprintMinOpenshellVersionWithDeps(rootDir);
 }
 
 function getBlueprintMaxOpenshellVersion(rootDir = ROOT) {
-  return getBlueprintVersionField("max_openshell_version", rootDir);
+  return getBlueprintMaxOpenshellVersionWithDeps(rootDir);
 }
 
 // ── Base image digest resolution ────────────────────────────────
@@ -471,10 +432,9 @@ function pullAndResolveBaseImageDigest() {
 }
 
 function getStableGatewayImageRef(versionOutput = null) {
-  const version = getInstalledOpenshellVersion(versionOutput);
-  if (!version) return null;
-  return `ghcr.io/nvidia/openshell/cluster:${version}`;
+  return getStableGatewayImageRefWithDeps(versionOutput, { runCapture });
 }
+
 
 function getOpenshellBinary() {
   if (OPENSHELL_BIN) return OPENSHELL_BIN;
