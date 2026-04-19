@@ -5,7 +5,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
-import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -15,6 +14,7 @@ import {
   buildSandboxConfigSyncScript,
   classifySandboxCreateFailure,
   compactText,
+  computeSetupPresetSuggestions,
   formatEnvAssignment,
   getDashboardAccessInfo,
   getDashboardForwardStartCommand,
@@ -34,6 +34,7 @@ import {
   getResumeSandboxConflict,
   getSandboxStateFromOutputs,
   getStableGatewayImageRef,
+  getSuggestedPolicyPresets,
   isGatewayHealthy,
   classifyValidationFailure,
   hasResponsesToolCall,
@@ -52,9 +53,6 @@ import {
 } from "../dist/lib/onboard";
 import { stageOptimizedSandboxBuildContext } from "../dist/lib/sandbox-build-context";
 import { buildWebSearchDockerConfig } from "../dist/lib/web-search";
-
-const require = createRequire(import.meta.url);
-const { getSuggestedPolicyPresets } = require("../dist/lib/onboard.js");
 
 describe("onboard helpers", () => {
   it("classifies sandbox create timeout failures and tracks upload progress", () => {
@@ -161,6 +159,85 @@ describe("onboard helpers", () => {
     expect(getSuggestedPolicyPresets({})).not.toContain("local-inference");
   });
 
+  describe("computeSetupPresetSuggestions", () => {
+    const known = [
+      "npm", "pypi", "huggingface", "brew", "brave",
+      "slack", "discord", "telegram", "jira", "outlook",
+      "local-inference",
+    ];
+
+    it("returns balanced tier defaults without messaging presets when no channels enabled", () => {
+      const suggestions = computeSetupPresetSuggestions("balanced", {
+        enabledChannels: [],
+        knownPresetNames: known,
+      });
+      expect(suggestions).toEqual(["npm", "pypi", "huggingface", "brew", "brave"]);
+    });
+
+    it("forwards enabled messaging channels into the balanced tier suggestions", () => {
+      const suggestions = computeSetupPresetSuggestions("balanced", {
+        enabledChannels: ["telegram"],
+        knownPresetNames: known,
+      });
+      expect(suggestions).toContain("telegram");
+      expect(suggestions).toContain("npm");
+      expect(suggestions).toContain("brave");
+    });
+
+    it("forwards multiple messaging channels", () => {
+      const suggestions = computeSetupPresetSuggestions("balanced", {
+        enabledChannels: ["discord", "slack"],
+        knownPresetNames: known,
+      });
+      expect(suggestions).toContain("discord");
+      expect(suggestions).toContain("slack");
+    });
+
+    it("does not duplicate a channel already present in the tier (open tier)", () => {
+      const suggestions = computeSetupPresetSuggestions("open", {
+        enabledChannels: ["telegram", "slack"],
+        knownPresetNames: known,
+      });
+      expect(suggestions.filter((n) => n === "telegram")).toHaveLength(1);
+      expect(suggestions.filter((n) => n === "slack")).toHaveLength(1);
+    });
+
+    it("drops channel names that are not known presets", () => {
+      const suggestions = computeSetupPresetSuggestions("balanced", {
+        enabledChannels: ["telegram", "not-a-real-preset"],
+        knownPresetNames: known,
+      });
+      expect(suggestions).toContain("telegram");
+      expect(suggestions).not.toContain("not-a-real-preset");
+    });
+
+    it("still adds brave when webSearchConfig is provided", () => {
+      const suggestions = computeSetupPresetSuggestions("restricted", {
+        webSearchConfig: { provider: "brave" },
+        knownPresetNames: known,
+      });
+      expect(suggestions).toContain("brave");
+    });
+
+    it("adds local-inference for local providers", () => {
+      const suggestions = computeSetupPresetSuggestions("balanced", {
+        provider: "ollama-local",
+        knownPresetNames: known,
+      });
+      expect(suggestions).toContain("local-inference");
+    });
+
+    it("ignores enabledChannels when null (non-explicit selection)", () => {
+      const suggestions = computeSetupPresetSuggestions("balanced", {
+        enabledChannels: null,
+        knownPresetNames: known,
+      });
+      expect(suggestions).not.toContain("telegram");
+      expect(suggestions).not.toContain("slack");
+      expect(suggestions).not.toContain("discord");
+    });
+  });
+
   it("patches the staged Dockerfile with the selected model and chat UI URL", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-onboard-dockerfile-"));
     const dockerfilePath = path.join(tmpDir, "Dockerfile");
@@ -192,6 +269,49 @@ describe("onboard helpers", () => {
       assert.match(patched, /^ARG CHAT_UI_URL=http:\/\/127\.0\.0\.1:19999$/m);
       assert.match(patched, /^ARG NEMOCLAW_BUILD_ID=build-123$/m);
     } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("patches context window, max tokens, and reasoning from env vars", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-onboard-dockerfile-model-meta-"));
+    const dockerfilePath = path.join(tmpDir, "Dockerfile");
+    fs.writeFileSync(
+      dockerfilePath,
+      [
+        "ARG NEMOCLAW_MODEL=nvidia/nemotron-3-super-120b-a12b",
+        "ARG NEMOCLAW_PROVIDER_KEY=nvidia",
+        "ARG NEMOCLAW_PRIMARY_MODEL_REF=nvidia/nemotron-3-super-120b-a12b",
+        "ARG CHAT_UI_URL=http://127.0.0.1:18789",
+        "ARG NEMOCLAW_CONTEXT_WINDOW=131072",
+        "ARG NEMOCLAW_MAX_TOKENS=4096",
+        "ARG NEMOCLAW_REASONING=false",
+        "ARG NEMOCLAW_INFERENCE_COMPAT_B64=e30=",
+        "ARG NEMOCLAW_WEB_SEARCH_ENABLED=0",
+        "ARG NEMOCLAW_BUILD_ID=default",
+      ].join("\n"),
+    );
+
+    const saved = {
+      NEMOCLAW_CONTEXT_WINDOW: process.env.NEMOCLAW_CONTEXT_WINDOW,
+      NEMOCLAW_MAX_TOKENS: process.env.NEMOCLAW_MAX_TOKENS,
+      NEMOCLAW_REASONING: process.env.NEMOCLAW_REASONING,
+    };
+    process.env.NEMOCLAW_CONTEXT_WINDOW = "32768";
+    process.env.NEMOCLAW_MAX_TOKENS = "8192";
+    process.env.NEMOCLAW_REASONING = "true";
+
+    try {
+      patchStagedDockerfile(dockerfilePath, "gpt-5.4", "http://127.0.0.1:19999", "build-meta", "openai-api");
+      const patched = fs.readFileSync(dockerfilePath, "utf8");
+      assert.match(patched, /^ARG NEMOCLAW_CONTEXT_WINDOW=32768$/m);
+      assert.match(patched, /^ARG NEMOCLAW_MAX_TOKENS=8192$/m);
+      assert.match(patched, /^ARG NEMOCLAW_REASONING=true$/m);
+    } finally {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   });
@@ -1504,6 +1624,10 @@ runner.run = (command, opts = {}) => {
   commands.push({ command, env: opts.env || null });
   return { status: 0 };
 };
+runner.runFile = (file, args = [], opts = {}) => {
+  commands.push({ type: "runFile", command: [file, ...args].join(" "), file, args, env: opts.env || null });
+  return { status: 0 };
+};
 runner.runCapture = (command) => {
   if (command.includes("inference") && command.includes("get")) {
     return [
@@ -1821,6 +1945,10 @@ runner.run = (command, opts = {}) => {
   commands.push({ command, env: opts.env || null });
   return { status: 0 };
 };
+runner.runFile = (file, args = [], opts = {}) => {
+  commands.push({ type: "runFile", command: [file, ...args].join(" "), file, args, env: opts.env || null });
+  return { status: 0 };
+};
 runner.runCapture = (command) => {
   if (command.includes("inference") && command.includes("get")) {
     return [
@@ -2073,7 +2201,7 @@ const { setupInference } = require(${onboardPath});
 
     assert.match(
       source,
-      /startRecordedStep\("sandbox", \{ sandboxName, provider, model \}\);\s*selectedMessagingChannels = await setupMessagingChannels\(\);\s*onboardSession\.updateSession\(\(current\) => \{\s*current\.messagingChannels = selectedMessagingChannels;\s*return current;\s*\}\);\s*sandboxName = await createSandbox\(\s*gpu,\s*model,\s*provider,\s*preferredInferenceApi,\s*sandboxName,\s*webSearchConfig,\s*selectedMessagingChannels,\s*fromDockerfile,\s*agent,\s*dangerouslySkipPermissions,\s*\);/,
+      /startRecordedStep\("sandbox", \{ sandboxName, provider, model \}\);\s*selectedMessagingChannels = await setupMessagingChannels\(\);\s*onboardSession\.updateSession\(\(current\) => \{\s*current\.messagingChannels = selectedMessagingChannels;\s*return current;\s*\}\);\s*sandboxName = await createSandbox\(\s*gpu,\s*model,\s*provider,\s*preferredInferenceApi,\s*sandboxName,\s*nextWebSearchConfig,\s*selectedMessagingChannels,\s*fromDockerfile,\s*agent,\s*dangerouslySkipPermissions,\s*\);/,
     );
   });
 
@@ -2093,18 +2221,19 @@ const { setupInference } = require(${onboardPath});
     );
   });
 
-  it("activates permissive policy via policy set when dangerouslySkipPermissions is true", () => {
+  it("enters permanent shields-down state when dangerouslySkipPermissions is true", () => {
     const source = fs.readFileSync(
       path.join(import.meta.dirname, "..", "src", "lib", "onboard.ts"),
       "utf-8",
     );
 
-    // The dangerouslySkipPermissions branch must call applyPermissivePolicy to
-    // activate the policy via `openshell policy set --wait`.  Without this,
-    // the base policy from sandbox create stays in Pending status (#897).
+    // The dangerouslySkipPermissions branch must call shields.shieldsDownPermanent
+    // to activate the permissive policy, unlock the config file with doctor-aligned
+    // permissions, and record permanent shields-down state. This replaced the
+    // previous policies.applyPermissivePolicy call to unify the shields state machine.
     assert.match(
       source,
-      /if \(dangerouslySkipPermissions\) \{\s*step\(8, 8, "Policy presets"\);\s*if \(!waitForSandboxReady\(sandboxName\)\) \{[\s\S]*?\}\s*policies\.applyPermissivePolicy\(sandboxName\);/,
+      /if \(dangerouslySkipPermissions\) \{\s*step\(8, 8, "Policy presets"\);\s*if \(!waitForSandboxReady\(sandboxName\)\) \{[\s\S]*?\}\s*shields\.shieldsDownPermanent\(sandboxName\);/,
     );
     // Must NOT just print a skip message without activating the policy.
     assert.doesNotMatch(
@@ -2147,6 +2276,10 @@ const credentials = require(${credentialsPath});
 const commands = [];
 runner.run = (command, opts = {}) => {
   commands.push({ command, env: opts.env || null });
+  return { status: 0 };
+};
+runner.runFile = (file, args = [], opts = {}) => {
+  commands.push({ type: "runFile", command: [file, ...args].join(" "), file, args, env: opts.env || null });
   return { status: 0 };
 };
 runner.runCapture = (command) => {
@@ -2277,10 +2410,14 @@ runner.run = (command, opts = {}) => {
   commands.push({ command, env: opts.env || null });
   return { status: 0 };
 };
+runner.runFile = (file, args = [], opts = {}) => {
+  commands.push({ type: "runFile", command: [file, ...args].join(" "), file, args, env: opts.env || null });
+  return { status: 0 };
+};
 runner.runCapture = (command) => {
   if (command.includes("'sandbox' 'get' 'my-assistant'")) return "";
   if (command.includes("'sandbox' 'list'")) return "my-assistant Ready";
-  if (command.includes("sandbox exec 'my-assistant' curl -sf http://localhost:18789/")) return "ok";
+  if (command.includes("'sandbox' 'exec' 'my-assistant' 'curl' '-sf' 'http://localhost:18789/'")) return "ok";
   if (command.includes("'forward' 'list'")) return "18789 -> my-assistant:18789";
   return "";
 };
@@ -2384,10 +2521,14 @@ runner.run = (command, opts = {}) => {
   commands.push({ command, env: opts.env || null });
   return { status: 0 };
 };
+runner.runFile = (file, args = [], opts = {}) => {
+  commands.push({ type: "runFile", command: [file, ...args].join(" "), file, args, env: opts.env || null });
+  return { status: 0 };
+};
 runner.runCapture = (command) => {
   if (command.includes("'sandbox' 'get' 'my-assistant'")) return "";
   if (command.includes("'sandbox' 'list'")) return "my-assistant Ready";
-  if (command.includes("sandbox exec 'my-assistant' curl -sf http://localhost:18789/")) return "ok";
+  if (command.includes("'sandbox' 'exec' 'my-assistant' 'curl' '-sf' 'http://localhost:18789/'")) return "ok";
   if (command.includes("'forward' 'list'")) return "18789 -> my-assistant:18789";
   return "";
 };
@@ -2468,16 +2609,25 @@ const childProcess = require("node:child_process");
 const { EventEmitter } = require("node:events");
 
 const commands = [];
+const _n = (command) =>
+  Array.isArray(command)
+    ? command.map((part) => "'" + String(part) + "'").join(" ")
+    : String(command);
 runner.run = (command, opts = {}) => {
-  commands.push({ command, env: opts.env || null });
+  commands.push({ command: _n(command), env: opts.env || null });
+  return { status: 0 };
+};
+runner.runFile = (file, args = [], opts = {}) => {
+  commands.push({ command: _n([file, ...args]), env: opts.env || null });
   return { status: 0 };
 };
 runner.runCapture = (command) => {
-  if (command.includes("'sandbox' 'get' 'my-assistant'")) return "";
-  if (command.includes("'sandbox' 'list'")) return "my-assistant Ready";
+  const normalized = _n(command);
+  if (normalized.includes("'sandbox' 'get' 'my-assistant'")) return "";
+  if (normalized.includes("'sandbox' 'list'")) return "my-assistant Ready";
   // Custom port: dashboard readiness curl uses 19000 (DASHBOARD_PORT from env)
-  if (command.includes("sandbox exec 'my-assistant' curl -sf http://localhost:19000/")) return "ok";
-  if (command.includes("'forward' 'list'")) return "19000 -> my-assistant:19000";
+  if (normalized.includes("'sandbox' 'exec' 'my-assistant' 'curl' '-sf' 'http://localhost:19000/'")) return "ok";
+  if (normalized.includes("'forward' 'list'")) return "19000 -> my-assistant:19000";
   return "";
 };
 registry.registerSandbox = () => true;
@@ -2602,12 +2752,16 @@ runner.run = (command, opts = {}) => {
   if (command.includes("'provider' 'get'")) return { status: 1 };
   return { status: 0 };
 };
+runner.runFile = (file, args = [], opts = {}) => {
+  commands.push({ type: "runFile", command: [file, ...args].join(" "), file, args, env: opts.env || null });
+  return { status: 0 };
+};
 runner.runCapture = (command) => {
   if (command.includes("'sandbox' 'get' 'my-assistant'")) return "";
   if (command.includes("'sandbox' 'list'")) return "my-assistant Ready";
   if (command.includes("'provider' 'get'")) return "Provider: discord-bridge";
   if (command.includes("'forward' 'list'")) return "18789 -> my-assistant:18789";
-  if (command.includes("sandbox exec") && command.includes("curl")) return "ok";
+  if (command.includes("'sandbox' 'exec'") && command.includes("'curl'")) return "ok";
   return "";
 };
 registry.registerSandbox = () => true;
@@ -2769,6 +2923,7 @@ runner.run = (command, opts = {}) => {
   }
   return { status: 0 };
 };
+runner.runFile = () => ({ status: 0 });
 runner.runCapture = (command) => {
   if (command.includes("'sandbox' 'get'")) return "";
   if (command.includes("'sandbox' 'list'")) return "";
@@ -2836,6 +2991,10 @@ const registry = require(${registryPath});
 const commands = [];
 runner.run = (command, opts = {}) => {
   commands.push({ command, env: opts.env || null });
+  return { status: 0 };
+};
+runner.runFile = (file, args = [], opts = {}) => {
+  commands.push({ type: "runFile", command: [file, ...args].join(" "), file, args, env: opts.env || null });
   return { status: 0 };
 };
 runner.runCapture = (command) => {
@@ -3020,11 +3179,15 @@ runner.run = (command, opts = {}) => {
   commands.push({ command, env: opts.env || null });
   return { status: 0 };
 };
+runner.runFile = (file, args = [], opts = {}) => {
+  commands.push({ type: "runFile", command: [file, ...args].join(" "), file, args, env: opts.env || null });
+  return { status: 0 };
+};
 runner.runCapture = (command) => {
   if (command.includes("'sandbox' 'get' 'my-assistant'")) return "my-assistant";
   if (command.includes("'sandbox' 'list'")) return "my-assistant Ready";
   if (command.includes("'forward' 'list'")) return "";
-  if (command.includes("sandbox exec") && command.includes("curl")) return "ok";
+  if (command.includes("'sandbox' 'exec'") && command.includes("'curl'")) return "ok";
   return "";
 };
 registry.getSandbox = () => ({ name: "my-assistant", gpuEnabled: false });
@@ -3233,6 +3396,10 @@ runner.run = (command, opts = {}) => {
   commands.push({ command, env: opts.env || null });
   return { status: 0 };
 };
+runner.runFile = (file, args = [], opts = {}) => {
+  commands.push({ type: "runFile", command: [file, ...args].join(" "), file, args, env: opts.env || null });
+  return { status: 0 };
+};
 runner.runCapture = (command) => {
   if (command.includes("'sandbox' 'get' 'my-assistant'")) return "my-assistant";
   if (command.includes("'sandbox' 'list'")) return "my-assistant Ready";
@@ -3329,11 +3496,15 @@ runner.run = (command, opts = {}) => {
   commands.push({ command, env: opts.env || null });
   return { status: 0 };
 };
+runner.runFile = (file, args = [], opts = {}) => {
+  commands.push({ type: "runFile", command: [file, ...args].join(" "), file, args, env: opts.env || null });
+  return { status: 0 };
+};
 runner.runCapture = (command) => {
   if (command.includes("'sandbox' 'get' 'my-assistant'")) return "my-assistant";
   if (command.includes("'sandbox' 'list'")) return "my-assistant Ready";
   if (command.includes("'forward' 'list'")) return "";
-  if (command.includes("sandbox exec") && command.includes("curl")) return "ok";
+  if (command.includes("'sandbox' 'exec'") && command.includes("'curl'")) return "ok";
   return "";
 };
 registry.getSandbox = () => ({ name: "my-assistant", gpuEnabled: false });
@@ -3444,6 +3615,10 @@ runner.run = (command, opts = {}) => {
   if (command.includes("'sandbox' 'delete'")) sandboxDeleted = true;
   return { status: 0 };
 };
+runner.runFile = (file, args = [], opts = {}) => {
+  commands.push({ type: "runFile", command: [file, ...args].join(" "), file, args, env: opts.env || null });
+  return { status: 0 };
+};
 runner.runCapture = (command) => {
   // Existing sandbox that is NOT ready initially, becomes Ready after recreation
   if (command.includes("'sandbox' 'get' 'my-assistant'")) return "my-assistant";
@@ -3451,7 +3626,7 @@ runner.runCapture = (command) => {
     return sandboxDeleted ? "my-assistant Ready" : "my-assistant NotReady";
   }
   if (command.includes("'forward' 'list'")) return "";
-  if (command.includes("sandbox exec") && command.includes("curl")) return "ok";
+  if (command.includes("'sandbox' 'exec'") && command.includes("'curl'")) return "ok";
   return "";
 };
 registry.getSandbox = () => ({ name: "my-assistant", gpuEnabled: false });
@@ -4138,13 +4313,17 @@ runner.run = (command, opts = {}) => {
   commands.push({ command, env: opts.env || null });
   return { status: 0 };
 };
+runner.runFile = (file, args = [], opts = {}) => {
+  commands.push({ type: "runFile", command: [file, ...args].join(" "), file, args, env: opts.env || null });
+  return { status: 0 };
+};
 runner.runCapture = (command) => {
   if (command.includes("'sandbox' 'get' 'my-assistant'")) return "";
   if (command.includes("'sandbox' 'list'")) {
     sandboxListCalls += 1;
     return sandboxListCalls >= 2 ? "my-assistant Ready" : "my-assistant Pending";
   }
-  if (command.includes("sandbox exec 'my-assistant' curl -sf http://localhost:18789/")) return "ok";
+  if (command.includes("'sandbox' 'exec' 'my-assistant' 'curl' '-sf' 'http://localhost:18789/'")) return "ok";
   if (command.includes("'forward' 'list'")) return "18789 -> my-assistant:18789";
   return "";
 };
@@ -4248,6 +4427,10 @@ const registry = require(${registryPath});
 const commands = [];
 runner.run = (command, opts = {}) => {
   commands.push({ command, env: opts.env || null });
+  return { status: 0 };
+};
+runner.runFile = (file, args = [], opts = {}) => {
+  commands.push({ type: "runFile", command: [file, ...args].join(" "), file, args, env: opts.env || null });
   return { status: 0 };
 };
 runner.runCapture = (command) => {
@@ -4371,6 +4554,10 @@ runner.run = (command, opts = {}) => {
   commands.push({ command, env: opts.env || null });
   return { status: 0 };
 };
+runner.runFile = (file, args = [], opts = {}) => {
+  commands.push({ type: "runFile", command: [file, ...args].join(" "), file, args, env: opts.env || null });
+  return { status: 0 };
+};
 runner.runCapture = (command) => {
   if (command.includes("inference") && command.includes("get")) {
     return [
@@ -4440,6 +4627,10 @@ const registry = require(${registryPath});
 const commands = [];
 runner.run = (command, opts = {}) => {
   commands.push({ command, env: opts.env || null });
+  return { status: 0 };
+};
+runner.runFile = (file, args = [], opts = {}) => {
+  commands.push({ type: "runFile", command: [file, ...args].join(" "), file, args, env: opts.env || null });
   return { status: 0 };
 };
 runner.runCapture = (command) => {
@@ -4526,10 +4717,14 @@ runner.run = (command, opts = {}) => {
   if (command.includes("'provider' 'get'")) return { status: 1 };
   return { status: 0 };
 };
+runner.runFile = (file, args = [], opts = {}) => {
+  commands.push({ type: "runFile", command: [file, ...args].join(" "), file, args, env: opts.env || null });
+  return { status: 0 };
+};
 runner.runCapture = (command) => {
   if (command.includes("'sandbox' 'get' 'my-assistant'")) return "";
   if (command.includes("'sandbox' 'list'")) return "my-assistant Ready";
-  if (command.includes("sandbox exec 'my-assistant' curl -sf http://localhost:18789/")) return "ok";
+  if (command.includes("'sandbox' 'exec' 'my-assistant' 'curl' '-sf' 'http://localhost:18789/'")) return "ok";
   if (command.includes("'forward' 'list'")) return "18789 -> my-assistant:18789";
   return "";
 };
@@ -4653,10 +4848,14 @@ runner.run = (command, opts = {}) => {
   commands.push({ command, env: opts.env || null });
   return { status: 0 };
 };
+runner.runFile = (file, args = [], opts = {}) => {
+  commands.push({ type: "runFile", command: [file, ...args].join(" "), file, args, env: opts.env || null });
+  return { status: 0 };
+};
 runner.runCapture = (command) => {
   if (command.includes("'sandbox' 'get' 'my-assistant'")) return "";
   if (command.includes("'sandbox' 'list'")) return "my-assistant Ready";
-  if (command.includes("sandbox exec 'my-assistant' curl -sf http://localhost:18789/")) return "ok";
+  if (command.includes("'sandbox' 'exec' 'my-assistant' 'curl' '-sf' 'http://localhost:18789/'")) return "ok";
   if (command.includes("'forward' 'list'")) return "18789 -> my-assistant:18789";
   return "";
 };
@@ -4925,10 +5124,14 @@ runner.run = (command, opts = {}) => {
   commands.push({ command, env: opts.env || null });
   return { status: 0 };
 };
+runner.runFile = (file, args = [], opts = {}) => {
+  commands.push({ type: "runFile", command: [file, ...args].join(" "), file, args, env: opts.env || null });
+  return { status: 0 };
+};
 runner.runCapture = (command) => {
   if (command.includes("'sandbox' 'get' 'my-assistant'")) return "";
   if (command.includes("'sandbox' 'list'")) return "my-assistant Ready";
-  if (command.includes("sandbox exec 'my-assistant' curl -sf http://localhost:18789/")) return "ok";
+  if (command.includes("'sandbox' 'exec' 'my-assistant' 'curl' '-sf' 'http://localhost:18789/'")) return "ok";
   if (command.includes("'forward' 'list'")) return "18789 -> my-assistant:18789";
   return "";
 };
