@@ -4688,6 +4688,7 @@ async function setupMessagingChannels() {
         console.log(`  ✓ ${ch.name} token saved`);
       } else {
         console.log(`  Skipped ${ch.name} (no token entered)`);
+        enabled.delete(ch.name);
         continue;
       }
     }
@@ -4743,19 +4744,23 @@ async function setupMessagingChannels() {
   }
   console.log("");
 
+  // Channels where the user declined to enter a token were dropped from
+  // `enabled` inside the per-channel loop, so only channels with credentials
+  // configured remain in the Set.
+
   // Preflight: verify Telegram API is reachable from the host before sandbox creation.
   // The non-interactive branch above already ran this probe and returned early,
   // so this second call only fires on the interactive path — guard explicitly
   // to make the no-double-probe invariant visible at the call site.
   if (
     !isNonInteractive() &&
-    selected.includes("telegram") &&
+    enabled.has("telegram") &&
     getMessagingToken("TELEGRAM_BOT_TOKEN")
   ) {
     await checkTelegramReachability(getMessagingToken("TELEGRAM_BOT_TOKEN"));
   }
 
-  return selected;
+  return Array.from(enabled);
 }
 
 function getSuggestedPolicyPresets({ enabledChannels = null, webSearchConfig = null, provider = null } = {}) {
