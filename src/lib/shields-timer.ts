@@ -130,6 +130,21 @@ setTimeout(() => {
         issues.push("file stat failed");
       }
 
+      if (configDir) {
+        try {
+          const dirPerms = execFileSync("docker", [
+            "exec", K3S_CONTAINER,
+            "kubectl", "exec", "-n", "openshell", sandboxName, "-c", "agent", "--",
+            "stat", "-c", "%a %U:%G", configDir,
+          ], { stdio: ["ignore", "pipe", "pipe"], timeout: 15000 }).toString().trim();
+          const [dirMode, dirOwner] = dirPerms.split(" ");
+          if (dirMode !== "755") issues.push(`dir mode=${dirMode}`);
+          if (dirOwner !== "root:root") issues.push(`dir owner=${dirOwner}`);
+        } catch {
+          issues.push("dir stat failed");
+        }
+      }
+
       if (chattrSucceeded) {
         try {
           const attrs = execFileSync("docker", [

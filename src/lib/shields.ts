@@ -148,14 +148,14 @@ function killTimer(sandboxName: string): void {
 // ---------------------------------------------------------------------------
 
 function unlockAgentConfig(sandboxName: string, target: { configPath: string; configDir: string }): void {
-  try {
-    kubectlExec(sandboxName, ["chattr", "-i", target.configPath]);
-    kubectlExec(sandboxName, ["chown", "sandbox:sandbox", target.configPath]);
-    kubectlExec(sandboxName, ["chmod", "600", target.configPath]);
-    kubectlExec(sandboxName, ["chown", "sandbox:sandbox", target.configDir]);
-    kubectlExec(sandboxName, ["chmod", "700", target.configDir]);
-  } catch {
-    console.error("  Warning: Could not unlock config file. Config may remain read-only.");
+  const errors: string[] = [];
+  try { kubectlExec(sandboxName, ["chattr", "-i", target.configPath]); } catch { errors.push("chattr -i"); }
+  try { kubectlExec(sandboxName, ["chown", "sandbox:sandbox", target.configPath]); } catch { errors.push("chown config file"); }
+  try { kubectlExec(sandboxName, ["chmod", "600", target.configPath]); } catch { errors.push("chmod 600 config file"); }
+  try { kubectlExec(sandboxName, ["chown", "sandbox:sandbox", target.configDir]); } catch { errors.push("chown config dir"); }
+  try { kubectlExec(sandboxName, ["chmod", "700", target.configDir]); } catch { errors.push("chmod 700 config dir"); }
+  if (errors.length > 0) {
+    console.error(`  Warning: Some unlock operations failed: ${errors.join(", ")}. Config may remain read-only.`);
   }
 }
 
