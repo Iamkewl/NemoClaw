@@ -8,6 +8,9 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { InferenceLoopDeps, InferenceLoopState } from "./onboard-inference-loop";
+import type { Session } from "./onboard-session";
+
 const require = createRequire(import.meta.url);
 const bootstrapDistPath = require.resolve("../../dist/lib/onboard-bootstrap");
 const contextDistPath = require.resolve("../../dist/lib/onboard-run-context");
@@ -190,7 +193,7 @@ describe("runOnboardingOrchestrator", () => {
     }
 
     const runContext = createOnboardRunContext(initializedRun.value);
-    runContext.updateSession((session) => {
+    runContext.updateSession((session: Session) => {
       session.endpointUrl = "https://old.example.com/v1";
       session.credentialEnv = "COMPATIBLE_API_KEY";
       session.preferredInferenceApi = "responses";
@@ -222,7 +225,10 @@ describe("runOnboardingOrchestrator", () => {
         startGateway: async () => {},
       },
       inference: {
-        run: async (state, deps) => {
+        run: async (
+          state: InferenceLoopState,
+          deps: Pick<InferenceLoopDeps, "onCompleteStep">,
+        ) => {
           deps.onCompleteStep("provider_selection", {
             provider: "openai-api",
             model: "gpt-5.4",
