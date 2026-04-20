@@ -46,10 +46,17 @@ const {
   parseGatewayInference,
 } = require("./inference-config");
 
-// Providers that run on the host and need the local-inference policy preset.
-// Shared constant so getSuggestedPolicyPresets() and setupPoliciesWithSelection()
-// stay in sync.
-const LOCAL_INFERENCE_PROVIDERS = ["ollama-local", "vllm-local"];
+const providers = require("./onboard-providers");
+const {
+  REMOTE_PROVIDER_CONFIG,
+  LOCAL_INFERENCE_PROVIDERS,
+  DISCORD_SNOWFLAKE_RE,
+  getProviderLabel,
+  getEffectiveProviderName,
+  getNonInteractiveProvider,
+  getNonInteractiveModel,
+  getSandboxInferenceConfig,
+} = providers;
 const { detectGatewayBackend, inferContainerRuntime, isWsl, shouldPatchCoredns } = require("./platform");
 const { isOpenshellVmAvailable } = require("./openshell");
 const { resolveOpenshell } = require("./resolve-openshell");
@@ -159,80 +166,7 @@ function verifyGatewayContainerRunning() {
 }
 const OPENCLAW_LAUNCH_AGENT_PLIST = "~/Library/LaunchAgents/ai.openclaw.gateway.plist";
 
-const BUILD_ENDPOINT_URL = "https://integrate.api.nvidia.com/v1";
-const OPENAI_ENDPOINT_URL = "https://api.openai.com/v1";
-const ANTHROPIC_ENDPOINT_URL = "https://api.anthropic.com";
-const GEMINI_ENDPOINT_URL = "https://generativelanguage.googleapis.com/v1beta/openai/";
 const BRAVE_SEARCH_HELP_URL = "https://brave.com/search/api/";
-
-const REMOTE_PROVIDER_CONFIG = {
-  build: {
-    label: "NVIDIA Endpoints",
-    providerName: "nvidia-prod",
-    providerType: "nvidia",
-    credentialEnv: "NVIDIA_API_KEY",
-    endpointUrl: BUILD_ENDPOINT_URL,
-    helpUrl: "https://build.nvidia.com/settings/api-keys",
-    modelMode: "catalog",
-    defaultModel: DEFAULT_CLOUD_MODEL,
-    skipVerify: true,
-  },
-  openai: {
-    label: "OpenAI",
-    providerName: "openai-api",
-    providerType: "openai",
-    credentialEnv: "OPENAI_API_KEY",
-    endpointUrl: OPENAI_ENDPOINT_URL,
-    helpUrl: "https://platform.openai.com/api-keys",
-    modelMode: "curated",
-    defaultModel: "gpt-5.4",
-    skipVerify: true,
-  },
-  anthropic: {
-    label: "Anthropic",
-    providerName: "anthropic-prod",
-    providerType: "anthropic",
-    credentialEnv: "ANTHROPIC_API_KEY",
-    endpointUrl: ANTHROPIC_ENDPOINT_URL,
-    helpUrl: "https://console.anthropic.com/settings/keys",
-    modelMode: "curated",
-    defaultModel: "claude-sonnet-4-6",
-  },
-  anthropicCompatible: {
-    label: "Other Anthropic-compatible endpoint",
-    providerName: "compatible-anthropic-endpoint",
-    providerType: "anthropic",
-    credentialEnv: "COMPATIBLE_ANTHROPIC_API_KEY",
-    endpointUrl: "",
-    helpUrl: null,
-    modelMode: "input",
-    defaultModel: "",
-  },
-  gemini: {
-    label: "Google Gemini",
-    providerName: "gemini-api",
-    providerType: "openai",
-    credentialEnv: "GEMINI_API_KEY",
-    endpointUrl: GEMINI_ENDPOINT_URL,
-    helpUrl: "https://aistudio.google.com/app/apikey",
-    modelMode: "curated",
-    defaultModel: "gemini-2.5-flash",
-    skipVerify: true,
-  },
-  custom: {
-    label: "Other OpenAI-compatible endpoint",
-    providerName: "compatible-endpoint",
-    providerType: "openai",
-    credentialEnv: "COMPATIBLE_API_KEY",
-    endpointUrl: "",
-    helpUrl: null,
-    modelMode: "input",
-    defaultModel: "",
-    skipVerify: true,
-  },
-};
-
-const DISCORD_SNOWFLAKE_RE = /^[0-9]{17,19}$/;
 
 // Non-interactive mode: set by --non-interactive flag or env var.
 // When active, all prompts use env var overrides or sensible defaults.
@@ -771,92 +705,17 @@ async function promptValidationRecovery(label, recovery, credentialEnv = null, h
   return "selection";
 }
 
-/**
- * Build the argument array for an `openshell provider create` or `update` command.
- * @param {"create"|"update"} action - Whether to create or update.
- * @param {string} name - Provider name.
- * @param {string} type - Provider type (e.g. "openai", "anthropic", "generic").
- * @param {string} credentialEnv - Credential environment variable name.
- * @param {string|null} baseUrl - Optional base URL for API-compatible endpoints.
- * @returns {string[]} Argument array for runOpenshell().
- */
-function buildProviderArgs(action, name, type, credentialEnv, baseUrl) {
-  const args =
-    action === "create"
-      ? ["provider", "create", "--name", name, "--type", type, "--credential", credentialEnv]
-      : ["provider", "update", name, "--credential", credentialEnv];
-  if (baseUrl && type === "openai") {
-    args.push("--config", `OPENAI_BASE_URL=${baseUrl}`);
-  } else if (baseUrl && type === "anthropic") {
-    args.push("--config", `ANTHROPIC_BASE_URL=${baseUrl}`);
-  }
-  return args;
-}
-
-/**
- * Create or update an OpenShell provider in the gateway.
- *
- * Checks whether the provider already exists via `openshell provider get`;
- * uses `create` for new providers and `update` for existing ones.
- * @param {string} name - Provider name (e.g. "discord-bridge", "inference").
- * @param {string} type - Provider type ("openai", "anthropic", "generic").
- * @param {string} credentialEnv - Environment variable name for the credential.
- * @param {string|null} baseUrl - Optional base URL for the provider endpoint.
- * @param {Record<string, string>} [env={}] - Environment variables for the openshell command.
- * @returns {{ ok: boolean, status?: number, message?: string }}
- */
+// Wrappers for provider CRUD — delegates to onboard-providers.ts,
+// injecting runOpenshell to avoid a circular dependency.
+const { buildProviderArgs } = providers;
 function upsertProvider(name, type, credentialEnv, baseUrl, env = {}) {
-  const exists = providerExistsInGateway(name);
-  const action = exists ? "update" : "create";
-  const args = buildProviderArgs(action, name, type, credentialEnv, baseUrl);
-  const runOpts = { ignoreError: true, env, stdio: ["ignore", "pipe", "pipe"] };
-  const result = runOpenshell(args, runOpts);
-  if (result.status !== 0) {
-    const output =
-      compactText(redact(`${result.stderr || ""}`)) ||
-      compactText(redact(`${result.stdout || ""}`)) ||
-      `Failed to ${action} provider '${name}'.`;
-    return { ok: false, status: result.status || 1, message: output };
-  }
-  return { ok: true };
+  return providers.upsertProvider(name, type, credentialEnv, baseUrl, env, runOpenshell);
 }
-
-/**
- * Upsert all messaging providers that have tokens configured.
- * Returns the list of provider names that were successfully created/updated.
- * Exits the process if any upsert fails.
- * @param {Array<{name: string, envKey: string, token: string|null}>} tokenDefs
- * @returns {string[]} Provider names that were upserted.
- */
 function upsertMessagingProviders(tokenDefs) {
-  const providers = [];
-  for (const { name, envKey, token } of tokenDefs) {
-    if (!token) continue;
-    const result = upsertProvider(name, "generic", envKey, null, { [envKey]: token });
-    if (!result.ok) {
-      console.error(`\n  ✗ Failed to create messaging provider '${name}': ${result.message}`);
-      process.exit(1);
-    }
-    providers.push(name);
-  }
-  return providers;
+  return providers.upsertMessagingProviders(tokenDefs, runOpenshell);
 }
-
-/**
- * Check whether an OpenShell provider exists in the gateway.
- *
- * Queries the gateway-level provider registry via `openshell provider get`.
- * Does NOT verify that the provider is attached to a specific sandbox —
- * OpenShell CLI does not currently expose a sandbox-scoped provider query.
- * @param {string} name - Provider name to look up (e.g. "discord-bridge").
- * @returns {boolean} True if the provider exists in the gateway.
- */
 function providerExistsInGateway(name) {
-  const result = runOpenshell(["provider", "get", name], {
-    ignoreError: true,
-    stdio: ["ignore", "ignore", "ignore"],
-  });
-  return result.status === 0;
+  return providers.providerExistsInGateway(name, runOpenshell);
 }
 
 /**
@@ -2741,7 +2600,12 @@ async function startVmGatewayProcess({ exitOnFailure = true } = {}) {
     console.log(`  Using downloaded VM runtime: ${downloadedRuntime}`);
   }
 
-  // Extract the rootfs so we can patch the supervisor binary before boot.
+  // Extract the rootfs so we can patch it before boot.
+  // Workaround 1 (mqueue shim): the vm-dev kernel lacks CONFIG_POSIX_MQUEUE
+  // (source fix landed in d8cf7951 but the runtime artifacts haven't been
+  // rebuilt yet). Without mqueue support runc fails to create any container
+  // inside the VM. The shim self-disables once the kernel is rebuilt.
+  // Workaround 2 (glibc): see below.
   const prepResult = spawnSync("openshell-vm", ["--name", GATEWAY_NAME, "prepare-rootfs"], {
     cwd: ROOT,
     env: vmEnv,
@@ -2754,7 +2618,76 @@ async function startVmGatewayProcess({ exitOnFailure = true } = {}) {
     console.log(`  prepare-rootfs failed (exit ${prepResult.status}): ${prepErr.slice(0, 200)}`);
   }
   if (prepOutput) {
-    console.log(`  Rootfs: ${prepOutput}`);
+    const rootfsDir = prepOutput;
+    console.log(`  Rootfs: ${rootfsDir}`);
+    const initScript = path.join(rootfsDir, "srv", "openshell-vm-init.sh");
+    // Write a containerd config template that routes runc through our shim.
+    // The shim strips mqueue mounts (replacing with tmpfs) for kernels that
+    // lack CONFIG_POSIX_MQUEUE. k3s reads config.toml.tmpl before generating
+    // its containerd config.
+    const shimDir = path.join(rootfsDir, "opt", "nemoclaw");
+    fs.mkdirSync(shimDir, { recursive: true });
+
+    const shimPath = path.join(shimDir, "runc-shim");
+    fs.writeFileSync(shimPath, [
+      "#!/bin/sh",
+      "# runc shim: strip mqueue mounts for kernels without CONFIG_POSIX_MQUEUE",
+      "# Find the real k3s-bundled runc",
+      'REAL=$(find /var/lib/rancher/k3s/data -name runc -type f 2>/dev/null | head -1)',
+      '[ -z "$REAL" ] && REAL=/usr/bin/runc',
+      '# Replace mqueue with tmpfs in config.json (mqueue needs CONFIG_POSIX_MQUEUE)',
+      'for a in "$@"; do',
+      '  [ -f "$a/config.json" ] && sed -i \'s/"type": *"mqueue"/"type": "tmpfs"/g\' "$a/config.json" 2>/dev/null',
+      "done",
+      'exec "$REAL" "$@"',
+      "",
+    ].join("\n"));
+    fs.chmodSync(shimPath, 0o755);
+
+    // Patch init script: test mqueue at boot, install containerd shim only
+    // if the kernel lacks support. Self-disabling.
+    if (fs.existsSync(initScript)) {
+      const initContent = fs.readFileSync(initScript, "utf-8");
+      if (!initContent.includes("nemoclaw-mqueue-fix")) {
+        const patchLines = [
+          "",
+          "# ── nemoclaw-mqueue-fix: work around missing CONFIG_POSIX_MQUEUE in vm-dev kernel ──",
+          "mkdir -p /tmp/_mqtest 2>/dev/null || true",
+          "if ! mount -t mqueue mqueue /tmp/_mqtest 2>/dev/null; then",
+          "  ts 'kernel lacks mqueue — configuring containerd to use runc shim'",
+          "  _tmpl_dir=/var/lib/rancher/k3s/agent/etc/containerd",
+          '  mkdir -p "$_tmpl_dir"',
+          '  cat > "$_tmpl_dir/config.toml.tmpl" << \'CTRD_TMPL\'',
+          "version = 2",
+          '[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc]',
+          '  runtime_type = "io.containerd.runc.v2"',
+          '[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]',
+          '  BinaryName = "/opt/nemoclaw/runc-shim"',
+          "CTRD_TMPL",
+          "else",
+          "  umount /tmp/_mqtest 2>/dev/null || true",
+          "fi",
+          "rmdir /tmp/_mqtest 2>/dev/null || true",
+          "",
+        ].join("\n");
+        const patched = initContent.replace(
+          /^(K3S_ARGS=\()/m,
+          patchLines + "$1",
+        );
+        if (patched !== initContent) {
+          fs.writeFileSync(initScript, patched);
+          console.log("  Patched VM init: containerd runc shim for mqueue");
+        } else {
+          console.log("  Init script patch: K3S_ARGS insertion point not found");
+        }
+      } else {
+        console.log("  Init script already has mqueue fix");
+      }
+    } else {
+      console.log(`  Init script not found at: ${initScript}`);
+    }
+  } else {
+    console.log("  prepare-rootfs returned no output");
   }
 
   // The vm-dev openshell-sandbox binary was built with cargo-zigbuild on
