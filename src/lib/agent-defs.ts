@@ -31,6 +31,14 @@ export interface AgentConfigPaths {
   format: string;
 }
 
+export type AgentDashboardKind = "ui" | "api";
+
+export interface AgentDashboard {
+  kind: AgentDashboardKind;
+  label: string;
+  path: string;
+}
+
 export interface AgentLegacyPaths {
   dockerfileBase: string | null;
   dockerfile: string | null;
@@ -60,6 +68,7 @@ export interface AgentDefinition {
   readonly displayName: string;
   readonly healthProbe: AgentHealthProbe;
   readonly forwardPort: number;
+  readonly dashboard: AgentDashboard;
   readonly configPaths: AgentConfigPaths;
   readonly stateDirs: string[];
   readonly versionCommand: string;
@@ -271,6 +280,20 @@ export function loadAgent(name: string): AgentDefinition {
 
     get forwardPort(): number {
       return forwardPorts?.[0] ?? DASHBOARD_PORT;
+    },
+
+    get dashboard(): AgentDashboard {
+      const d = (raw.dashboard as Partial<AgentDashboard>) || {};
+      const kind: AgentDashboardKind = d.kind === "api" ? "api" : "ui";
+      const defaultLabel = kind === "api" ? "API" : "UI";
+      const normalizedLabel = typeof d.label === "string" ? d.label.trim() : "";
+      const rawPath = typeof d.path === "string" ? d.path.trim() : "";
+      const path = rawPath ? (rawPath.startsWith("/") ? rawPath : `/${rawPath}`) : "/";
+      return {
+        kind,
+        label: normalizedLabel || defaultLabel,
+        path,
+      };
     },
 
     get configPaths(): AgentConfigPaths {
