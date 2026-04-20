@@ -510,8 +510,10 @@ if [ $resume_exit -eq 0 ]; then
   pass "Resume completed (exit 0)"
 else
   fail "Resume failed (exit $resume_exit)"
-  info "Resume output: ${resume_output:0:500}"
 fi
+# Always print resume output for diagnostics
+info "Resume output (last 2000 chars):"
+echo "${resume_output: -2000}"
 
 # Verify sandbox is still operational after resume
 if nemoclaw "$SANDBOX_NAME" status >/dev/null 2>&1; then
