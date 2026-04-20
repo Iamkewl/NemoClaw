@@ -6353,51 +6353,24 @@ async function onboard(opts = {}) {
     if (resume) {
       session = onboardSession.loadSession();
 
-      // VM backend: allow resuming a completed session when the gateway
-      // crashed. This handles the "kill openshell-vm → onboard --resume"
-      // recovery flow. Restart the gateway, verify sandbox is alive, done.
+      // VM backend: when the session was complete but the VM gateway died,
+      // mark the session as resumable so the normal resume path re-runs
+      // all steps (gateway, inference, sandbox). We don't attempt a fast
+      // recovery because k3s state (providers, routes, pod readiness)
+      // doesn't reliably survive an unclean VM shutdown.
       if (
         session?.status === "complete" &&
         session?.gatewayBackend === "vm" &&
         !isVmGatewayHealthy()
       ) {
-        console.log("  Completed session with dead VM gateway — restarting...");
-        await startVmGatewayProcess({ exitOnFailure: true });
-        const sandboxName = session.sandboxName;
-        if (sandboxName) {
-          // Give the sandbox time to reconnect after gateway restart
-          let sandboxOk = false;
-          for (let i = 0; i < 30; i++) {
-            const list = runCaptureOpenshell(["sandbox", "list"], { ignoreError: true });
-            if (isSandboxReady(list, sandboxName)) {
-              sandboxOk = true;
-              break;
-            }
-            sleep(2);
-          }
-          if (sandboxOk) {
-            // Wait for the inference route to be re-established after
-            // gateway restart. The openshell server needs a few seconds
-            // to reconcile providers and routes from persisted k3s state.
-            console.log(`  ✓ Sandbox '${sandboxName}' is ready — waiting for inference route...`);
-            for (let j = 0; j < 30; j++) {
-              const inference = runCaptureOpenshell(["inference", "get"], { ignoreError: true });
-              if (inference && inference.includes("inference.local")) {
-                console.log("  ✓ Gateway recovered, inference route active");
-                process.exit(0);
-              }
-              sleep(2);
-            }
-            // Inference route didn't come back within 60s — exit 0 anyway
-            // since the sandbox is running. The route may need a manual
-            // provider re-attach.
-            console.log("  ✓ Gateway recovered (inference route not yet active after 60s)");
-            process.exit(0);
-          }
-          console.log("  Gateway recovered but sandbox not ready — falling through to re-onboard...");
-        }
-        // Mark session resumable so the normal resume path can re-run steps
+        console.log("  Completed session with dead VM gateway — will re-run onboard steps...");
         session.resumable = true;
+        // Clear step status so the normal resume path recreates everything
+        if (session.steps) {
+          for (const step of Object.keys(session.steps)) {
+            session.steps[step].status = "pending";
+          }
+        }
         onboardSession.saveSession(session);
       }
 
