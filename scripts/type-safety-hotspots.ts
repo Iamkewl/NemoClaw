@@ -107,6 +107,8 @@ type CliOptions = {
 type RawFunctionData = PatternCounts & {
   displayName: string;
   filePath: string;
+  start: number;
+  end: number;
   line: number;
   loc: number;
   exported: boolean;
@@ -126,6 +128,12 @@ type RawFileData = PatternCounts & {
   importSpecifiers: string[];
   noCheck: boolean;
   functions: RawFunctionData[];
+};
+
+type CommentDirectiveOccurrence = {
+  pos: number;
+  end: number;
+  count: number;
 };
 
 type ReportableFunctionNode =
@@ -177,31 +185,38 @@ function countMatches(text: string, re: RegExp): number {
   return matches ? matches.length : 0;
 }
 
-function collectCommentText(text: string): string {
+function collectDirectiveCommentOccurrences(text: string): CommentDirectiveOccurrence[] {
   const scanner = ts.createScanner(
     ts.ScriptTarget.Latest,
     false,
     ts.LanguageVariant.Standard,
     text,
   );
-  let comments = "";
+  const occurrences: CommentDirectiveOccurrence[] = [];
 
   while (true) {
     const token = scanner.scan();
     if (token === ts.SyntaxKind.EndOfFileToken) {
-      return comments;
+      return occurrences;
     }
     if (
       token === ts.SyntaxKind.SingleLineCommentTrivia ||
       token === ts.SyntaxKind.MultiLineCommentTrivia
     ) {
-      comments += `${scanner.getTokenText()}\n`;
+      const count = countMatches(scanner.getTokenText(), COMMENT_DIRECTIVE_RE);
+      if (count > 0) {
+        occurrences.push({
+          pos: scanner.getTokenPos(),
+          end: scanner.getTextPos(),
+          count,
+        });
+      }
     }
   }
 }
 
-function countDirectiveComments(text: string): number {
-  return countMatches(collectCommentText(text), COMMENT_DIRECTIVE_RE);
+function countDirectiveComments(occurrences: readonly CommentDirectiveOccurrence[]): number {
+  return occurrences.reduce((count, occurrence) => count + occurrence.count, 0);
 }
 
 function hasLeadingTsNoCheck(text: string): boolean {
@@ -634,8 +649,7 @@ function isParserBoundaryCall(node: ts.CallExpression): boolean {
   return (
     (owner.text === "JSON" && member === "parse") ||
     (owner.text === "JSON5" && member === "parse") ||
-    (owner.text === "YAML" && member === "parse") ||
-    (owner.text === "yaml" && member === "load")
+    ((owner.text === "YAML" || owner.text === "yaml") && (member === "parse" || member === "load"))
   );
 }
 
@@ -734,8 +748,9 @@ function createFunctionData(
 ): RawFunctionData {
   const displayName = getFunctionDisplayName(node) ?? "<anonymous>";
   const start = node.getStart(sourceFile);
+  const end = node.end;
   const line = sourceFile.getLineAndCharacterOfPosition(start).line + 1;
-  const loc = countNonEmptyLines(sourceFile.text.slice(start, node.end));
+  const loc = countNonEmptyLines(sourceFile.text.slice(start, end));
   const weakParameterCount = node.parameters.reduce((count, parameter) => {
     return count + (containsWeakType(parameter.type, aliases) ? 1 : 0);
   }, 0);
@@ -744,6 +759,8 @@ function createFunctionData(
     ...createPatternCounts(),
     displayName,
     filePath,
+    start,
+    end,
     line,
     loc,
     exported: isNodeExported(node),
@@ -871,16 +888,35 @@ function buildFunctionReasons(fn: RawFunctionData, fileFanIn: number): string[] 
   return reasons.slice(0, 5);
 }
 
+function findInnermostContainingFunction(
+  functions: readonly RawFunctionData[],
+  occurrence: CommentDirectiveOccurrence,
+): RawFunctionData | null {
+  let innermost: RawFunctionData | null = null;
+
+  for (const fn of functions) {
+    if (occurrence.pos < fn.start || occurrence.end > fn.end) {
+      continue;
+    }
+    if (!innermost || fn.end - fn.start < innermost.end - innermost.start) {
+      innermost = fn;
+    }
+  }
+
+  return innermost;
+}
+
 function analyzeFile(absPath: string, rootDir: string, project: ProjectInfo): RawFileData {
   const text = fs.readFileSync(absPath, "utf8");
   const sourceFile = ts.createSourceFile(absPath, text, ts.ScriptTarget.Latest, true);
   const aliases = buildTypeAliasMap(sourceFile);
   const noCheck = hasLeadingTsNoCheck(text);
+  const directiveOccurrences = collectDirectiveCommentOccurrences(text);
   const fileMetrics = createPatternCounts();
   const functions: RawFunctionData[] = [];
   const functionStack: RawFunctionData[] = [];
 
-  addPattern(fileMetrics, "tsDirectiveCount", countDirectiveComments(text));
+  addPattern(fileMetrics, "tsDirectiveCount", countDirectiveComments(directiveOccurrences));
 
   function applyPattern(key: keyof PatternCounts, amount = 1): void {
     addPattern(fileMetrics, key, amount);
@@ -932,6 +968,13 @@ function analyzeFile(absPath: string, rootDir: string, project: ProjectInfo): Ra
   }
 
   visit(sourceFile);
+
+  for (const occurrence of directiveOccurrences) {
+    const containingFunction = findInnermostContainingFunction(functions, occurrence);
+    if (containingFunction) {
+      addPattern(containingFunction, "tsDirectiveCount", occurrence.count);
+    }
+  }
 
   const weakExportCount = functions.filter(
     (fn) => fn.exported && (fn.weakParameterCount > 0 || fn.weakReturnType || fn.missingReturnType),
@@ -1094,6 +1137,7 @@ export function analyzeTypeSafetyHotspots(options: AnalyzeOptions = {}): Hotspot
   const functions: FunctionHotspot[] = rawFiles
     .flatMap((file) => file.functions)
     .map((fn) => {
+      const { start: _start, end: _end, ...functionData } = fn;
       const fileFanIn = fanInByFile.get(fn.filePath) ?? 0;
       const rawUnsafety = computeFunctionRawUnsafety(fn);
       const impactMultiplier = 1 + Math.min(fileFanIn, 8) * 0.1 + (fn.exported ? 0.35 : 0);
@@ -1102,7 +1146,7 @@ export function analyzeTypeSafetyHotspots(options: AnalyzeOptions = {}): Hotspot
       );
 
       return {
-        ...fn,
+        ...functionData,
         fileFanIn,
         rawUnsafety,
         impactMultiplier,

@@ -67,6 +67,11 @@ export const template = ` +
       "src/commented.ts": `// @ts-ignore this is a real directive comment
 export const value = 1;
 `,
+      "src/function-commented.ts": `export function ignored(value: string): string {
+  // @ts-expect-error deliberately ignored in fixture
+  return value;
+}
+`,
     });
 
     const report = analyzeTypeSafetyHotspots({
@@ -77,12 +82,37 @@ export const value = 1;
     const disabled = report.files.find((file) => file.filePath === "src/disabled.ts");
     const stringy = report.files.find((file) => file.filePath === "src/stringy.ts");
     const commented = report.files.find((file) => file.filePath === "src/commented.ts");
+    const ignored = report.functions.find((fn) => fn.displayName === "ignored");
 
     expect(disabled?.noCheck).toBe(true);
     expect(stringy?.noCheck).toBe(false);
     expect(stringy?.tsDirectiveCount).toBe(0);
     expect(commented?.tsDirectiveCount).toBe(1);
+    expect(ignored?.tsDirectiveCount).toBe(1);
     expect(disabled?.score).toBeGreaterThan(0);
+  });
+
+  it("detects YAML.load as a parse boundary", () => {
+    const rootDir = makeProject({
+      "src/yamlish.ts": `export function loadConfig(raw: string) {
+  const YAML = { load(value: string): string { return value; } };
+  // @ts-ignore fixture suppression for hotspot scoring
+  return YAML.load(raw);
+}
+`,
+    });
+
+    const report = analyzeTypeSafetyHotspots({
+      rootDir,
+      projectPaths: ["tsconfig.json"],
+    });
+
+    const yamlish = report.files.find((file) => file.filePath === "src/yamlish.ts");
+    const loadConfig = report.functions.find((fn) => fn.displayName === "loadConfig");
+
+    expect(yamlish?.parserBoundaryCount).toBe(1);
+    expect(loadConfig?.parserBoundaryCount).toBe(1);
+    expect(loadConfig?.tsDirectiveCount).toBe(1);
   });
 
   it("ranks shared parse-boundary helpers as high-value typing targets", () => {
