@@ -1158,6 +1158,17 @@ function showStatus() {
 async function listSandboxes() {
   const opsBinList = resolveOpenshell();
   const sessionDeps = opsBinList ? createSessionDeps(opsBinList) : null;
+
+  // Cache the SSH process probe once for all sandboxes — avoids spawning ps
+  // per sandbox row. The getSshProcesses() call is the expensive part (5s timeout).
+  let cachedSshOutput: string | null | undefined;
+  const getCachedSshOutput = () => {
+    if (cachedSshOutput === undefined && sessionDeps) {
+      cachedSshOutput = sessionDeps.getSshProcesses();
+    }
+    return cachedSshOutput ?? null;
+  };
+
   await listSandboxesCommand({
     recoverRegistryEntries: () => recoverRegistryEntries(),
     getLiveInference: () =>
@@ -1166,8 +1177,10 @@ async function listSandboxes() {
     getActiveSessionCount: sessionDeps
       ? (name) => {
           try {
-            const result = getActiveSandboxSessions(name, sessionDeps);
-            return result.detected ? result.sessions.length : null;
+            const sshOutput = getCachedSshOutput();
+            if (sshOutput === null) return null;
+            const { parseSshProcesses } = require("./lib/sandbox-session-state");
+            return parseSshProcesses(sshOutput, name).length;
           } catch {
             return null;
           }
