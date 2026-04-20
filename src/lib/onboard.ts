@@ -122,6 +122,13 @@ const VM_PID_FILE = path.join(process.env.HOME || "/tmp", ".nemoclaw", "openshel
 const VM_LOG_FILE = path.join(process.env.HOME || "/tmp", ".nemoclaw", "openshell-vm.log");
 // openshell-vm prefixes instance names: gateway_name("nemoclaw") → "openshell-vm-nemoclaw"
 const VM_GATEWAY_NAME = `openshell-vm-${GATEWAY_NAME}`;
+
+/** Return the effective gateway name for the current backend. */
+function getEffectiveGatewayName() {
+  const backend = detectGatewayBackend({ vmAvailable: isOpenshellVmAvailable() });
+  return backend === "vm" ? VM_GATEWAY_NAME : GATEWAY_NAME;
+}
+
 const BACK_TO_SELECTION = "__NEMOCLAW_BACK_TO_SELECTION__";
 
 /**
@@ -4736,7 +4743,7 @@ async function setupInference(
   credentialEnv = null,
 ) {
   step(4, 8, "Setting up inference provider");
-  runOpenshell(["gateway", "select", GATEWAY_NAME], { ignoreError: true });
+  runOpenshell(["gateway", "select", getEffectiveGatewayName()], { ignoreError: true });
 
   if (
     provider === "nvidia-prod" ||
