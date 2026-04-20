@@ -2367,7 +2367,7 @@ runner.runCapture = (command) => {
   if (_n(command).includes("sandbox get my-assistant")) return "";
   if (_n(command).includes("sandbox list")) return "my-assistant Ready";
   if (_n(command).includes("sandbox exec my-assistant curl -sf http://localhost:18789/")) return "ok";
-  if (_n(command).includes("forward list")) return "18789 -> my-assistant:18789";
+  if (_n(command).includes("forward list")) return "my-assistant 127.0.0.1 18789 12345 running";
   return "";
 };
 registry.registerSandbox = () => true;
@@ -2475,7 +2475,7 @@ runner.runCapture = (command) => {
   if (_n(command).includes("sandbox get my-assistant")) return "";
   if (_n(command).includes("sandbox list")) return "my-assistant Ready";
   if (_n(command).includes("sandbox exec my-assistant curl -sf http://localhost:18789/")) return "ok";
-  if (_n(command).includes("forward list")) return "18789 -> my-assistant:18789";
+  if (_n(command).includes("forward list")) return "my-assistant 127.0.0.1 18789 12345 running";
   return "";
 };
 registry.registerSandbox = () => true;
@@ -2569,7 +2569,7 @@ runner.runCapture = (command) => {
   if (_n(command).includes("sandbox list")) return "my-assistant Ready";
   // Custom port: dashboard readiness curl uses 19000 (DASHBOARD_PORT from env)
   if (_n(command).includes("sandbox exec my-assistant curl -sf http://localhost:19000/")) return "ok";
-  if (_n(command).includes("forward list")) return "19000 -> my-assistant:19000";
+  if (_n(command).includes("forward list")) return "my-assistant 127.0.0.1 19000 12345 running";
   return "";
 };
 registry.registerSandbox = () => true;
@@ -2697,7 +2697,7 @@ runner.runCapture = (command) => {
   if (_n(command).includes("sandbox get my-assistant")) return "";
   if (_n(command).includes("sandbox list")) return "my-assistant Ready";
   if (_n(command).includes("provider get")) return "Provider: discord-bridge";
-  if (_n(command).includes("forward list")) return "18789 -> my-assistant:18789";
+  if (_n(command).includes("forward list")) return "my-assistant 127.0.0.1 18789 12345 running";
   if (_n(command).includes("sandbox exec") && _n(command).includes("curl")) return "ok";
   return "";
 };
@@ -2937,7 +2937,7 @@ runner.runCapture = (command) => {
   if (_n(command).includes("sandbox list")) return "my-assistant Ready";
   // All messaging providers already exist in gateway
   if (_n(command).includes("provider get")) return "Provider: exists";
-  if (_n(command).includes("forward list")) return "18789 -> my-assistant:18789";
+  if (_n(command).includes("forward list")) return "my-assistant 127.0.0.1 18789 12345 running";
   return "";
 };
 registry.getSandbox = () => ({ name: "my-assistant", gpuEnabled: false });
@@ -3333,7 +3333,7 @@ runner.run = (command, opts = {}) => {
 runner.runCapture = (command) => {
   if (_n(command).includes("sandbox get my-assistant")) return "my-assistant";
   if (_n(command).includes("sandbox list")) return "my-assistant Ready";
-  if (_n(command).includes("forward list")) return "18789 -> my-assistant:18789";
+  if (_n(command).includes("forward list")) return "my-assistant 127.0.0.1 18789 12345 running";
   return "";
 };
 registry.getSandbox = () => ({ name: "my-assistant", gpuEnabled: false });
@@ -3978,7 +3978,7 @@ runner.runCapture = (command) => {
     return sandboxListCalls >= 2 ? "my-assistant Ready" : "my-assistant Pending";
   }
   if (_n(command).includes("sandbox exec my-assistant curl -sf http://localhost:18789/")) return "ok";
-  if (_n(command).includes("forward list")) return "18789 -> my-assistant:18789";
+  if (_n(command).includes("forward list")) return "my-assistant 127.0.0.1 18789 12345 running";
   return "";
 };
 registry.registerSandbox = () => true;
@@ -4087,7 +4087,7 @@ runner.run = (command, opts = {}) => {
 runner.runCapture = (command) => {
   if (_n(command).includes("sandbox get my-assistant")) return "my-assistant";
   if (_n(command).includes("sandbox list")) return "my-assistant Ready";
-  if (_n(command).includes("forward list")) return "18789 -> my-assistant:18789";
+  if (_n(command).includes("forward list")) return "my-assistant 127.0.0.1 18789 12345 running";
   return "";
 };
 registry.getSandbox = () => ({ name: "my-assistant", gpuEnabled: false });
@@ -4367,7 +4367,7 @@ runner.runCapture = (command) => {
   if (_n(command).includes("sandbox get my-assistant")) return "";
   if (_n(command).includes("sandbox list")) return "my-assistant Ready";
   if (_n(command).includes("sandbox exec my-assistant curl -sf http://localhost:18789/")) return "ok";
-  if (_n(command).includes("forward list")) return "18789 -> my-assistant:18789";
+  if (_n(command).includes("forward list")) return "my-assistant 127.0.0.1 18789 12345 running";
   return "";
 };
 registry.registerSandbox = () => true;
@@ -4495,7 +4495,7 @@ runner.runCapture = (command) => {
   if (_n(command).includes("sandbox get my-assistant")) return "";
   if (_n(command).includes("sandbox list")) return "my-assistant Ready";
   if (_n(command).includes("sandbox exec my-assistant curl -sf http://localhost:18789/")) return "ok";
-  if (_n(command).includes("forward list")) return "18789 -> my-assistant:18789";
+  if (_n(command).includes("forward list")) return "my-assistant 127.0.0.1 18789 12345 running";
   return "";
 };
 registry.registerSandbox = () => true;
@@ -4770,7 +4770,7 @@ runner.runCapture = (command) => {
   if (_n(command).includes("sandbox get my-assistant")) return "";
   if (_n(command).includes("sandbox list")) return "my-assistant Ready";
   if (_n(command).includes("sandbox exec my-assistant curl -sf http://localhost:18789/")) return "ok";
-  if (_n(command).includes("forward list")) return "18789 -> my-assistant:18789";
+  if (_n(command).includes("forward list")) return "my-assistant 127.0.0.1 18789 12345 running";
   return "";
 };
 registry.registerSandbox = () => true;
