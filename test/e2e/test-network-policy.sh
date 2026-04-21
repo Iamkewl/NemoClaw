@@ -147,6 +147,7 @@ apply_preset() {
   local preset_name="$1"
   local preset_list preset_num
   preset_list=$(nemoclaw "$SANDBOX_NAME" policy-add </dev/null 2>&1) || true
+  log "  DEBUG preset_list output: ${preset_list:0:500}"
   preset_num=$(echo "$preset_list" | grep -oE '[0-9]+\) [^ ]+ '"$preset_name" | grep -oE '^[0-9]+') || true
   if [[ -z "$preset_num" ]]; then
     log "  Could not find '$preset_name' in preset list"
