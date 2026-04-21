@@ -58,11 +58,8 @@ const {
   stripAnsi,
   versionGte,
 } = require("./lib/openshell");
-const {
-  getSandboxInventory,
-  listSandboxesCommand,
-  showStatusCommand,
-} = require("./lib/inventory-commands");
+const { showStatusCommand } = require("./lib/inventory-commands");
+const { runRegisteredOclifCommand } = require("./lib/oclif-runner");
 const { executeDeploy } = require("./lib/deploy");
 const { runStartCommand, runStopCommand } = require("./lib/services-command");
 const { buildVersionedUninstallUrl, runUninstallCommand } = require("./lib/uninstall-command");
@@ -505,6 +502,9 @@ async function recoverRegistryEntries({ requestedSandboxName = null } = {}) {
     recoveredFromGateway,
   };
 }
+
+exports.captureOpenshell = captureOpenshell;
+exports.recoverRegistryEntries = recoverRegistryEntries;
 
 function hasNamedGateway(output = "") {
   return stripAnsi(output).includes("Gateway: nemoclaw");
@@ -1177,69 +1177,12 @@ function showStatus() {
   });
 }
 
-function parseListArgs(args = []) {
-  const options = { json: false };
-
-  for (const arg of args) {
-    if (arg === "--json") {
-      options.json = true;
-      continue;
-    }
-    if (arg === "--help" || arg === "-h") {
-      console.log("  Usage: nemoclaw list [--json]");
-      console.log("");
-      process.exit(0);
-    }
-    console.error(`  Unknown argument(s) for list: ${args.join(", ")}`);
-    console.error("  Usage: nemoclaw list [--json]");
-    process.exit(1);
-  }
-
-  return options;
-}
-
 async function listSandboxes(args = []) {
-  const options = parseListArgs(args);
-  const opsBinList = resolveOpenshell();
-  const sessionDeps = opsBinList ? createSessionDeps(opsBinList) : null;
-
-  // Cache the SSH process probe once for all sandboxes — avoids spawning ps
-  // per sandbox row. The getSshProcesses() call is the expensive part (5s timeout).
-  let cachedSshOutput: string | null | undefined;
-  const getCachedSshOutput = () => {
-    if (cachedSshOutput === undefined && sessionDeps) {
-      cachedSshOutput = sessionDeps.getSshProcesses();
-    }
-    return cachedSshOutput ?? null;
-  };
-
-  const deps = {
-    recoverRegistryEntries: () => recoverRegistryEntries(),
-    getLiveInference: () =>
-      parseGatewayInference(captureOpenshell(["inference", "get"], { ignoreError: true }).output),
-    loadLastSession: () => onboardSession.loadSession(),
-    getActiveSessionCount: sessionDeps
-      ? (name) => {
-          try {
-            const sshOutput = getCachedSshOutput();
-            if (sshOutput === null) return null;
-            const { parseSshProcesses } = require("./lib/sandbox-session-state");
-            return parseSshProcesses(sshOutput, name).length;
-          } catch {
-            return null;
-          }
-        }
-      : undefined,
-    log: console.log,
-  };
-
-  if (options.json) {
-    const inventory = await getSandboxInventory(deps);
-    console.log(JSON.stringify(inventory, null, 2));
-    return;
-  }
-
-  await listSandboxesCommand(deps);
+  await runRegisteredOclifCommand("list", args, {
+    rootDir: ROOT,
+    error: console.error,
+    exit: (code) => process.exit(code),
+  });
 }
 
 // ── Sandbox-scoped actions ───────────────────────────────────────
