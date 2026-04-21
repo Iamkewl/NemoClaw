@@ -271,6 +271,7 @@ async function promptOrDefault(question, envVar, defaultValue) {
 // Gateway state functions — delegated to src/lib/gateway-state.ts
 const {
   isSandboxReady,
+  parseSandboxStatus,
   hasStaleGateway,
   isSelectedGateway,
   isGatewayHealthy,
@@ -6584,6 +6585,7 @@ module.exports = {
   printSandboxCreateRecoveryHints,
   providerExistsInGateway,
   parsePolicyPresetEnv,
+  parseSandboxStatus,
   pruneStaleSandboxEntry,
   repairRecordedSandbox,
   recoverGatewayRuntime,
