@@ -1029,7 +1029,7 @@ After removal, re-running <code class="docutils literal notranslate"><span class
 Each <code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">onboard</span></code> builds an <code class="docutils literal notranslate"><span class="pre">openshell/sandbox-from:&lt;timestamp&gt;</span></code> image (~765 MB).
 The <code class="docutils literal notranslate"><span class="pre">destroy</span></code> and <code class="docutils literal notranslate"><span class="pre">rebuild</span></code> commands clean up the image automatically, but images from older NemoClaw versions or interrupted operations may remain.
 This command lists all <code class="docutils literal notranslate"><span class="pre">openshell/sandbox-from:*</span></code> images, cross-references the sandbox registry, and removes any that are no longer associated with a registered sandbox.</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>nemoclaw<span class="w"> </span>gc<span class="w"> </span><span class="o">[</span>--dry-run<span class="o">]</span><span class="w"> </span><span class="o">[</span>--yes<span class="o">]</span>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>nemoclaw<span class="w"> </span>gc<span class="w"> </span><span class="o">[</span>--dry-run<span class="o">]</span><span class="w"> </span><span class="o">[</span>--yes<span class="p">|</span>--force<span class="o">]</span>
 </pre></div>
 </div>
 <div class="pst-scrollable-table-container"><table class="table">
