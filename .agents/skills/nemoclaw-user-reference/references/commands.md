@@ -492,7 +492,7 @@ The `destroy` and `rebuild` commands clean up the image automatically, but image
 This command lists all `openshell/sandbox-from:*` images, cross-references the sandbox registry, and removes any that are no longer associated with a registered sandbox.
 
 ```console
-$ nemoclaw gc [--dry-run] [--yes]
+$ nemoclaw gc [--dry-run] [--yes|--force]
 ```
 
 | Flag | Description |

@@ -2713,7 +2713,10 @@ async function garbageCollectImages(args = []) {
       console.log(`  ${G}✓${R} Removed ${img.tag}`);
       removed++;
     } else {
-      console.error(`  ${YW}⚠${R} Failed to remove ${img.tag}`);
+      const details = `${rmiResult.stderr || rmiResult.stdout || ""}`.trim();
+      console.error(
+        `  ${YW}⚠${R} Failed to remove ${img.tag}${details ? `: ${details}` : ""}`,
+      );
       failed++;
     }
   }
@@ -2721,6 +2724,7 @@ async function garbageCollectImages(args = []) {
   console.log("");
   if (removed > 0) console.log(`  ${G}✓${R} Removed ${removed} orphaned image(s).`);
   if (failed > 0) console.log(`  ${YW}⚠${R} Failed to remove ${failed} image(s).`);
+  if (failed > 0) process.exit(1);
 }
 
 // ── Help ─────────────────────────────────────────────────────────
