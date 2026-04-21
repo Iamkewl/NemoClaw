@@ -6,6 +6,13 @@
   "bin": {
     "nemoclaw": "./bin/nemoclaw.js"
   },
+  "oclif": {
+    "bin": "nemoclaw",
+    "commands": {
+      "strategy": "explicit",
+      "target": "./dist/lib/oclif-commands.js"
+    }
+  },
   "scripts": {
     "test": "vitest run",
     "lint": "eslint .",
