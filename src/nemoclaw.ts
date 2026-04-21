@@ -1681,6 +1681,11 @@ async function sandboxChannelsAdd(sandboxName, args = []) {
     process.exit(1);
   }
 
+  if (dryRun) {
+    console.log(`  --dry-run: would enable channel '${channelArg}' for '${sandboxName}'.`);
+    return;
+  }
+
   const tokenKeys = getChannelTokenKeys(channel);
   const acquired = {};
   for (const envKey of tokenKeys) {
@@ -1707,11 +1712,6 @@ async function sandboxChannelsAdd(sandboxName, args = []) {
       process.exit(1);
     }
     acquired[envKey] = token;
-  }
-
-  if (dryRun) {
-    console.log(`  --dry-run: would enable channel '${channelArg}' for '${sandboxName}'.`);
-    return;
   }
 
   persistChannelTokens(acquired);

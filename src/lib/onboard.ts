@@ -4578,7 +4578,7 @@ async function setupMessagingChannels() {
   }
 
   // Single-keypress toggle selector — pre-select channels that already have tokens.
-  // Press 1/2/3 to instantly toggle a channel; press Enter to continue.
+  // Press a channel number to toggle; press Enter to continue.
   const enabled = new Set(
     MESSAGING_CHANNELS.filter((c) => getMessagingToken(c.envKey)).map((c) => c.name),
   );
@@ -4601,7 +4601,7 @@ async function setupMessagingChannels() {
       output.write(`    [${i + 1}] ${marker} ${ch.name} — ${ch.description}${status}\n`);
     });
     output.write("\n");
-    output.write("  Press 1-3 to toggle, Enter when done: ");
+    output.write(`  Press 1-${MESSAGING_CHANNELS.length} to toggle, Enter when done: `);
   };
 
   showList();

@@ -422,7 +422,8 @@ For the security trade-offs, refer to Security Best Practices (see the `nemoclaw
 ### `openclaw channels add` or `remove` is blocked inside the sandbox
 
 This is expected.
-The sandbox keeps `/sandbox/.openclaw/openclaw.json` read-only (Landlock + filesystem hardening), so `openclaw channels` commands that mutate the baked config cannot write there.
+The messaging channel list is frozen into the sandbox's container image when the image is built during `nemoclaw onboard` or `nemoclaw rebuild` (the selected channel names are passed to the `docker build` as `NEMOCLAW_MESSAGING_CHANNELS_B64` and written into `/sandbox/.openclaw/openclaw.json` as part of the image).
+At runtime the sandbox mounts that path read-only and layers Landlock + filesystem hardening on top, so `openclaw channels` commands that mutate the config cannot write there.
 NemoClaw's sandbox entrypoint installs a guard that intercepts `openclaw channels <add|remove>` and prints an actionable error pointing at the host-side commands below, instead of letting the call fail deep in the binary with a raw `EACCES` trace.
 
 Run the equivalent host-side command instead:
