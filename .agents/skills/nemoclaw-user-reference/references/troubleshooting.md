@@ -419,11 +419,11 @@ Changing or exporting it later does not rewrite the baked `openclaw.json` inside
 If you need a different device-auth setting, rerun onboarding so NemoClaw rebuilds the sandbox image with the desired configuration.
 For the security trade-offs, refer to Security Best Practices (see the `nemoclaw-user-configure-security` skill).
 
-### `openclaw channels add` or `remove` fails with `EACCES` inside the sandbox
+### `openclaw channels add` or `remove` is blocked inside the sandbox
 
 This is expected.
 The sandbox keeps `/sandbox/.openclaw/openclaw.json` read-only (Landlock + filesystem hardening), so `openclaw channels` commands that mutate the baked config cannot write there.
-NemoClaw surfaces a clear error from inside the sandbox instead of the raw `EACCES` trace.
+NemoClaw's sandbox entrypoint installs a guard that intercepts `openclaw channels <add|remove>` and prints an actionable error pointing at the host-side commands below, instead of letting the call fail deep in the binary with a raw `EACCES` trace.
 
 Run the equivalent host-side command instead:
 

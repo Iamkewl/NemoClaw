@@ -2648,7 +2648,7 @@ function help() {
     nemoclaw <name> policy-list      List presets ${D}(● = applied)${R}
 
   ${G}Messaging Channels:${R}
-    nemoclaw <name> channels list            Show configured messaging channels
+    nemoclaw <name> channels list            List supported messaging channels
     nemoclaw <name> channels add <channel>   Save credentials and rebuild ${D}(telegram|discord|slack)${R}
     nemoclaw <name> channels remove <channel> Clear credentials and rebuild
 
@@ -2872,7 +2872,7 @@ const [cmd, ...args] = process.argv.slice(2);
           default:
             console.error(`  Unknown channels subcommand: ${channelsSub}`);
             console.error("  Usage: nemoclaw <name> channels <list|add|remove> [args]");
-            console.error("    list                  Show which channels are configured");
+            console.error("    list                  List supported messaging channels");
             console.error("    add <channel>         Store credentials and rebuild the sandbox");
             console.error("    remove <channel>      Clear credentials and rebuild the sandbox");
             process.exit(1);
