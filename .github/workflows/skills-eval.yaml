@@ -1,0 +1,145 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Scenario-based eval for NemoClaw agent skills.
+# Runs evaluate-skills.ts against the skills whose files changed in this PR,
+# grades each scenario's assertions with an LLM judge, compares the per-skill
+# delta against ci/skills-eval-baseline.json, and posts a sticky PR comment.
+#
+# See ci/skills-eval-policy.md for regression semantics, baseline management,
+# cost caps, fork-PR fallback, and the emergency bypass label.
+
+name: skills-eval
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+    paths:
+      - ".agents/skills/**"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: skills-eval-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      should-eval: ${{ steps.decide.outputs.should-eval }}
+      fork-pr: ${{ steps.decide.outputs.fork-pr }}
+      bypass-label: ${{ steps.decide.outputs.bypass-label }}
+    steps:
+      - name: Decide run mode
+        id: decide
+        env:
+          HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+          LABEL_NAMES: ${{ toJson(github.event.pull_request.labels.*.name) }}
+        run: |
+          has_bypass=false
+          if echo "$LABEL_NAMES" | grep -Fq '"skip-skills-eval"'; then
+            has_bypass=true
+          fi
+          echo "bypass-label=$has_bypass" >> "$GITHUB_OUTPUT"
+
+          if [ "$has_bypass" = "true" ]; then
+            echo "should-eval=false" >> "$GITHUB_OUTPUT"
+            echo "fork-pr=false"    >> "$GITHUB_OUTPUT"
+          elif [ "$HAS_KEY" != "true" ]; then
+            echo "should-eval=false" >> "$GITHUB_OUTPUT"
+            echo "fork-pr=true"     >> "$GITHUB_OUTPUT"
+          else
+            echo "should-eval=true"  >> "$GITHUB_OUTPUT"
+            echo "fork-pr=false"    >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Log bypass label usage
+        if: steps.decide.outputs.bypass-label == 'true'
+        run: |
+          echo "::notice title=skills-eval bypassed::skip-skills-eval label applied. author=${{ github.event.pull_request.user.login }} labeler=${{ github.actor }} pr=${{ github.event.pull_request.number }}"
+
+      - name: Post bypass comment
+        if: steps.decide.outputs.bypass-label == 'true'
+        uses: marocchino/sticky-pull-request-comment@70d2764d1a7d5d9560b100cbea0077fc8f633987 # v3.0.2
+        with:
+          header: skills-eval
+          message: |
+            :label: **Skills eval skipped via `skip-skills-eval` label.**
+
+            This bypass is logged for the weekly maintainer review.
+            See [ci/skills-eval-policy.md](../blob/main/ci/skills-eval-policy.md#emergency-bypass).
+
+      - name: Post fork-PR notice
+        if: steps.decide.outputs.fork-pr == 'true'
+        uses: marocchino/sticky-pull-request-comment@70d2764d1a7d5d9560b100cbea0077fc8f633987 # v3.0.2
+        with:
+          header: skills-eval
+          message: |
+            :lock: **Skills eval skipped — fork PRs cannot access `ANTHROPIC_API_KEY`.**
+
+            A maintainer will rerun this check after an initial review.
+            See [ci/skills-eval-policy.md](../blob/main/ci/skills-eval-policy.md#fork-pr-fallback).
+
+  eval:
+    needs: gate
+    if: needs.gate.outputs.should-eval == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install --ignore-scripts
+
+      - name: Fetch PR base ref
+        run: git fetch --no-tags --depth=1 origin "${{ github.event.pull_request.base.ref }}"
+
+      - name: Run skills eval
+        id: eval
+        run: |
+          npm run eval:skills -- \
+            --changed-only \
+            --base-ref "origin/${{ github.event.pull_request.base.ref }}" \
+            --baseline ci/skills-eval-baseline.json \
+            --output markdown \
+            --output-path skills-eval-report.md
+
+      - name: Prepare fallback report on failure
+        if: failure() && hashFiles('skills-eval-report.md') == ''
+        run: |
+          {
+            echo "# Skills eval report"
+            echo
+            echo ":x: The eval run failed before producing a report. See the"
+            echo "workflow logs for details."
+          } > skills-eval-report.md
+
+      - name: Post eval report
+        if: always() && hashFiles('skills-eval-report.md') != ''
+        uses: marocchino/sticky-pull-request-comment@70d2764d1a7d5d9560b100cbea0077fc8f633987 # v3.0.2
+        with:
+          header: skills-eval
+          path: skills-eval-report.md
+
+      - name: Upload report artifact
+        if: always() && hashFiles('skills-eval-report.md') != ''
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        with:
+          name: skills-eval-report
+          path: skills-eval-report.md
+          retention-days: 14

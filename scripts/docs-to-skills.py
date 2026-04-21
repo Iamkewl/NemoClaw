@@ -1110,7 +1110,133 @@ def generate_skill(
                     spdx_ref + content.rstrip("\n") + "\n", encoding="utf-8"
                 )
 
+        write_eval_scaffold(skill_dir, name)
+
     return summary
+
+
+# ---------------------------------------------------------------------------
+# evals.json scaffolding
+# ---------------------------------------------------------------------------
+#
+# Writers fill this stub in by hand (see .agents/skills/EVALS.md for the
+# authoring rubric). A pre-push hook rejects files that still contain
+# "TODO:" markers, so scaffolds can't ship as real evals.
+
+
+EVAL_STUB_INSTRUCTIONS = (
+    "Stub scaffold — replace all placeholder values before shipping. See "
+    ".agents/skills/EVALS.md for the authoring rubric. A pre-push hook "
+    "rejects files whose placeholder markers remain."
+)
+
+
+def _eval_scaffold(skill_name: str) -> dict:
+    """Return the stub evals.json payload for a new skill."""
+    return {
+        "$instructions": EVAL_STUB_INSTRUCTIONS,
+        "skill_name": skill_name,
+        "evals": [
+            {
+                "id": 1,
+                "prompt": "TODO: happy-path user scenario — implementation-vague, in the user's words",
+                "expected_output": "TODO: one-sentence description of correct agent behavior",
+                "files": [],
+                "assertions": [
+                    "TODO: behavioral claim #1 (specific, quote-checkable)",
+                    "TODO: behavioral claim #2",
+                    "TODO: behavioral claim #3",
+                ],
+            },
+            {
+                "id": 2,
+                "prompt": "TODO: edge or partial-state scenario — user mid-task, realistic wrinkle",
+                "expected_output": "TODO: one-sentence description of correct agent behavior",
+                "files": [],
+                "assertions": [
+                    "TODO: behavioral claim #1",
+                    "TODO: behavioral claim #2",
+                    "TODO: behavioral claim #3",
+                ],
+            },
+            {
+                "id": 3,
+                "prompt": "TODO: adjacent-wrong scenario — the agent should NOT use this skill",
+                "expected_output": "TODO: one-sentence description of correct redirect behavior",
+                "files": [],
+                "assertions": [
+                    "TODO: behavioral claim #1 (what to redirect to)",
+                    "TODO: behavioral claim #2 (what NOT to do)",
+                    "TODO: behavioral claim #3",
+                ],
+            },
+        ],
+    }
+
+
+def write_eval_scaffold(
+    skill_dir: Path, skill_name: str, *, dry_run: bool = False
+) -> bool:
+    """Write a stub evals/evals.json if one does not already exist.
+
+    Returns True if a new file was written (or would be, in dry-run mode).
+    Existing evals.json files are never overwritten.
+    """
+    evals_path = skill_dir / "evals" / "evals.json"
+    if evals_path.exists():
+        return False
+    if dry_run:
+        return True
+    evals_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = _eval_scaffold(skill_name)
+    evals_path.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    return True
+
+
+_SKILL_FRONTMATTER_NAME_RE = re.compile(
+    r'^\s*name:\s*["\']?([a-zA-Z0-9_.-]+)["\']?\s*$', re.MULTILINE
+)
+
+
+def read_skill_name_from_frontmatter(skill_md_path: Path) -> str | None:
+    """Pull the `name:` field from a SKILL.md YAML frontmatter block.
+
+    Falls back to the parent directory name if the frontmatter is missing
+    or unparseable, matching the on-disk convention.
+    """
+    try:
+        text = skill_md_path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    if not text.startswith("---"):
+        return skill_md_path.parent.name
+    end_marker = text.find("\n---", 3)
+    if end_marker == -1:
+        return skill_md_path.parent.name
+    frontmatter = text[3:end_marker]
+    match = _SKILL_FRONTMATTER_NAME_RE.search(frontmatter)
+    if match:
+        return match.group(1)
+    return skill_md_path.parent.name
+
+
+def scaffold_existing_skills(output_dir: Path, *, dry_run: bool = False) -> list[str]:
+    """Scaffold evals.json for any skill dir under output_dir missing one.
+
+    Returns the list of skill names scaffolded.
+    """
+    scaffolded: list[str] = []
+    if not output_dir.is_dir():
+        return scaffolded
+    for skill_md in sorted(output_dir.glob("*/SKILL.md")):
+        skill_dir = skill_md.parent
+        name = read_skill_name_from_frontmatter(skill_md) or skill_dir.name
+        if write_eval_scaffold(skill_dir, name, dry_run=dry_run):
+            scaffolded.append(name)
+    return scaffolded
 
 
 # ---------------------------------------------------------------------------
@@ -1378,6 +1504,20 @@ def main():
                 claude_skills.symlink_to(rel)
                 print(f"\n✔ Created symlink: {claude_skills} → {rel}")
                 break
+
+    # Scaffold evals.json stubs for any skill dir (including hand-authored
+    # maintainer/contributor skills) that does not yet have one.
+    total_scaffolded: list[tuple[Path, list[str]]] = []
+    for out_dir in args.output_dirs:
+        scaffolded = scaffold_existing_skills(out_dir, dry_run=args.dry_run)
+        if scaffolded:
+            total_scaffolded.append((out_dir, scaffolded))
+
+    if total_scaffolded:
+        label = "Would scaffold" if args.dry_run else "Scaffolded"
+        print(f"\n{label} evals.json stubs:")
+        for out_dir, names in total_scaffolded:
+            print(f"  {out_dir}: {', '.join(names)}")
 
     # Report
     print("\n" + "=" * 60)

@@ -1,0 +1,45 @@
+{
+  "skill_name": "nemoclaw-user-get-started",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I'm brand new to NemoClaw and working on a MacBook. Walk me through getting my first sandbox running so I can talk to an agent.",
+      "expected_output": "Ordered walkthrough: run the install script, let the guided onboarding complete, connect to the sandbox, send a first message.",
+      "files": [],
+      "assertions": [
+        "Response names the `curl -fsSL https://www.nvidia.com/nemoclaw.sh | bash` installer or an equivalent one-line install step",
+        "Response describes an onboarding or `nemoclaw onboard` flow that follows the install",
+        "Response shows how to connect to the sandbox (for example `nemoclaw <name> connect`)",
+        "Response mentions interacting with the agent via the OpenClaw TUI or `openclaw agent` command",
+        "Response acknowledges that NemoClaw is alpha or pre-production software",
+        "Response does NOT assume the user is on Windows"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "I ran the NemoClaw install script and it said it finished, but now when I type `nemoclaw` in my terminal I get 'command not found'. I use nvm to manage Node. What should I try?",
+      "expected_output": "Point to PATH not refreshing in the current shell; suggest sourcing the shell rc or opening a new terminal; acknowledge nvm/fnm as a common cause.",
+      "files": [],
+      "assertions": [
+        "Response identifies that the current shell's PATH has not been refreshed as the likely cause",
+        "Response suggests either sourcing `~/.zshrc` / `~/.bashrc` or opening a new terminal",
+        "Response acknowledges that nvm or fnm can prevent the installer from updating PATH automatically",
+        "Response does NOT recommend uninstalling and reinstalling as the first step",
+        "Response does NOT claim the install failed"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "I already have a NemoClaw sandbox running — it's working fine — but I want to switch the model it uses from the default Nemotron model to a different provider. How do I do that?",
+      "expected_output": "Recognize this is inference configuration, not first-time setup; redirect to the configure-inference flow; do not re-run onboarding.",
+      "files": [],
+      "assertions": [
+        "Response identifies that this is a change-inference task, not a first-time install",
+        "Response points to inference configuration (for example running onboarding again, the inference provider list, or a configure-inference flow)",
+        "Response does NOT tell the user to run the install script again",
+        "Response does NOT walk the user through first-time onboarding steps as if they were starting over",
+        "Response acknowledges the existing sandbox should keep running"
+      ]
+    }
+  ]
+}

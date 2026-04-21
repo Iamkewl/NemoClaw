@@ -1,0 +1,124 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Nightly full skills-eval run on main.
+#
+# Runs evaluate-skills.ts against every skill with an authored evals.json,
+# refreshes ci/skills-eval-baseline.json, appends one row to
+# ci/skills-scoreboard-history.jsonl, rebuilds ci/skills-scoreboard.md, and
+# opens a bot PR for maintainer review. Also updates the pinned "NemoClaw
+# Skills Scoreboard" issue so the public answer to "how do we measure good
+# skills?" stays live.
+#
+# See ci/skills-eval-policy.md for the full policy, cost caps, and rollback.
+
+name: skills-eval-nightly
+
+on:
+  schedule:
+    - cron: "0 8 * * *" # 08:00 UTC daily
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: skills-eval-nightly
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    if: github.repository == 'NVIDIA/NemoClaw'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Abort if ANTHROPIC_API_KEY is missing
+        if: env.ANTHROPIC_API_KEY == ''
+        run: |
+          echo "::error title=skills-eval-nightly skipped::ANTHROPIC_API_KEY secret is not set."
+          exit 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install --ignore-scripts
+
+      - name: Run full skills eval
+        run: |
+          npm run eval:skills -- \
+            --output json \
+            --output-path ci/skills-eval-latest.json \
+            --cost-cap 25 \
+            --baseline ci/skills-eval-baseline.json
+
+      - name: Update scoreboard + refresh baseline
+        run: |
+          npx tsx scripts/update-skills-scoreboard.ts \
+            --latest ci/skills-eval-latest.json \
+            --history ci/skills-scoreboard-history.jsonl \
+            --output ci/skills-scoreboard.md \
+            --baseline ci/skills-eval-baseline.json \
+            --commit "$GITHUB_SHA"
+
+      - name: Update scoreboard issue
+        run: |
+          title="NemoClaw Skills Scoreboard"
+          body_file=ci/skills-scoreboard.md
+          existing=$(gh issue list --state open --search "\"$title\" in:title" --json number,title --jq '.[] | select(.title == "'"$title"'") | .number' | head -n1)
+          if [ -z "$existing" ]; then
+            gh issue create --title "$title" --body-file "$body_file" --label "skills-scoreboard"
+          else
+            gh issue edit "$existing" --body-file "$body_file"
+          fi
+
+      - name: Open baseline refresh PR
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: chore/skills-eval-nightly-refresh
+          base: main
+          commit-message: "chore(skills): nightly baseline + scoreboard refresh"
+          title: "chore(skills): nightly baseline + scoreboard refresh"
+          body: |
+            Automated nightly refresh from `skills-eval-nightly`.
+
+            - `ci/skills-eval-baseline.json` updated from today's run.
+            - `ci/skills-scoreboard-history.jsonl` appended.
+            - `ci/skills-scoreboard.md` regenerated.
+
+            Merging this PR is what **moves the regression baseline**. Only
+            merge after spot-checking the scoreboard to confirm no skill
+            silently regressed overnight.
+
+            See [ci/skills-eval-policy.md](../blob/main/ci/skills-eval-policy.md#nightly-baseline-refresh).
+          labels: |
+            skills-eval
+            automated
+          delete-branch: true
+          add-paths: |
+            ci/skills-eval-baseline.json
+            ci/skills-scoreboard-history.jsonl
+            ci/skills-scoreboard.md
+
+      - name: Upload raw eval JSON
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        with:
+          name: skills-eval-latest
+          path: ci/skills-eval-latest.json
+          retention-days: 30

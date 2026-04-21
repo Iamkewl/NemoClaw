@@ -1,0 +1,45 @@
+{
+  "skill_name": "nemoclaw-maintainer-cut-release-tag",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "We're ready to ship the next NemoClaw release. It's a normal release cut — a handful of bug fixes and docs changes since the last tag. Walk me through what to do.",
+      "expected_output": "Determine current tag, ask the user which bump (defaulting to patch), show the commit and changelog, run bump-version (dry-run then real), pick PR vs direct mode, tag and push after merge.",
+      "files": [],
+      "assertions": [
+        "Response says to fetch tags and determine the current latest semver tag before bumping",
+        "Response proposes patch as the default bump for bug fixes and explicitly asks for user confirmation of the version",
+        "Response invokes `npm run bump:version` (or `scripts/bump-version.ts`) rather than hand-editing version strings",
+        "Response recommends running the version bump in dry-run mode first, then confirming before the real run",
+        "Response describes creating an annotated (`-a`) tag and moving the `latest` tag",
+        "Response does NOT tag without explicit user confirmation of the version"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "I already ran `npm run bump:version -- 0.0.22 --dry-run` and the output looks correct. What do I do next? I'd rather go through a PR than push straight to main.",
+      "expected_output": "Run the real bump-version in PR mode, wait for the release PR to merge, then tag main and force-push the latest tag.",
+      "files": [],
+      "assertions": [
+        "Response directs the user to re-run `npm run bump:version -- 0.0.22` without `--dry-run` (PR mode, no extra flags beyond any the user already chose)",
+        "Response explicitly does NOT recommend `--no-create-pr --push` because the user asked to go through a PR",
+        "Response describes that tagging happens AFTER the release PR merges, not before",
+        "Response walks through `git tag -a v0.0.22 origin/main` and moving the `latest` tag once the PR is merged",
+        "Response notes the `latest` tag must be pushed with `--force` because it moves"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Our nightly E2E run just started failing on main after a recent commit landed. I want to get back to a known-good state. What's the fastest path?",
+      "expected_output": "Recognize this is a rollback/recovery task, not a release-cut task; avoid running the version bump or creating a new tag; point toward revert, reverting a PR, or investigating the failing commit.",
+      "files": [],
+      "assertions": [
+        "Response identifies this as a rollback or regression-investigation task, not a release-cut task",
+        "Response does NOT invoke `npm run bump:version` or `scripts/bump-version.ts`",
+        "Response does NOT create a new semver tag as the fix",
+        "Response suggests an investigation or recovery path (for example: identify the offending commit, revert the PR, or roll back via git)",
+        "Response may mention that a later fix could be shipped as a patch release but does not conflate rollback with a release cut"
+      ]
+    }
+  ]
+}

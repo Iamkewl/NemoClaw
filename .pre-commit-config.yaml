@@ -251,6 +251,15 @@ repos:
         stages: [pre-push]
         priority: 10
 
+      - id: skills-eval-stubs
+        name: Reject scaffold stubs in .agents/skills/*/evals/evals.json
+        entry: npx tsx scripts/check-skills-eval-stubs.ts
+        language: system
+        files: ^\.agents/skills/.*/evals/evals\.json$
+        pass_filenames: true
+        stages: [pre-push]
+        priority: 10
+
   # ── Priority 20: project-level checks (coverage + ratchet) ─────────────────
   - repo: local
     hooks:

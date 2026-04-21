@@ -1,0 +1,39 @@
+{
+  "$instructions": "Stub scaffold — replace all placeholder values before shipping. See .agents/skills/EVALS.md for the authoring rubric. A pre-push hook rejects files whose placeholder markers remain.",
+  "skill_name": "nemoclaw-user-configure-inference",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "TODO: happy-path user scenario — implementation-vague, in the user's words",
+      "expected_output": "TODO: one-sentence description of correct agent behavior",
+      "files": [],
+      "assertions": [
+        "TODO: behavioral claim #1 (specific, quote-checkable)",
+        "TODO: behavioral claim #2",
+        "TODO: behavioral claim #3"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "TODO: edge or partial-state scenario — user mid-task, realistic wrinkle",
+      "expected_output": "TODO: one-sentence description of correct agent behavior",
+      "files": [],
+      "assertions": [
+        "TODO: behavioral claim #1",
+        "TODO: behavioral claim #2",
+        "TODO: behavioral claim #3"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "TODO: adjacent-wrong scenario — the agent should NOT use this skill",
+      "expected_output": "TODO: one-sentence description of correct redirect behavior",
+      "files": [],
+      "assertions": [
+        "TODO: behavioral claim #1 (what to redirect to)",
+        "TODO: behavioral claim #2 (what NOT to do)",
+        "TODO: behavioral claim #3"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "skill_name": "nemoclaw-user-configure-security",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I'm about to roll out NemoClaw to a small team of engineers who'll each run sandboxed agents on their own machines. Before I sign off on this, what are the main security trade-offs I should understand about what NemoClaw does and does not protect?",
+      "expected_output": "Summarize the layered sandbox controls, note deny-by-default posture, call out credential-storage trade-offs, and clearly distinguish NemoClaw's boundaries from OpenClaw's responsibilities.",
+      "files": [],
+      "assertions": [
+        "Response identifies the layered security model covering at least two of: network, filesystem, process, inference",
+        "Response states that NemoClaw's default posture is deny-by-default or otherwise restrictive",
+        "Response mentions that provider credentials are stored locally and notes a trade-off or risk about that storage",
+        "Response distinguishes NemoClaw's infrastructure-layer controls from OpenClaw's application-layer controls (for example prompt injection, tool access, audit)",
+        "Response does NOT claim NemoClaw is 'secure by default' without naming specific controls",
+        "Response does NOT imply NemoClaw handles prompt-injection or tool-access policy itself"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "My sandbox's agent needs to reach an internal company API at `internal-svc.example.corp`, but egress is blocked by default. Walk me through the security implications of allowing that specific host — I want to understand the risk, not just the flag to flip.",
+      "expected_output": "Explain that network egress is controlled at the Gateway via policy, frame the risk of widening the allowlist, recommend the narrowest possible change.",
+      "files": [],
+      "assertions": [
+        "Response identifies that egress is controlled at the Gateway or Network layer, not inside the sandbox process",
+        "Response recommends allowing only the specific host, not widening the policy broadly",
+        "Response articulates the risk of expanding egress (for example: exfiltration vector, lateral movement, reduced audit signal)",
+        "Response mentions that NemoClaw or OpenClaw provides an approval or policy mechanism for this change",
+        "Response does NOT simply tell the user to set a wildcard allow or disable the network policy"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "For my NemoClaw sandbox, I want to pin the agent to a specific LLM — say a locally-hosted Ollama model instead of the cloud default. What do I need to change?",
+      "expected_output": "Redirect to inference configuration rather than security posture discussion; optionally note that model choice has a minor security dimension but the primary task is configuration.",
+      "files": [],
+      "assertions": [
+        "Response identifies that this is an inference-configuration task, not a security-posture task",
+        "Response points to the inference configuration flow (for example re-running onboarding, editing inference config, or the configure-inference skill)",
+        "Response does NOT walk the user through the full security-layer framework as if that were the question",
+        "Response does NOT claim this is primarily a security decision",
+        "Response may briefly note security implications of the choice but does not treat them as the main answer"
+      ]
+    }
+  ]
+}
