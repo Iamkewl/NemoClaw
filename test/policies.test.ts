@@ -156,10 +156,11 @@ describe("policies", () => {
       }
     });
 
-    it("local-inference preset targets host.openshell.internal on Ollama and vLLM ports", () => {
+    it("local-inference preset targets host.openshell.internal on Ollama, proxy, and vLLM ports", () => {
       const content = policies.loadPreset("local-inference");
       expect(content).toContain("host.openshell.internal");
       expect(content).toContain("port: 11434");
+      expect(content).toContain("port: 11435");
       expect(content).toContain("port: 8000");
     });
 
