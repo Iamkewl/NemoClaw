@@ -207,8 +207,11 @@ Applying the label logs a line in the workflow run with the PR author and the la
    - Appends one row to `ci/skills-scoreboard-history.jsonl` (append-only; preserves per-assertion pass/fail bits for trend and regression diffs).
    - Rewrites `ci/skills-scoreboard.md` with the current delta table, 7-day sparkline, and last-regression date per skill.
    - Rewrites `ci/skills-eval-baseline.json` with today's numbers.
-4. Updates the pinned GitHub issue titled **"NemoClaw Skills Scoreboard"** with the new markdown body (creates the issue the first time it runs, labelled `skills-scoreboard`).
-5. Opens a PR on branch `chore/skills-eval-nightly-refresh` via `peter-evans/create-pull-request` containing only the three `ci/` files. The PR is the audit trail for baseline shifts — **merging it is what actually moves the baseline**; until merged, PR-side `skills-eval` still compares against the previously-merged baseline.
+4. Runs `scripts/render-eval-reports.ts` twice against `ci/skills-eval-latest.json`:
+   - Deterministic pass first, writing `ci/eval-reports/weakest-links.md` and `ci/eval-reports/value-vs-cost.md` with `<!-- slot -->` placeholders.
+   - Narration pass second (`--narrate`, Haiku 4.5, ~$0.05/report cap) overwriting the same files with prose-filled versions. Marked `continue-on-error: true` — if narration fails (cost cap, parse error), the deterministic versions remain.
+5. Updates the pinned GitHub issue titled **"NemoClaw Skills Scoreboard"** with the new markdown body (creates the issue the first time it runs, labelled `skills-scoreboard`).
+6. Opens a PR on branch `chore/skills-eval-nightly-refresh` via `peter-evans/create-pull-request` containing the baseline, scoreboard, history, and the two eval-reports files. The PR is the audit trail for baseline shifts — **merging it is what actually moves the baseline**; until merged, PR-side `skills-eval` still compares against the previously-merged baseline.
 
 The cron job is no-op on forks (`if: github.repository == 'NVIDIA/NemoClaw'`) and exits cleanly if `ANTHROPIC_API_KEY` is unset.
 
@@ -230,4 +233,5 @@ Maintainers can run the nightly flow on demand via **Actions → skills-eval-nig
 |------|--------|
 | 2026-04-20 | Initial draft (Sprint 0 Tasks 0.3 + 0.4 combined) |
 | 2026-04-20 | Sprint 4 — document nightly refresh, scoreboard issue, history file |
+| 2026-04-21 | Nightly now also renders `ci/eval-reports/weakest-links.md` + `value-vs-cost.md` (Haiku-narrated, deterministic fallback) |
 | 2026-04-20 | Scope narrowed to `nemoclaw-user-*` skills; maintainer/contributor skills excluded |

@@ -6,9 +6,11 @@
 # Runs evaluate-skills.ts against every skill with an authored evals.json,
 # refreshes ci/skills-eval-baseline.json, appends one row to
 # ci/skills-scoreboard-history.jsonl, rebuilds ci/skills-scoreboard.md, and
-# opens a bot PR for maintainer review. Also updates the pinned "NemoClaw
-# Skills Scoreboard" issue so the public answer to "how do we measure good
-# skills?" stays live.
+# regenerates ci/eval-reports/{weakest-links,value-vs-cost}.md (Haiku-narrated
+# when narration succeeds, deterministic with slot markers otherwise). Opens a
+# bot PR for maintainer review and updates the pinned "NemoClaw Skills
+# Scoreboard" issue so the public answer to "how do we measure good skills?"
+# stays live.
 #
 # See ci/skills-eval-policy.md for the full policy, cost caps, and rollback.
 
@@ -75,6 +77,22 @@ jobs:
             --baseline ci/skills-eval-baseline.json \
             --commit "$GITHUB_SHA"
 
+      - name: Render weakest-links + value-vs-cost (deterministic)
+        run: |
+          npx tsx scripts/render-eval-reports.ts \
+            --input ci/skills-eval-latest.json \
+            --skills-dir .agents/skills \
+            --output-dir ci/eval-reports
+
+      - name: Narrate weakest-links + value-vs-cost (Haiku)
+        continue-on-error: true
+        run: |
+          npx tsx scripts/render-eval-reports.ts \
+            --input ci/skills-eval-latest.json \
+            --skills-dir .agents/skills \
+            --output-dir ci/eval-reports \
+            --narrate
+
       - name: Update scoreboard issue
         run: |
           title="NemoClaw Skills Scoreboard"
@@ -100,6 +118,8 @@ jobs:
             - `ci/skills-eval-baseline.json` updated from today's run.
             - `ci/skills-scoreboard-history.jsonl` appended.
             - `ci/skills-scoreboard.md` regenerated.
+            - `ci/eval-reports/weakest-links.md` regenerated (Haiku-narrated when possible).
+            - `ci/eval-reports/value-vs-cost.md` regenerated (Haiku-narrated when possible).
 
             Merging this PR is what **moves the regression baseline**. Only
             merge after spot-checking the scoreboard to confirm no skill
@@ -114,6 +134,8 @@ jobs:
             ci/skills-eval-baseline.json
             ci/skills-scoreboard-history.jsonl
             ci/skills-scoreboard.md
+            ci/eval-reports/weakest-links.md
+            ci/eval-reports/value-vs-cost.md
 
       - name: Upload raw eval JSON
         if: always()
@@ -121,4 +143,12 @@ jobs:
         with:
           name: skills-eval-latest
           path: ci/skills-eval-latest.json
+          retention-days: 30
+
+      - name: Upload eval reports
+        if: always() && hashFiles('ci/eval-reports/*.md') != ''
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        with:
+          name: skills-eval-reports
+          path: ci/eval-reports/*.md
           retention-days: 30

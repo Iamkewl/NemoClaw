@@ -3,6 +3,8 @@
 
 # Skill Evaluations
 
+> **Want a 60-second tour first?** Read [`EVALS-README.md`](EVALS-README.md) — it's the imperative quick-start with the commands, the CI flow, and how to read the reports. This file is the deeper authoring rubric.
+
 Skills are code. They ship to production as part of every release, they change agent behavior for every user, and — until now — we had no way to answer the question "does this skill actually help?" This system answers that question empirically, so a bad user-facing skill can't land and a regressed one can't hide.
 
 ## Scope
@@ -35,6 +37,7 @@ Skills are a docs problem in disguise — they're instructions that *happen* to 
 | CI policy | `ci/skills-eval-policy.md` | Delta-drop tolerance, absolute floor, baseline cadence, cost caps, secret handling. |
 | Nightly baseline | `.github/workflows/skills-eval-nightly.yaml` + `ci/skills-eval-baseline.json` | Re-grades `main` each night and commits the new baseline. |
 | Scoreboard | `scripts/update-skills-scoreboard.ts` + `ci/skills-scoreboard-history.jsonl` | Public per-skill delta table with sparkline history. |
+| Eval reports | `scripts/render-eval-reports.ts` + `ci/eval-reports/{weakest-links,value-vs-cost}.md` | Renders two markdown reports from the eval JSON: which skills are hurting/marginal (weakest-links) and which earn their context budget (value-vs-cost). Optional `--narrate` fills prose slots via Haiku. |
 | Pre-push hook | `scripts/check-skills-eval-stubs.ts` | Blocks scaffold stubs (`$instructions`, `TODO:`) from landing. |
 | Scaffolder | `scripts/docs-to-skills.py` | Writes a stub `evals.json` when a new skill is generated. |
 
@@ -49,9 +52,22 @@ npm run eval:skills -- --changed-only
 
 # Regenerate the scoreboard from ci/skills-scoreboard-history.jsonl
 npx tsx scripts/update-skills-scoreboard.ts
+
+# Render weakest-links.md + value-vs-cost.md from the latest eval JSON
+npx tsx scripts/render-eval-reports.ts \
+  --input ci/skills-eval-latest.json \
+  --skills-dir .agents/skills \
+  --output-dir ci/eval-reports
+
+# Same, but fill the diagnosis/commentary slots with Haiku-narrated prose
+npx tsx scripts/render-eval-reports.ts \
+  --input ci/skills-eval-latest.json \
+  --skills-dir .agents/skills \
+  --output-dir ci/eval-reports \
+  --narrate
 ```
 
-Requires `ANTHROPIC_API_KEY` in the environment. CI runs use the repo-level secret.
+Requires `ANTHROPIC_API_KEY` in the environment for `eval:skills` and for `--narrate`. The deterministic `render-eval-reports.ts` path (no `--narrate`) makes no API calls and runs anywhere. CI runs use the repo-level secret.
 
 ## Where to go from here
 
