@@ -3398,8 +3398,12 @@ async function createSandbox(
 
     note(`  Deleting and recreating sandbox '${sandboxName}'...`);
 
-    // Destroy old sandbox
+    // Destroy old sandbox and clean up its host-side Docker image.
+    const oldEntry = registry.getSandbox(sandboxName);
     runOpenshell(["sandbox", "delete", sandboxName], { ignoreError: true });
+    if (oldEntry?.imageTag) {
+      run(["docker", "rmi", oldEntry.imageTag], { ignoreError: true });
+    }
     registry.removeSandbox(sandboxName);
   }
 
@@ -3589,11 +3593,12 @@ async function createSandbox(
       console.warn(`    docker pull ${SANDBOX_BASE_IMAGE}:${SANDBOX_BASE_TAG}`);
     }
   }
+  const buildId = String(Date.now());
   patchStagedDockerfile(
     stagedDockerfile,
     model,
     chatUiUrl,
-    String(Date.now()),
+    buildId,
     provider,
     preferredInferenceApi,
     webSearchConfig,
@@ -3759,6 +3764,7 @@ async function createSandbox(
     gpuEnabled: !!gpu,
     agent: agent ? agent.name : null,
     agentVersion: fromDockerfile ? null : effectiveAgent.expectedVersion || null,
+    imageTag: `openshell/sandbox-from:${buildId}`,
     dangerouslySkipPermissions: dangerouslySkipPermissions || undefined,
     providerCredentialHashes:
       Object.keys(providerCredentialHashes).length > 0 ? providerCredentialHashes : undefined,
