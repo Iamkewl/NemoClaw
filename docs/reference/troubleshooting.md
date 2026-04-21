@@ -449,6 +449,23 @@ Changing or exporting it later does not rewrite the baked `openclaw.json` inside
 If you need a different device-auth setting, rerun onboarding so NemoClaw rebuilds the sandbox image with the desired configuration.
 For the security trade-offs, refer to [Security Best Practices](../security/best-practices.md).
 
+### `openclaw channels add` or `remove` fails with `EACCES` inside the sandbox
+
+This is expected.
+The sandbox keeps `/sandbox/.openclaw/openclaw.json` read-only (Landlock + filesystem hardening), so `openclaw channels` commands that mutate the baked config cannot write there.
+NemoClaw surfaces a clear error from inside the sandbox instead of the raw `EACCES` trace.
+
+Run the equivalent host-side command instead:
+
+```console
+$ nemoclaw <sandbox> channels list
+$ nemoclaw <sandbox> channels add <telegram|discord|slack>
+$ nemoclaw <sandbox> channels remove <telegram|discord|slack>
+```
+
+`channels add` stores credentials under `~/.nemoclaw/credentials.json` and `channels remove` clears them; both offer to rebuild the sandbox so the image reflects the new channel set.
+In non-interactive mode (`NEMOCLAW_NON_INTERACTIVE=1`), the commands stage the change and leave the rebuild to a follow-up `nemoclaw <sandbox> rebuild`.
+
 ### `openclaw doctor --fix` cannot repair Discord channel config inside the sandbox
 
 This is expected in NemoClaw-managed sandboxes.
