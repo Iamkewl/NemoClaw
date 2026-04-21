@@ -426,9 +426,7 @@ function bootstrapLaunchable(elapsed) {
   // Install nemoclaw CLI.
   // Use `sudo npm link` because Node.js is installed system-wide via
   // nodesource (global prefix is /usr), so creating the global symlink
-  // requires elevated permissions. The launchable setup script already
-  // runs this once during its readiness window, so this invocation is a
-  // fast idempotent no-op against the existing symlink on Brev CPU runs.
+  // requires elevated permissions.
   console.log(`[${elapsed()}] Installing nemoclaw CLI (npm link)...`);
   ssh(
     `source ~/.nvm/nvm.sh 2>/dev/null || true && cd ${resolvedRemoteDir} && sudo npm link && sudo chown -R $(whoami):$(whoami) ${resolvedRemoteDir}`,
