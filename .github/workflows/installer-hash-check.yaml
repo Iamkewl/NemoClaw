@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Verifies pinned installer SHA-256 hashes still match upstream scripts.
-# Checked: NemoClaw k8s installer, Ollama installer.
+# Checked: Ollama installer.
 # Runs on every PR and push to main, plus a weekly scheduled check.
 
 name: installer-hash-check

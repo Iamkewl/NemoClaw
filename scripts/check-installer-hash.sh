@@ -6,8 +6,7 @@
 # the current upstream scripts.
 #
 # Checked installers:
-#   1. NemoClaw installer  — k8s/nemoclaw-k8s.yaml  (NEMOCLAW_INSTALLER_SHA256)
-#   2. Ollama installer    — scripts/install.sh      (OLLAMA_INSTALL_SHA256)
+#   1. Ollama installer    — scripts/install.sh      (OLLAMA_INSTALL_SHA256)
 #
 # Usage:
 #   scripts/check-installer-hash.sh            # exit 0 if current, 1 if stale
@@ -73,11 +72,6 @@ register() {
   VARS+=("$3")
   URLS+=("$4")
 }
-
-register "NemoClaw k8s installer" \
-  "${REPO_ROOT}/k8s/nemoclaw-k8s.yaml" \
-  "NEMOCLAW_INSTALLER_SHA256" \
-  "https://www.nvidia.com/nemoclaw.sh"
 
 register "Ollama installer" \
   "${REPO_ROOT}/scripts/install.sh" \
