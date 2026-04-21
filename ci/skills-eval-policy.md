@@ -5,6 +5,8 @@
 
 Defines how NemoClaw's skill evaluations gate pull requests: delta-regression thresholds, baseline management, model choices, cost caps, secret handling, and the fork-PR fallback. Paired with `.agents/skills/EVALS.md` (authoring rubric) and `.context/judge-prompt-v0.md` (judge prompt + calibration).
 
+**Scope: `nemoclaw-user-*` skills only.** The gate applies exclusively to user-facing skills. Maintainer skills (`nemoclaw-maintainer-*`) and contributor skills (`nemoclaw-contributor-*`) are out of scope for the shared eval system — those are internal workflows whose quality is better judged by the maintainers using them, not by a general-purpose judge measuring end-user experience. PRs that touch only non-user skills skip this gate entirely.
+
 ## At a glance
 
 | Policy area | Value |
@@ -141,8 +143,8 @@ Per scenario: 2 agent calls + 2 judge calls ≈ **$0.031**.
 | Single skill, 3 scenarios | 3 | $0.09 |
 | Changed-only typical PR (2 skills) | 6 | $0.19 |
 | Changed-only large PR (5 skills) | 15 | $0.47 |
-| Full suite (21 skills × 3) | 63 | **~$2.00** |
-| Nightly baseline (full suite) | 63 | **~$2.00** × 30 nights = ~$60/mo |
+| Full suite (11 user skills × 3) | 33 | **~$1.05** |
+| Nightly baseline (full suite) | 33 | **~$1.05** × 30 nights = ~$32/mo |
 
 ### Per-PR cap
 
@@ -150,9 +152,9 @@ Hard ceiling: `$2.50` per PR invocation, enforced in the evaluator via aggregate
 
 ### Monthly budget estimate
 
-- Nightly baseline: ~$60/mo
-- Assume 40 PRs/mo touching skills, averaging $0.20 each: ~$8/mo
-- **Total: <$100/mo** at current cadence. Review when we exceed $250/mo.
+- Nightly baseline: ~$32/mo
+- Assume 40 PRs/mo touching user skills, averaging $0.20 each: ~$8/mo
+- **Total: <$50/mo** at current cadence. Review when we exceed $150/mo.
 
 ## Secret handling
 
@@ -212,7 +214,7 @@ The cron job is no-op on forks (`if: github.repository == 'NVIDIA/NemoClaw'`) an
 
 ### History file retention
 
-`ci/skills-scoreboard-history.jsonl` is append-only and checked into git. It is not pruned automatically; at ~200 bytes per skill per day, a year of daily runs for 21 skills is ~1.5 MB — acceptable in-repo. If it grows large enough to matter, write a second workflow that rotates rows older than 90 days into `ci/skills-scoreboard-history-archive.jsonl`.
+`ci/skills-scoreboard-history.jsonl` is append-only and checked into git. It is not pruned automatically; at ~200 bytes per skill per day, a year of daily runs for 11 user skills is ~800 KB — acceptable in-repo. If it grows large enough to matter, write a second workflow that rotates rows older than 90 days into `ci/skills-scoreboard-history-archive.jsonl`.
 
 ### Manual trigger
 
@@ -228,3 +230,4 @@ Maintainers can run the nightly flow on demand via **Actions → skills-eval-nig
 |------|--------|
 | 2026-04-20 | Initial draft (Sprint 0 Tasks 0.3 + 0.4 combined) |
 | 2026-04-20 | Sprint 4 — document nightly refresh, scoreboard issue, history file |
+| 2026-04-20 | Scope narrowed to `nemoclaw-user-*` skills; maintainer/contributor skills excluded |

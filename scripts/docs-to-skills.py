@@ -1223,8 +1223,17 @@ def read_skill_name_from_frontmatter(skill_md_path: Path) -> str | None:
     return skill_md_path.parent.name
 
 
-def scaffold_existing_skills(output_dir: Path, *, dry_run: bool = False) -> list[str]:
+def scaffold_existing_skills(
+    output_dir: Path,
+    *,
+    prefix: str = "",
+    dry_run: bool = False,
+) -> list[str]:
     """Scaffold evals.json for any skill dir under output_dir missing one.
+
+    When prefix is non-empty, only skill directories whose name starts with
+    that prefix are scaffolded. Maintainer and contributor skills are out
+    of scope for the shared eval system (see .agents/skills/EVALS.md).
 
     Returns the list of skill names scaffolded.
     """
@@ -1233,6 +1242,8 @@ def scaffold_existing_skills(output_dir: Path, *, dry_run: bool = False) -> list
         return scaffolded
     for skill_md in sorted(output_dir.glob("*/SKILL.md")):
         skill_dir = skill_md.parent
+        if prefix and not skill_dir.name.startswith(prefix):
+            continue
         name = read_skill_name_from_frontmatter(skill_md) or skill_dir.name
         if write_eval_scaffold(skill_dir, name, dry_run=dry_run):
             scaffolded.append(name)
@@ -1505,11 +1516,14 @@ def main():
                 print(f"\n✔ Created symlink: {claude_skills} → {rel}")
                 break
 
-    # Scaffold evals.json stubs for any skill dir (including hand-authored
-    # maintainer/contributor skills) that does not yet have one.
+    # Scaffold evals.json stubs only for skills that match --prefix. The shared
+    # eval system scopes to user-facing skills; maintainer and contributor
+    # skills set up their own evals independently (see .agents/skills/EVALS.md).
     total_scaffolded: list[tuple[Path, list[str]]] = []
     for out_dir in args.output_dirs:
-        scaffolded = scaffold_existing_skills(out_dir, dry_run=args.dry_run)
+        scaffolded = scaffold_existing_skills(
+            out_dir, prefix=args.prefix, dry_run=args.dry_run
+        )
         if scaffolded:
             total_scaffolded.append((out_dir, scaffolded))
 

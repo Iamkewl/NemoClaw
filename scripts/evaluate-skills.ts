@@ -34,6 +34,13 @@ const AGENT_MAX_TOKENS = 2048;
 const JUDGE_MAX_TOKENS = 2048;
 const NEUTRAL_EXIT_CODE = 78;
 
+/**
+ * Skill-name prefix that the eval system gates on. Only skills whose
+ * directory name begins with this prefix are scored — maintainer and
+ * contributor skills are explicitly out of scope (see EVALS.md).
+ */
+const USER_SKILL_PREFIX = "nemoclaw-user-";
+
 /** Cached token pricing (USD per 1M tokens). Revisit quarterly; see policy. */
 const PRICING: Record<string, { input: number; output: number }> = {
   "claude-sonnet-4-6": { input: 3.0, output: 15.0 },
@@ -540,7 +547,9 @@ function getChangedSkills(rootDir: string, baseRef: string): string[] {
     const changed = new Set<string>();
     for (const line of out.split("\n")) {
       const match = line.match(/^\.agents\/skills\/([^/]+)\//);
-      if (match?.[1]) changed.add(match[1]);
+      if (match?.[1] && match[1].startsWith(USER_SKILL_PREFIX)) {
+        changed.add(match[1]);
+      }
     }
     return [...changed].sort();
   } catch (error) {
@@ -555,6 +564,7 @@ function listAllSkillsWithEvals(rootDir: string): string[] {
   const result: string[] = [];
   for (const dirent of dirents) {
     if (!dirent.isDirectory()) continue;
+    if (!dirent.name.startsWith(USER_SKILL_PREFIX)) continue;
     const evalsPath = path.join(skillsDir, dirent.name, "evals", "evals.json");
     if (existsSync(evalsPath)) result.push(dirent.name);
   }
@@ -798,11 +808,12 @@ function printHelp(): void {
   console.log(`Usage: npm run eval:skills -- [options]
 
 Runs scenario-based evals for NemoClaw agent skills and grades responses with
-an LLM judge. See ci/skills-eval-policy.md for regression-gate semantics.
+an LLM judge. Only ${USER_SKILL_PREFIX}* skills are in scope — maintainer and
+contributor skills are excluded. See ci/skills-eval-policy.md for regression-gate semantics.
 
 Options:
-  --skills <a,b,c>             Comma-separated skill names (default: all with evals.json)
-  --changed-only               Only skills with changed files vs --base-ref
+  --skills <a,b,c>             Comma-separated skill names (default: all ${USER_SKILL_PREFIX}* with evals.json)
+  --changed-only               Only ${USER_SKILL_PREFIX}* skills with changed files vs --base-ref
   --base-ref <ref>             Git ref for --changed-only (default: origin/main)
   --output <markdown|json|junit>  Output format (default: markdown)
   --output-path <file>         Write output to file instead of stdout

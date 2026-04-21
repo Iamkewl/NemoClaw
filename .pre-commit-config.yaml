@@ -252,10 +252,10 @@ repos:
         priority: 10
 
       - id: skills-eval-stubs
-        name: Reject scaffold stubs in .agents/skills/*/evals/evals.json
+        name: Reject scaffold stubs in .agents/skills/nemoclaw-user-*/evals/evals.json
         entry: npx tsx scripts/check-skills-eval-stubs.ts
         language: system
-        files: ^\.agents/skills/.*/evals/evals\.json$
+        files: ^\.agents/skills/nemoclaw-user-[^/]+/evals/evals\.json$
         pass_filenames: true
         stages: [pre-push]
         priority: 10

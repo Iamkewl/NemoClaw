@@ -1,8 +1,10 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-// Rejects .agents/skills/*/evals/evals.json files that are still scaffold stubs.
-// A stub is identified by either:
+// Rejects .agents/skills/nemoclaw-user-*/evals/evals.json files that are still
+// scaffold stubs. Only user-facing skills are in scope for the shared eval
+// system; maintainer/contributor skills are excluded (see EVALS.md). A stub
+// is identified by either:
 //   1. A top-level "$instructions" key (present only in generated scaffolds), or
 //   2. Any string value beginning with "TODO:" (placeholder markers).
 // Run as a pre-push hook so scaffolds can't land as real evals.

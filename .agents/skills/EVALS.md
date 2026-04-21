@@ -3,11 +3,15 @@
 
 # Skill Evaluations
 
-Skills are code. They ship to production as part of every release, they change agent behavior for every user, and — until now — we had no way to answer the question "does this skill actually help?" This system answers that question empirically, so a bad skill can't land and a regressed skill can't hide.
+Skills are code. They ship to production as part of every release, they change agent behavior for every user, and — until now — we had no way to answer the question "does this skill actually help?" This system answers that question empirically, so a bad user-facing skill can't land and a regressed one can't hide.
+
+## Scope
+
+The shared eval system covers **`nemoclaw-user-*` skills only** — the ones end users load when they ask NemoClaw for help. Maintainer and contributor skills (`nemoclaw-maintainer-*`, `nemoclaw-contributor-*`) are deliberately out of scope: those are internal workflows whose quality is better judged by the maintainers using them day-to-day, not by a general-purpose judge measuring end-user experience. Devs are free to set up their own evals for maintainer/contributor skills; they just don't live here.
 
 ## What the system does
 
-For each skill, we write a small set of scenarios — user-voice prompts a real person might send in Slack or a GitHub issue. For each scenario, we run the agent **twice**: once with the skill's `SKILL.md` loaded into context, once without. A judge model grades both responses against a list of assertions ("response mentions the Node.js version prerequisite", "response does NOT assume Windows", etc.) and scores each in `[0, 1]`. The **delta** — with-skill score minus without-skill score — is the skill's value:
+For each user-facing skill, we write a small set of scenarios — user-voice prompts a real person might send in Slack or a GitHub issue. For each scenario, we run the agent **twice**: once with the skill's `SKILL.md` loaded into context, once without. A judge model grades both responses against a list of assertions ("response mentions the Node.js version prerequisite", "response does NOT assume Windows", etc.) and scores each in `[0, 1]`. The **delta** — with-skill score minus without-skill score — is the skill's value:
 
 - `delta > 0` — the skill is helping.
 - `delta ≈ 0` — the skill isn't load-bearing; the agent does just as well without it.
@@ -23,8 +27,8 @@ Skills are a docs problem in disguise — they're instructions that *happen* to 
 
 | Piece | Path | What it does |
 |-------|------|--------------|
-| Eval files | `.agents/skills/<skill>/evals/evals.json` | Scenarios + assertions per skill. One required per skill. |
-| Reference walkthroughs | `.agents/skills/{nemoclaw-user-get-started,nemoclaw-user-configure-security,nemoclaw-maintainer-cut-release-tag}/evals/README.md` | Annotated examples — read one of these before authoring your own. |
+| Eval files | `.agents/skills/nemoclaw-user-*/evals/evals.json` | Scenarios + assertions per user-facing skill. One required per skill. |
+| Reference walkthroughs | `.agents/skills/{nemoclaw-user-get-started,nemoclaw-user-configure-security}/evals/README.md` | Annotated examples — read one before authoring your own. |
 | Authoring rubric | `.agents/skills/EVALS.md` (this file, below) | How to write scenarios and assertions that grade well. |
 | Runner | `scripts/evaluate-skills.ts` | Executes the with/without agent runs, calls the judge, emits per-skill JSON. |
 | CI gate | `.github/workflows/skills-eval.yaml` | Runs on PRs; applies the two-rule delta-regression gate. |
@@ -51,7 +55,7 @@ Requires `ANTHROPIC_API_KEY` in the environment. CI runs use the repo-level secr
 
 ## Where to go from here
 
-- **Authoring a new eval?** Read one of the three reference walkthroughs above, then work through the rubric below.
+- **Authoring a new eval?** Read one of the two reference walkthroughs above, then work through the rubric below.
 - **Curious about the CI gate?** Read `ci/skills-eval-policy.md` — it documents the two-rule gate, the new-skill grace period, the cost model, and the bypass label.
 - **Want the design context?** `.context/skills-eval-mvp-plan.md` has the v2 MVP plan.
 
@@ -132,9 +136,8 @@ Before committing a scenario, apply this test: **if you remove the skill name fr
 |-------------------------------|--------------------|
 | "Run `nemoclaw onboard` and explain each flag" | "I just cloned NemoClaw and I'm not sure what to do next. Help me get set up." |
 | "Use the configure-security skill to evaluate my sandbox egress controls" | "I'm preparing to deploy a NemoClaw sandbox in a team environment. What security trade-offs should I think about?" |
-| "Invoke the cut-release-tag workflow for v0.0.22" | "We're ready to ship the next release. What's the process?" |
 | "Read .agents/skills/nemoclaw-user-deploy-remote/SKILL.md and summarize" | "I want to run NemoClaw on a Brev GPU instance. Is that still supported?" |
-| "Check the triage instructions for a bug labeled priority-high" | "There's a new bug report and I'm not sure how to label it." |
+| "Invoke the manage-policy TUI and walk me through approving a blocked request" | "An agent action was blocked and I need to decide whether to allow it. What should I look at?" |
 
 ## Writing good assertions
 
