@@ -1,11 +1,65 @@
 <!-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-# Authoring Skill Evaluations
+# Skill Evaluations
 
-This guide tells you how to write `evals/evals.json` for a NemoClaw skill. Every skill under `.agents/skills/` needs one. Scenarios measure whether the skill makes an agent **meaningfully better** at real user tasks — not whether the agent can recite the skill's keywords.
+Skills are code. They ship to production as part of every release, they change agent behavior for every user, and — until now — we had no way to answer the question "does this skill actually help?" This system answers that question empirically, so a bad skill can't land and a regressed skill can't hide.
 
-If you're new to the MVP design, start with `.context/skills-eval-mvp-plan.md` for context; this doc is the *how*.
+## What the system does
+
+For each skill, we write a small set of scenarios — user-voice prompts a real person might send in Slack or a GitHub issue. For each scenario, we run the agent **twice**: once with the skill's `SKILL.md` loaded into context, once without. A judge model grades both responses against a list of assertions ("response mentions the Node.js version prerequisite", "response does NOT assume Windows", etc.) and scores each in `[0, 1]`. The **delta** — with-skill score minus without-skill score — is the skill's value:
+
+- `delta > 0` — the skill is helping.
+- `delta ≈ 0` — the skill isn't load-bearing; the agent does just as well without it.
+- `delta < 0` — the skill is actively making the agent worse.
+
+CI runs the evals for any skill touched by a PR and fails the build if the skill's delta drops more than 10pp from its nightly baseline or falls below zero. A nightly job on `main` re-establishes the baseline and updates the public scoreboard.
+
+## Why bother
+
+Skills are a docs problem in disguise — they're instructions that *happen* to be executed by a model instead of read by a human. Docs rot silently; so do skills. Without a measurement loop, a skill that used to raise delta by 40pp can quietly drift to 10pp over a year of "small cleanups" and nobody notices. The evals catch that drift at PR time, and the nightly history makes trends visible on the scoreboard. It's doc tests for prompt engineering.
+
+## The pieces
+
+| Piece | Path | What it does |
+|-------|------|--------------|
+| Eval files | `.agents/skills/<skill>/evals/evals.json` | Scenarios + assertions per skill. One required per skill. |
+| Reference walkthroughs | `.agents/skills/{nemoclaw-user-get-started,nemoclaw-user-configure-security,nemoclaw-maintainer-cut-release-tag}/evals/README.md` | Annotated examples — read one of these before authoring your own. |
+| Authoring rubric | `.agents/skills/EVALS.md` (this file, below) | How to write scenarios and assertions that grade well. |
+| Runner | `scripts/evaluate-skills.ts` | Executes the with/without agent runs, calls the judge, emits per-skill JSON. |
+| CI gate | `.github/workflows/skills-eval.yaml` | Runs on PRs; applies the two-rule delta-regression gate. |
+| CI policy | `ci/skills-eval-policy.md` | Delta-drop tolerance, absolute floor, baseline cadence, cost caps, secret handling. |
+| Nightly baseline | `.github/workflows/skills-eval-nightly.yaml` + `ci/skills-eval-baseline.json` | Re-grades `main` each night and commits the new baseline. |
+| Scoreboard | `scripts/update-skills-scoreboard.ts` + `ci/skills-scoreboard-history.jsonl` | Public per-skill delta table with sparkline history. |
+| Pre-push hook | `scripts/check-skills-eval-stubs.ts` | Blocks scaffold stubs (`$instructions`, `TODO:`) from landing. |
+| Scaffolder | `scripts/docs-to-skills.py` | Writes a stub `evals.json` when a new skill is generated. |
+
+## Running an eval locally
+
+```bash
+# Score a specific skill (with-skill vs without-skill, prints per-scenario deltas)
+npm run eval:skills -- --skills nemoclaw-user-get-started
+
+# Score all touched skills against the committed baseline
+npm run eval:skills -- --changed-only
+
+# Regenerate the scoreboard from ci/skills-scoreboard-history.jsonl
+npx tsx scripts/update-skills-scoreboard.ts
+```
+
+Requires `ANTHROPIC_API_KEY` in the environment. CI runs use the repo-level secret.
+
+## Where to go from here
+
+- **Authoring a new eval?** Read one of the three reference walkthroughs above, then work through the rubric below.
+- **Curious about the CI gate?** Read `ci/skills-eval-policy.md` — it documents the two-rule gate, the new-skill grace period, the cost model, and the bypass label.
+- **Want the design context?** `.context/skills-eval-mvp-plan.md` has the v2 MVP plan.
+
+---
+
+## Authoring rubric
+
+The rest of this file is the rubric for writing `evals/evals.json`. Scenarios measure whether the skill makes an agent **meaningfully better** at real user tasks — not whether the agent can recite the skill's keywords.
 
 ## TL;DR
 
