@@ -18,10 +18,11 @@ const path = require("path");
 const { execFileSync } = require("child_process");
 const { validateName } = require("./runner");
 const credentialFilter: typeof import("./credential-filter") = require("./credential-filter");
-const { stripCredentials } = credentialFilter;
+const { stripCredentials, isConfigObject } = credentialFilter;
 const { appendAuditEntry } = require("./shields-audit");
 
 type ConfigObject = import("./credential-filter").ConfigObject;
+type ConfigValue = import("./credential-filter").ConfigValue;
 const {
   runOpenshellCommand,
   captureOpenshellCommand,
@@ -91,10 +92,6 @@ function resolveAgentConfig(sandboxName: string): AgentConfigTarget {
 
 function getOpenshellBinary(): string {
   return process.env.NEMOCLAW_OPENSHELL_BIN || "openshell";
-}
-
-function isConfigObject(value: unknown): value is ConfigObject {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function extractDotpath(obj: unknown, dotpath: string): unknown {
@@ -227,7 +224,7 @@ function configGet(sandboxName: string, opts: ConfigGetOpts = {}): void {
   validateName(sandboxName, "sandbox name");
 
   const target = resolveAgentConfig(sandboxName);
-  let config: unknown = stripCredentials(readSandboxConfig(sandboxName, target));
+  let config: ConfigValue = stripCredentials(readSandboxConfig(sandboxName, target));
 
   // Remove gateway section for openclaw (contains auth tokens)
   if (isConfigObject(config)) {
@@ -236,7 +233,7 @@ function configGet(sandboxName: string, opts: ConfigGetOpts = {}): void {
 
   // Extract dotpath if specified
   if (opts.key) {
-    const value = extractDotpath(config, opts.key);
+    const value = extractDotpath(config, opts.key) as ConfigValue | undefined;
     if (value === undefined) {
       console.error(`  Key "${opts.key}" not found in ${target.agentName} config.`);
       process.exit(1);

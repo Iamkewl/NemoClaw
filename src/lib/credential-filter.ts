@@ -12,6 +12,9 @@
 
 import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 
+/**
+ * JSON-like configuration value supported by credential stripping.
+ */
 export type ConfigValue =
   | null
   | undefined
@@ -21,6 +24,9 @@ export type ConfigValue =
   | ConfigValue[]
   | ConfigObject;
 
+/**
+ * JSON-like configuration object supported by credential stripping.
+ */
 export type ConfigObject = { [key: string]: ConfigValue };
 
 const CREDENTIAL_PLACEHOLDER = "[STRIPPED_BY_MIGRATION]";
@@ -51,11 +57,17 @@ const CREDENTIAL_FIELDS = new Set([
 const CREDENTIAL_FIELD_PATTERN =
   /(?:access|refresh|client|bearer|auth|api|private|public|signing|session)(?:Token|Key|Secret|Password)$/;
 
+/**
+ * Check whether a field name should be treated as credential-bearing.
+ */
 export function isCredentialField(key: string): boolean {
   return CREDENTIAL_FIELDS.has(key) || CREDENTIAL_FIELD_PATTERN.test(key);
 }
 
-function isConfigObject(value: unknown): value is ConfigObject {
+/**
+ * Narrow an unknown value to a JSON-like configuration object.
+ */
+export function isConfigObject(value: unknown): value is ConfigObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
