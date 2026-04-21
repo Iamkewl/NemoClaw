@@ -123,6 +123,7 @@ async function loadSandboxState() {
   return {
     validateTarEntries: mod.validateTarEntries,
     safeTarExtract: mod.safeTarExtract,
+    rejectHardLinks: mod.rejectHardLinks,
   };
 }
 
@@ -322,6 +323,70 @@ describe("Fix: safeTarExtract blocks malicious archives and extracts safe ones",
   });
 });
 
+describe("Fix: rejectHardLinks blocks hard-link entries at validation time", () => {
+  it("rejects a hard-link entry targeting outside the archive", async () => {
+    const { rejectHardLinks } = await loadSandboxState();
+
+    // Build a tar archive with a hard-link entry (type '1')
+    const tar = buildTar([
+      { path: "inside/config.json", type: "1", linkTarget: "../outside.json" },
+    ]);
+
+    const violations = rejectHardLinks(tar);
+
+    expect(violations.length).toBeGreaterThan(0);
+    expect(violations[0]).toContain("hard link");
+  });
+
+  it("rejects a hard-link entry targeting within the archive", async () => {
+    const { rejectHardLinks } = await loadSandboxState();
+
+    // Even internal hard links are rejected — no legitimate use in state backups
+    const tar = buildTar([
+      { path: "data/original.txt", content: "payload" },
+      { path: "data/hardlink.txt", type: "1", linkTarget: "data/original.txt" },
+    ]);
+
+    const violations = rejectHardLinks(tar);
+
+    expect(violations.length).toBeGreaterThan(0);
+    expect(violations[0]).toContain("hard link");
+  });
+
+  it("accepts archive with no hard links", async () => {
+    const { rejectHardLinks } = await loadSandboxState();
+
+    const tar = buildTar([
+      { path: "workspace/config.json", content: '{"key":"value"}' },
+      { path: "workspace/data.db", content: "db-content" },
+    ]);
+
+    const violations = rejectHardLinks(tar);
+
+    expect(violations.length).toBe(0);
+  });
+
+  it("safeTarExtract rejects archive containing hard links", async () => {
+    const { safeTarExtract } = await loadSandboxState();
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-hardlink-"));
+    try {
+      const targetDir = path.join(workDir, "backup");
+      fs.mkdirSync(targetDir, { recursive: true });
+
+      const tar = buildTar([
+        { path: "inside/link.json", type: "1", linkTarget: "../outside.json" },
+      ]);
+
+      const result = safeTarExtract(tar, targetDir);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("hard link");
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+});
+
 // ═══════════════════════════════════════════════════════════════════
 // 3. Regression guard — sandbox-state.ts must use safe extraction
 // ═══════════════════════════════════════════════════════════════════
@@ -379,5 +444,15 @@ describe("Regression: sandbox-state.ts uses validated tar extraction", () => {
     const auditCall = safeFnBody.indexOf("auditExtractedSymlinks");
     expect(auditCall).not.toBe(-1);
     expect(auditCall).toBeGreaterThan(extractCall);
+  });
+
+  it("rejectHardLinks is called before extraction", () => {
+    const src = getSourceCode();
+    const safeFnStart = src.indexOf("function safeTarExtract");
+    const safeFnBody = src.slice(safeFnStart);
+    const hardLinkCall = safeFnBody.indexOf("rejectHardLinks");
+    const extractCall = safeFnBody.indexOf('"-xf"');
+    expect(hardLinkCall).not.toBe(-1);
+    expect(hardLinkCall).toBeLessThan(extractCall);
   });
 });

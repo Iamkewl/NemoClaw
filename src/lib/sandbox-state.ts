@@ -194,6 +194,38 @@ function auditExtractedSymlinks(dirPath: string, rootPath: string): string[] {
 }
 
 /**
+ * Detect hard-link entries in a tar archive using verbose listing.
+ * Hard links are rejected entirely — sandbox state backups have no
+ * legitimate reason to contain them, and they can be used to reference
+ * files outside the extraction root.
+ */
+export function rejectHardLinks(tarBuffer: Buffer): string[] {
+  const result = spawnSync("tar", ["-tvf", "-"], {
+    input: tarBuffer,
+    encoding: "utf-8",
+    stdio: ["pipe", "pipe", "pipe"],
+    timeout: 60000,
+  });
+
+  if (result.status !== 0) {
+    return [`tar verbose listing failed (exit ${result.status})`];
+  }
+
+  const violations: string[] = [];
+  const lines = (result.stdout || "").trim().split("\n").filter((l) => l.length > 0);
+
+  for (const line of lines) {
+    // Both GNU tar and bsdtar prefix hard-link entries with 'h' in verbose mode
+    // and include " link to " in the line.
+    if (line.startsWith("h") || / link to /.test(line)) {
+      violations.push(`hard link: ${line.trim()}`);
+    }
+  }
+
+  return violations;
+}
+
+/**
  * SECURITY: Validate tar contents, extract with safety flags, then
  * audit for symlink escapes. Nukes the extraction on any violation.
  */
@@ -201,12 +233,21 @@ export function safeTarExtract(
   tarBuffer: Buffer,
   targetDir: string,
 ): SafeExtractResult {
-  // Phase 1: Validate entry paths before extraction
+  // Phase 1a: Validate entry paths before extraction
   const validation = validateTarEntries(tarBuffer, targetDir);
   if (!validation.safe) {
     return {
       success: false,
       error: `tar entry validation failed: ${validation.violations.join("; ")}`,
+    };
+  }
+
+  // Phase 1b: Reject hard links (not detectable via tar -tf, require verbose listing)
+  const hardLinkViolations = rejectHardLinks(tarBuffer);
+  if (hardLinkViolations.length > 0) {
+    return {
+      success: false,
+      error: `hard link rejected: ${hardLinkViolations.join("; ")}`,
     };
   }
 
