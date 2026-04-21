@@ -3,7 +3,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import { runListCommand } from "./list-command";
+import { createListCommand, runListCommand } from "./list-command";
 
 function makeExit(): (code: number) => never {
   return ((code: number) => {
@@ -30,7 +30,7 @@ describe("list command", () => {
     expect(recoverRegistryEntries).not.toHaveBeenCalled();
   });
 
-  it("renders JSON inventory through the oclif command adapter", async () => {
+  it("renders JSON inventory through oclif's built-in json flag", async () => {
     const lines: string[] = [];
 
     await runListCommand(["--json"], {
@@ -77,6 +77,48 @@ describe("list command", () => {
           connected: true,
         },
       ],
+    });
+  });
+
+  it("creates commands bound to independent dependency sets", async () => {
+    const alphaLines: string[] = [];
+    const betaLines: string[] = [];
+
+    const AlphaCommand = createListCommand({
+      rootDir: process.cwd(),
+      recoverRegistryEntries: async () => ({
+        sandboxes: [{ name: "alpha" }],
+        defaultSandbox: "alpha",
+      }),
+      getLiveInference: () => null,
+      loadLastSession: () => null,
+      log: (message = "") => alphaLines.push(message),
+      error: vi.fn(),
+      exit: makeExit(),
+    });
+    const BetaCommand = createListCommand({
+      rootDir: process.cwd(),
+      recoverRegistryEntries: async () => ({
+        sandboxes: [{ name: "beta" }],
+        defaultSandbox: "beta",
+      }),
+      getLiveInference: () => null,
+      loadLastSession: () => null,
+      log: (message = "") => betaLines.push(message),
+      error: vi.fn(),
+      exit: makeExit(),
+    });
+
+    await AlphaCommand.run(["--json"], process.cwd());
+    await BetaCommand.run(["--json"], process.cwd());
+
+    expect(JSON.parse(alphaLines.join("\n"))).toMatchObject({
+      defaultSandbox: "alpha",
+      sandboxes: [{ name: "alpha" }],
+    });
+    expect(JSON.parse(betaLines.join("\n"))).toMatchObject({
+      defaultSandbox: "beta",
+      sandboxes: [{ name: "beta" }],
     });
   });
 
