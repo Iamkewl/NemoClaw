@@ -269,9 +269,19 @@ print_done() {
       printf "  %s$%s source %s\n" "$C_GREEN" "$C_RESET" "$(detect_shell_profile)"
     fi
     printf "  %s$%s nemoclaw %s connect\n" "$C_GREEN" "$C_RESET" "$sandbox_name"
-    if [[ "$agent_name" == "openclaw" || -z "$agent_name" ]]; then
-      printf "  %ssandbox@%s$%s openclaw tui\n" "$C_GREEN" "$sandbox_name" "$C_RESET"
-    fi
+    local agent_cmd
+    case "$agent_name" in
+      hermes)
+        agent_cmd="hermes"
+        ;;
+      "" | openclaw)
+        agent_cmd="openclaw tui"
+        ;;
+      *)
+        agent_cmd="$agent_name"
+        ;;
+    esac
+    printf "  %ssandbox@%s$%s %s\n" "$C_GREEN" "$sandbox_name" "$C_RESET" "$agent_cmd"
   elif [[ "$NEMOCLAW_READY_NOW" == true ]]; then
     printf "  ${C_GREEN}NemoClaw CLI is installed.${C_RESET}\n"
     printf "  ${C_DIM}Onboarding has not run yet.${C_RESET}\n"
@@ -923,6 +933,9 @@ install_nemoclaw() {
   local repo_root package_json
   repo_root="$(resolve_repo_root)"
   package_json="${repo_root}/package.json"
+  # Tell prepare not to run npm link — the installer handles linking explicitly.
+  export NEMOCLAW_INSTALLING=1
+
   if is_source_checkout "$repo_root"; then
     info "NemoClaw package.json found in the selected source checkout — installing from source…"
     NEMOCLAW_SOURCE_ROOT="$repo_root"

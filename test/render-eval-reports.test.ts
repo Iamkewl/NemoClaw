@@ -138,7 +138,7 @@ describe("findAssertionGaps (against demo-eval fixture)", () => {
     // Hand-written fixture cited these three gaps.
     const triples = gaps.map((g) => `${g.skill}#${g.scenario_id}#${g.assertion_id}`);
     expect(triples).toContain("nemoclaw-user-manage-policy#3#6");
-    expect(triples).toContain("nemoclaw-user-skills-coding#2#6");
+    expect(triples).toContain("nemoclaw-user-agent-skills#2#6");
     expect(triples).toContain("nemoclaw-user-triage-instructions#3#5");
   });
 });
@@ -235,11 +235,11 @@ describe("renderValueVsCost (against demo-eval fixture)", () => {
     );
     const out = renderValueVsCost(report, assets, "2026-04-21");
 
-    // `reference` has the highest Δ per 1K tokens (tiny skill, decent Δ).
+    // `agent-skills` has the highest Δ per 1K tokens (~223 tokens, Δ +0.59 → 2.64 Δ/1K).
     const lines = out.split("\n");
     const tableStart = lines.findIndex((l) => l.startsWith("| `nemoclaw-user-"));
     expect(tableStart).toBeGreaterThan(0);
-    expect(lines[tableStart]).toContain("nemoclaw-user-reference");
+    expect(lines[tableStart]).toContain("nemoclaw-user-agent-skills");
   });
 
   it("places each skill into the expected cost quadrant", () => {
@@ -250,25 +250,24 @@ describe("renderValueVsCost (against demo-eval fixture)", () => {
     );
     const out = renderValueVsCost(report, assets, "2026-04-21");
 
-    // Sanity-check the four quadrants.
+    // Sanity-check the four quadrants. SKILL.md sizes are read live, so these
+    // expectations track current on-disk sizes — update if a skill is rewritten.
     const eliteSection = sectionOf(out, "### Elite");
     expect(eliteSection).toContain("nemoclaw-user-monitor-sandbox");
-    expect(eliteSection).toContain("nemoclaw-user-skills-coding");
+    expect(eliteSection).toContain("nemoclaw-user-overview");
     expect(eliteSection).toContain("nemoclaw-user-manage-policy");
 
     const heavyWorth = sectionOf(out, "### Heavy but worth it");
-    expect(heavyWorth).toContain("nemoclaw-user-overview");
     expect(heavyWorth).toContain("nemoclaw-user-deploy-remote");
 
     const actionZone = sectionOf(out, "### Action zone");
     expect(actionZone).toContain("nemoclaw-user-configure-inference");
-    expect(actionZone).toContain("nemoclaw-user-configure-security");
-    expect(actionZone).toContain("nemoclaw-user-triage-instructions");
 
     const marginalCheap = sectionOf(out, "### Marginal & cheap");
     expect(marginalCheap).toContain("nemoclaw-user-reference");
     expect(marginalCheap).toContain("nemoclaw-user-get-started");
     expect(marginalCheap).toContain("nemoclaw-user-workspace");
+    expect(marginalCheap).toContain("nemoclaw-user-configure-security");
   });
 
   it("emits a slot for each quadrant commentary", () => {
