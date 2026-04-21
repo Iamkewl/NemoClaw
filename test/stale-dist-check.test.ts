@@ -1,4 +1,3 @@
-// @ts-nocheck
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -43,7 +42,7 @@ describe("stale-dist-check", () => {
     writeFile(path.join(root, "src", "lib", "foo.ts"), "x", 5_000_000);
     const result = checkStaleDist(root);
     expect(result).not.toBeNull();
-    expect(result.srcMtime).toBeGreaterThan(result.distMtime);
+    expect(result!.srcMtime).toBeGreaterThan(result!.distMtime);
   });
 
   it("ignores .test.ts files (they do not ship to dist/)", () => {
