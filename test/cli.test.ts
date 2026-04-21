@@ -70,10 +70,12 @@ describe("CLI dispatch", () => {
     expect(r.out.includes("No sandboxes")).toBeTruthy();
   });
 
-  it("list --help exits 0 and shows usage", () => {
+  it("list --help exits 0 and shows oclif command help", () => {
     const r = run("list --help");
     expect(r.code).toBe(0);
-    expect(r.out.includes("Usage: nemoclaw list [--json]")).toBeTruthy();
+    expect(r.out.includes("USAGE")).toBeTruthy();
+    expect(r.out.includes("$ nemoclaw list [--json]")).toBeTruthy();
+    expect(r.out.includes("GLOBAL FLAGS")).toBeTruthy();
   });
 
   it("list --json emits structured empty inventory", () => {
@@ -161,11 +163,11 @@ describe("CLI dispatch", () => {
     });
   });
 
-  it("list rejects unknown options", () => {
+  it("list forwards oclif parse errors for unknown options", () => {
     const r = run("list --bogus");
-    expect(r.code).toBe(1);
-    expect(r.out.includes("Unknown argument(s) for list: --bogus")).toBeTruthy();
-    expect(r.out.includes("Usage: nemoclaw list [--json]")).toBeTruthy();
+    expect(r.code).toBe(2);
+    expect(r.out.includes("Nonexistent flag: --bogus")).toBeTruthy();
+    expect(r.out.includes("See more help with --help")).toBeTruthy();
   });
 
   it("start does not prompt for NVIDIA_API_KEY before launching local services", () => {

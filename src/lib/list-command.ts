@@ -1,117 +1,34 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { Command, Config as OclifConfig, type Config, Flags } from "@oclif/core";
+import { Command, Flags } from "@oclif/core";
 
-import {
-  getSandboxInventory,
-  type ListSandboxesCommandDeps,
-  renderSandboxInventoryText,
-} from "./inventory-commands";
+import { getSandboxInventory, renderSandboxInventoryText } from "./inventory-commands";
+import { buildListCommandDeps } from "./list-command-deps";
 
-export interface RunListCommandDeps extends ListSandboxesCommandDeps {
-  rootDir: string;
-  error?: (message?: string) => void;
-  exit?: (code: number) => never;
-}
-
-export function printListUsage(log: (message?: string) => void = console.log): void {
-  log("  Usage: nemoclaw list [--json]");
-  log("");
-}
-
-function isListParseError(error: unknown): boolean {
-  const name =
-    error && typeof error === "object"
-      ? (error as { constructor?: { name?: string } }).constructor?.name
-      : "";
-  return name === "NonExistentFlagsError" || name === "UnexpectedArgsError";
-}
-
-export interface ListCommandClass {
-  new (argv: string[], config: Config): Command;
-  run(argv?: string[], opts?: string): Promise<unknown>;
-}
-
-function resolveListCommandDeps(
-  depsOrProvider: RunListCommandDeps | (() => RunListCommandDeps),
-): RunListCommandDeps {
-  return typeof depsOrProvider === "function" ? depsOrProvider() : depsOrProvider;
-}
-
-export function createListCommand(
-  depsOrProvider: RunListCommandDeps | (() => RunListCommandDeps),
-): ListCommandClass {
-  return class ListCommand extends Command {
-    static strict = true;
-    static enableJsonFlag = true;
-    static summary = "List all sandboxes";
-    static description =
-      "List all registered sandboxes with their model, provider, and policy presets.";
-    static usage = ["list [--json]"];
-    static flags = {
-      help: Flags.boolean({ char: "h" }),
-    };
-
-    protected logJson(json: unknown): void {
-      const deps = resolveListCommandDeps(depsOrProvider);
-      const log = deps.log ?? console.log;
-      log(JSON.stringify(json, null, 2));
-    }
-
-    public async run(): Promise<unknown> {
-      const { flags } = await this.parse(ListCommand);
-      const deps = resolveListCommandDeps(depsOrProvider);
-      const log = deps.log ?? console.log;
-
-      if (flags.help) {
-        printListUsage(log);
-        return;
-      }
-
-      const inventory = await getSandboxInventory(deps);
-      if (this.jsonEnabled()) {
-        return inventory;
-      }
-
-      renderSandboxInventoryText(inventory, log);
-    }
+export default class ListCommand extends Command {
+  static id = "list";
+  static strict = true;
+  static enableJsonFlag = true;
+  static summary = "List all sandboxes";
+  static description =
+    "List all registered sandboxes with their model, provider, and policy presets.";
+  static usage = ["list [--json]"];
+  static flags = {
+    help: Flags.help({ char: "h" }),
   };
-}
 
-export async function runListCommand(args: string[], deps: RunListCommandDeps): Promise<void> {
-  const ListCommand = createListCommand(deps);
-
-  try {
-    await ListCommand.run(args, deps.rootDir);
-  } catch (error) {
-    if (isListParseError(error)) {
-      const errorLine = deps.error ?? console.error;
-      const exit = deps.exit ?? ((code: number) => process.exit(code));
-      errorLine(`  Unknown argument(s) for list: ${args.join(", ")}`);
-      printListUsage(errorLine);
-      exit(1);
-    }
-    throw error;
+  protected logJson(json: unknown): void {
+    console.log(JSON.stringify(json, null, 2));
   }
-}
 
-export async function runRegisteredListCommand(
-  args: string[],
-  opts: Pick<RunListCommandDeps, "rootDir" | "error" | "exit">,
-): Promise<void> {
-  const config = await OclifConfig.load(opts.rootDir);
-
-  try {
-    await config.runCommand("list", args);
-  } catch (error) {
-    if (isListParseError(error)) {
-      const errorLine = opts.error ?? console.error;
-      const exit = opts.exit ?? ((code: number) => process.exit(code));
-      errorLine(`  Unknown argument(s) for list: ${args.join(", ")}`);
-      printListUsage(errorLine);
-      exit(1);
+  public async run(): Promise<unknown> {
+    await this.parse(ListCommand);
+    const inventory = await getSandboxInventory(buildListCommandDeps());
+    if (this.jsonEnabled()) {
+      return inventory;
     }
-    throw error;
+
+    renderSandboxInventoryText(inventory, this.log.bind(this));
   }
 }
