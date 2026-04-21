@@ -73,16 +73,18 @@ describe("gateway startup wait config", () => {
     const { getGatewayHealthWaitConfig } = loadOnboard();
     process.env.NEMOCLAW_GATEWAY_START_POLL_COUNT = "7";
     process.env.NEMOCLAW_GATEWAY_START_POLL_INTERVAL = "3";
+    process.env.NEMOCLAW_HEALTH_POLL_COUNT = "4";
+    process.env.NEMOCLAW_HEALTH_POLL_INTERVAL = "1";
 
     expect(getGatewayHealthWaitConfig(1, "missing")).toEqual({
-      count: 7,
-      interval: 3,
-      extended: true,
+      count: 4,
+      interval: 1,
+      extended: false,
       containerState: "missing",
     });
   });
 
-  it("keeps the short wait only when the start command succeeded", () => {
+  it("uses the short wait for missing containers regardless of start exit code", () => {
     const { getGatewayHealthWaitConfig } = loadOnboard();
     process.env.NEMOCLAW_HEALTH_POLL_COUNT = "7";
     process.env.NEMOCLAW_HEALTH_POLL_INTERVAL = "3";
@@ -92,6 +94,19 @@ describe("gateway startup wait config", () => {
       interval: 3,
       extended: false,
       containerState: "missing",
+    });
+  });
+
+  it("extends the wait when the container is still live even if gateway start exited zero", () => {
+    const { getGatewayHealthWaitConfig } = loadOnboard();
+    process.env.NEMOCLAW_GATEWAY_START_POLL_COUNT = "8";
+    process.env.NEMOCLAW_GATEWAY_START_POLL_INTERVAL = "6";
+
+    expect(getGatewayHealthWaitConfig(0, "running")).toEqual({
+      count: 8,
+      interval: 6,
+      extended: true,
+      containerState: "running",
     });
   });
 });
@@ -112,6 +127,20 @@ describe("gateway bootstrap secret repair", () => {
       missingSecrets: ["openshell-client-tls"],
       needsRepair: true,
       needsServerTls: false,
+      needsClientBundle: true,
+      needsHandshake: false,
+    });
+  });
+
+  it("ignores unknown secret names when planning repairs", () => {
+    const { getGatewayBootstrapRepairPlan } = loadOnboard();
+
+    expect(
+      getGatewayBootstrapRepairPlan(["openshell-client-tls", "noise", " openshell-server-tls ", ""]),
+    ).toEqual({
+      missingSecrets: ["openshell-client-tls", "openshell-server-tls"],
+      needsRepair: true,
+      needsServerTls: true,
       needsClientBundle: true,
       needsHandshake: false,
     });

@@ -4,7 +4,7 @@ title:
   nav: "Commands"
 description:
   main: "Full CLI reference for slash commands and standalone NemoClaw commands."
-  agent: "Lists all slash commands and standalone NemoClaw CLI commands. Use when looking up a command, checking command syntax, or browsing the CLI reference."
+  agent: "Includes the full CLI reference for slash commands and standalone NemoClaw commands. Use when looking up a specific `nemoclaw` or `/nemoclaw` subcommand, flag, argument, or exit code."
 keywords: ["nemoclaw cli commands", "nemoclaw command reference"]
 topics: ["generative_ai", "ai_agents"]
 tags: ["openclaw", "openshell", "nemoclaw", "cli"]
@@ -210,6 +210,9 @@ If the backend is down, the output includes an `Inference: unreachable` line wit
 The Policy section displays the live enforced policy (fetched via `openshell policy get --full`), which reflects presets added or removed after sandbox creation.
 If the sandbox is running an outdated agent version, the output includes an `Update` line with the available version and a `nemoclaw <name> rebuild` hint.
 
+When other sandboxes have the same messaging channel enabled (Telegram, Discord, or Slack) with the same bot token, the output includes a cross-sandbox overlap warning so you can resolve the conflict before messages start dropping.
+The command also tails `/tmp/gateway.log` inside the default sandbox and flags Telegram `409 Conflict` errors that indicate a duplicate consumer for the bot token.
+
 ```console
 $ nemoclaw my-assistant status
 ```
@@ -282,6 +285,49 @@ $ nemoclaw my-assistant policy-remove
 
 Unchecking a preset in the onboard TUI checkbox also removes it from the sandbox.
 
+### `nemoclaw <name> channels list`
+
+List the messaging channels NemoClaw knows about (`telegram`, `discord`, `slack`) with a short description.
+The command is a static reference; it does not consult credentials or the running sandbox.
+
+```console
+$ nemoclaw my-assistant channels list
+```
+
+### `nemoclaw <name> channels add <channel>`
+
+Store credentials for a messaging channel (`telegram`, `discord`, or `slack`) and rebuild the sandbox so the image picks up the new channel.
+The command prompts for any missing token, persists it under `~/.nemoclaw/credentials.json`, then asks whether to rebuild immediately.
+Running `add` for an already-configured channel simply overwrites the stored tokens — the operation is idempotent.
+
+```console
+$ nemoclaw my-assistant channels add telegram
+```
+
+| Flag | Description |
+|------|-------------|
+| `--dry-run` | Validate the channel and token inputs without saving credentials or rebuilding |
+
+Slack requires both `SLACK_BOT_TOKEN` (bot user OAuth) and `SLACK_APP_TOKEN` (app-level Socket Mode token); the command prompts for each in turn.
+When `NEMOCLAW_NON_INTERACTIVE=1` is set, any missing token fails fast and no rebuild prompt is shown — instead, the change is queued and you are told to run `nemoclaw <name> rebuild` manually.
+
+### `nemoclaw <name> channels remove <channel>`
+
+Clear the stored credentials for a messaging channel and rebuild the sandbox so the image drops the channel.
+Running `remove` for a channel that was never configured is a no-op against the credentials file and still triggers the rebuild prompt.
+
+```console
+$ nemoclaw my-assistant channels remove telegram
+```
+
+| Flag | Description |
+|------|-------------|
+| `--dry-run` | Report the channel that would be removed without clearing credentials or rebuilding |
+
+As with `channels add`, `NEMOCLAW_NON_INTERACTIVE=1` skips the rebuild prompt and queues the change for a manual `nemoclaw <name> rebuild`.
+
+Host-side removal is the supported path because `/sandbox/.openclaw/openclaw.json` is read-only at runtime; `openclaw channels remove` cannot modify the baked config from inside the sandbox.
+
 ### `nemoclaw <name> skill install <path>`
 
 Deploy a skill directory to a running sandbox.
@@ -317,6 +363,25 @@ $ nemoclaw my-assistant rebuild [--yes] [--verbose]
 
 The sandbox must be running for the backup step to succeed.
 After restore, the command runs `openclaw doctor --fix` for cross-version structure repair.
+
+### `nemoclaw upgrade-sandboxes`
+
+Rebuild sandboxes whose base image is older than the one currently pinned by NemoClaw.
+NemoClaw resolves the digest of `ghcr.io/nvidia/nemoclaw/sandbox-base:latest` from the registry, then compares it against the digest each sandbox was created with.
+Sandboxes that match the current digest are left alone.
+
+```console
+$ nemoclaw upgrade-sandboxes [--check] [--auto] [--yes]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--check` | List stale sandboxes without rebuilding any of them. Exits non-zero if any are stale. |
+| `--auto` | Rebuild every stale sandbox without prompting. Used by the installer to upgrade in place. |
+| `--yes` | Skip the confirmation prompt for the rebuild plan. |
+
+Each rebuild reuses the same workspace backup-and-restore flow as `nemoclaw <name> rebuild`, so workspace files survive the upgrade.
+If the registry is unreachable (offline or firewalled hosts), NemoClaw falls back to the unpinned `:latest` tag and reports that the digest could not be resolved instead of failing.
 
 ### `nemoclaw backup-all`
 
@@ -423,6 +488,8 @@ $ nemoclaw debug [--quick] [--sandbox NAME] [--output PATH]
 | `--sandbox NAME` | Target a specific sandbox (default: auto-detect) |
 | `--output PATH` | Write diagnostics tarball to the given path |
 
+If `--output` is set and the tarball cannot be written (for example, the destination directory is missing or read-only), the command exits non-zero so scripts can detect the failure.
+
 ### `nemoclaw credentials list`
 
 List the names of all credentials stored in `~/.nemoclaw/credentials.json`.
@@ -449,6 +516,9 @@ $ nemoclaw credentials reset NVIDIA_API_KEY
 
 Run `uninstall.sh` to remove NemoClaw sandboxes, gateway resources, related images and containers, and local state.
 The CLI uses the local `uninstall.sh` first and falls back to the hosted script if the local file is unavailable.
+
+Uninstall also stops any orphaned `openshell` host processes left behind by previous onboard or destroy cycles, including `openshell sandbox create`, `openshell ssh-proxy`, and SSH sessions spawned by OpenShell.
+Earlier releases only stopped `openshell forward` processes, so those orphans accumulated across runs.
 
 | Flag | Effect |
 |---|---|
