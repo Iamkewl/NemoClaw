@@ -173,23 +173,26 @@ function killTimer(sandboxName: string): void {
 
 function unlockAgentConfig(
   sandboxName: string,
-  target: { configPath: string; configDir: string },
+  target: { configPath: string; configDir: string; sensitiveFiles?: string[] },
 ): void {
   const errors: string[] = [];
-  try {
-    kubectlExec(sandboxName, ["chattr", "-i", target.configPath]);
-  } catch {
-    errors.push("chattr -i");
-  }
-  try {
-    kubectlExec(sandboxName, ["chown", "sandbox:sandbox", target.configPath]);
-  } catch {
-    errors.push("chown config file");
-  }
-  try {
-    kubectlExec(sandboxName, ["chmod", "600", target.configPath]);
-  } catch {
-    errors.push("chmod 600 config file");
+  const filesToUnlock = [target.configPath, ...(target.sensitiveFiles || [])];
+  for (const f of filesToUnlock) {
+    try {
+      kubectlExec(sandboxName, ["chattr", "-i", f]);
+    } catch {
+      errors.push(`chattr -i ${f}`);
+    }
+    try {
+      kubectlExec(sandboxName, ["chown", "sandbox:sandbox", f]);
+    } catch {
+      errors.push(`chown ${f}`);
+    }
+    try {
+      kubectlExec(sandboxName, ["chmod", "600", f]);
+    } catch {
+      errors.push(`chmod 600 ${f}`);
+    }
   }
   try {
     kubectlExec(sandboxName, ["chown", "sandbox:sandbox", target.configDir]);
@@ -228,20 +231,22 @@ function unlockAgentConfig(
 
 function lockAgentConfig(
   sandboxName: string,
-  target: { configPath: string; configDir: string },
+  target: { configPath: string; configDir: string; sensitiveFiles?: string[] },
 ): void {
   const errors: string[] = [];
+  const filesToLock = [target.configPath, ...(target.sensitiveFiles || [])];
 
-  try {
-    kubectlExec(sandboxName, ["chmod", "444", target.configPath]);
-  } catch {
-    errors.push("chmod 444 config file");
-  }
-
-  try {
-    kubectlExec(sandboxName, ["chown", "root:root", target.configPath]);
-  } catch {
-    errors.push("chown root:root config file");
+  for (const f of filesToLock) {
+    try {
+      kubectlExec(sandboxName, ["chmod", "444", f]);
+    } catch {
+      errors.push(`chmod 444 ${f}`);
+    }
+    try {
+      kubectlExec(sandboxName, ["chown", "root:root", f]);
+    } catch {
+      errors.push(`chown root:root ${f}`);
+    }
   }
 
   try {
@@ -259,10 +264,12 @@ function lockAgentConfig(
   // Best-effort: kubectl exec may lack CAP_LINUX_IMMUTABLE. Track the
   // result so verification doesn't require something that was never there.
   let chattrSucceeded = true;
-  try {
-    kubectlExec(sandboxName, ["chattr", "+i", target.configPath]);
-  } catch {
-    chattrSucceeded = false;
+  for (const f of filesToLock) {
+    try {
+      kubectlExec(sandboxName, ["chattr", "+i", f]);
+    } catch {
+      chattrSucceeded = false;
+    }
   }
 
   if (errors.length > 0) {

@@ -41,6 +41,8 @@ interface AgentConfigTarget {
   format: string;
   /** Config file basename */
   configFile: string;
+  /** Additional files to lock/unlock alongside the main config (e.g. .env, .config-hash) */
+  sensitiveFiles?: string[];
 }
 
 const DEFAULT_AGENT_CONFIG: AgentConfigTarget = {
@@ -49,6 +51,7 @@ const DEFAULT_AGENT_CONFIG: AgentConfigTarget = {
   configDir: "/sandbox/.openclaw",
   format: "json",
   configFile: "openclaw.json",
+  sensitiveFiles: ["/sandbox/.openclaw/.config-hash"],
 };
 
 function resolveAgentConfig(sandboxName: string): AgentConfigTarget {
@@ -61,12 +64,18 @@ function resolveAgentConfig(sandboxName: string): AgentConfigTarget {
     const agent = agentDefs.loadAgent(entry.agent);
     const cfg = agent.configPaths;
 
+    const dir = cfg.dir;
+    const sensitiveFiles = [`${dir}/.config-hash`];
+    // Hermes stores credentials in .env alongside the config
+    if (entry.agent === "hermes") sensitiveFiles.push(`${dir}/.env`);
+
     return {
       agentName: entry.agent,
-      configPath: `${cfg.dir}/${cfg.configFile}`,
-      configDir: cfg.dir,
+      configPath: `${dir}/${cfg.configFile}`,
+      configDir: dir,
       format: cfg.format || "json",
       configFile: cfg.configFile,
+      sensitiveFiles,
     };
   } catch {
     // Registry or agent-defs unavailable (e.g., during tests) — fall back
@@ -187,10 +196,4 @@ function configGet(sandboxName: string, opts: ConfigGetOpts = {}): void {
 // Exports
 // ---------------------------------------------------------------------------
 
-export {
-  configGet,
-  resolveAgentConfig,
-  readSandboxConfig,
-  extractDotpath,
-  parseConfig,
-};
+export { configGet, resolveAgentConfig, readSandboxConfig, extractDotpath, parseConfig };
