@@ -172,6 +172,10 @@ export function registerSandbox(entry: SandboxEntry): void {
       imageTag: entry.imageTag || null,
       providerCredentialHashes: entry.providerCredentialHashes || undefined,
       messagingChannels: entry.messagingChannels || [],
+      disabledChannels:
+        Array.isArray(entry.disabledChannels) && entry.disabledChannels.length > 0
+          ? [...entry.disabledChannels]
+          : undefined,
     };
     if (!data.defaultSandbox) {
       data.defaultSandbox = entry.name;

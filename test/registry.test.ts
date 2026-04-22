@@ -209,6 +209,16 @@ describe("registry", () => {
   it("setChannelDisabled returns false when sandbox is missing", () => {
     expect(registry.setChannelDisabled("missing", "telegram", true)).toBe(false);
   });
+
+  it("registerSandbox preserves disabledChannels when re-registering", () => {
+    registry.registerSandbox({ name: "s1" });
+    registry.setChannelDisabled("s1", "telegram", true);
+    registry.registerSandbox({
+      name: "s1",
+      disabledChannels: registry.getDisabledChannels("s1"),
+    });
+    expect(registry.getDisabledChannels("s1")).toEqual(["telegram"]);
+  });
 });
 
 describe("atomic writes", () => {

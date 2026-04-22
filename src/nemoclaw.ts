@@ -1866,6 +1866,14 @@ async function sandboxChannelsSetEnabled(sandboxName, args, disabled) {
   }
 
   const normalized = channelArg.trim().toLowerCase();
+  const alreadyDisabled = registry.getDisabledChannels(sandboxName).includes(normalized);
+  if (alreadyDisabled === disabled) {
+    console.log(
+      `  Channel '${normalized}' is already ${disabled ? "disabled" : "enabled"} for '${sandboxName}'. Nothing to do.`,
+    );
+    return;
+  }
+
   if (dryRun) {
     console.log(
       `  --dry-run: would ${verb} channel '${normalized}' for '${sandboxName}'.`,
