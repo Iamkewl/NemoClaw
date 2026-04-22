@@ -19,20 +19,13 @@ describe("exec approvals path regression guard", () => {
     expect(src).toContain("Unable to verify OpenClaw exec approvals path in dist");
   });
 
-  it("Dockerfile applies a runtime compatibility patch for stale base images", () => {
+  it("Dockerfile sets mutable-default permissions on .openclaw", () => {
     const dockerfile = path.join(import.meta.dirname, "..", "Dockerfile");
     const src = fs.readFileSync(dockerfile, "utf-8");
 
-    expect(src).toContain('[ ! -d "$OPENCLAW_DIST_DIR" ]');
     expect(src).toContain("mkdir -p /sandbox/.openclaw");
-    expect(src).toContain("chown sandbox:sandbox /sandbox/.openclaw");
-    expect(src).toContain("chmod 755 /sandbox/.openclaw");
-    expect(src).toContain('LEGACY_EXEC_APPROVALS_PATH="$(printf \'%b\'');
-    expect(src).toContain('DATA_EXEC_APPROVALS_PATH="$(printf \'%b\'');
-    expect(src).toContain('files_with_old_path_file="$(mktemp)"');
-    expect(src).toContain("--include='*.js'");
-    expect(src).toContain("Unable to verify OpenClaw exec approvals path in dist");
-    expect(src).toContain("OpenClaw dist directory not found:");
-    expect(src).toContain("OpenClaw exec approvals path patch failed");
+    expect(src).toContain("chown -R sandbox:sandbox /sandbox/.openclaw");
+    expect(src).toContain("chmod 700 /sandbox/.openclaw");
+    expect(src).toContain("chmod 600 /sandbox/.openclaw/openclaw.json");
   });
 });
