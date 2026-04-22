@@ -94,6 +94,7 @@ const GLOBAL_COMMANDS = new Set([
   "setup-spark",
   "start",
   "stop",
+  "tunnel",
   "status",
   "debug",
   "uninstall",
