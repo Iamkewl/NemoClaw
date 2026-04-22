@@ -4,7 +4,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 
 import { describe, expect, it } from "vitest";
 
@@ -43,6 +43,7 @@ function runInstallerFunction(
   fakeBin: string,
   extraEnv: NodeJS.ProcessEnv = {},
   cwd?: string,
+  spawnOptions: { uid?: number; gid?: number } = {},
 ) {
   return spawnSync("bash", ["-c", `source "${INSTALLER_PAYLOAD}" >/dev/null 2>&1; ${bashSnippet}`], {
     cwd: cwd ?? path.join(import.meta.dirname, ".."),
@@ -52,7 +53,19 @@ function runInstallerFunction(
       PATH: `${fakeBin}:${TEST_SYSTEM_PATH}`,
       ...extraEnv,
     },
+    ...spawnOptions,
   });
+}
+
+function nonRootSpawnOptions(): { uid?: number; gid?: number } {
+  if (typeof process.getuid !== "function" || process.getuid() !== 0 || process.platform !== "linux") {
+    return {};
+  }
+
+  return {
+    uid: Number.parseInt(execFileSync("id", ["-u", "nobody"], { encoding: "utf-8" }).trim(), 10),
+    gid: Number.parseInt(execFileSync("id", ["-g", "nobody"], { encoding: "utf-8" }).trim(), 10),
+  };
 }
 
 describe("installer npm resolution", () => {
@@ -160,11 +173,17 @@ exit 98
     const prefix = path.join(tmp, "prefix");
     const prefixBin = path.join(prefix, "bin");
     const prefixLib = path.join(prefix, "lib");
+    const spawnOptions = nonRootSpawnOptions();
 
     fs.mkdirSync(fakeBin);
     fs.mkdirSync(prefixBin, { recursive: true });
     fs.mkdirSync(prefixLib, { recursive: true });
-    fs.chmodSync(prefixBin, 0o755);
+    fs.chmodSync(tmp, 0o755);
+    fs.chmodSync(fakeBin, 0o755);
+    // When the test suite runs as root (WSL CI), drop to nobody so `test -w`
+    // behaves like a normal installer user. Make bin writable in that mode so
+    // the lib directory is the blocker we are actually asserting on.
+    fs.chmodSync(prefixBin, spawnOptions.uid !== undefined ? 0o777 : 0o755);
     fs.chmodSync(prefixLib, 0o555);
 
     const result = runInstallerFunction(
@@ -174,6 +193,8 @@ exit 98
         HOME: tmp,
         TARGET_PREFIX: prefix,
       },
+      undefined,
+      spawnOptions,
     );
 
     expect(result.status).toBe(0);
