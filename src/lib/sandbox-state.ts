@@ -547,7 +547,7 @@ export function backupSandboxState(sandboxName: string, options: BackupOptions =
     }
 
     // Download via SSH+tar
-    const tarCmd = `tar -cf - -C ${dir} ${existingDirs.join(" ")}`;
+    const tarCmd = `tar -chf - -C ${dir} ${existingDirs.join(" ")}`;
     _log(`Downloading via SSH+tar: ${tarCmd}`);
     const result = spawnSync("ssh", [...sshArgs(configFile, sandboxName), tarCmd], {
       stdio: ["ignore", "pipe", "pipe"],
@@ -634,7 +634,7 @@ export function restoreSandboxState(sandboxName: string, backupPath: string): Re
   const configFile = writeTempSshConfig(sshConfig);
   try {
     // Upload via tar pipe
-    const tarResult = spawnSync("tar", ["-cf", "-", "-C", backupPath, ...localDirs], {
+    const tarResult = spawnSync("tar", ["-chf", "-", "-C", backupPath, ...localDirs], {
       stdio: ["ignore", "pipe", "pipe"],
       timeout: 60000,
       maxBuffer: 256 * 1024 * 1024,

@@ -7,11 +7,9 @@ ARG BASE_IMAGE=nemoclaw-sandbox-test
 # hadolint ignore=DL3006
 FROM ${BASE_IMAGE}
 
-# The production image locks .openclaw (root:root, 755, openclaw.json 444).
-# Tests need writable fixtures and a sandbox-owned config for rollback tests,
-# so relax permissions here.
+# Ensure mutable-default permissions for test fixtures.
 USER root
-RUN chown -R sandbox:sandbox /sandbox/.openclaw /sandbox/.openclaw-data \
+RUN chown -R sandbox:sandbox /sandbox/.openclaw \
     && chmod 700 /sandbox/.openclaw \
     && chmod 600 /sandbox/.openclaw/openclaw.json
 

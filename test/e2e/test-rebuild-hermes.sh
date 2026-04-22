@@ -26,7 +26,7 @@ set -euo pipefail
 
 SANDBOX_NAME="${NEMOCLAW_SANDBOX_NAME:-e2e-rebuild-hm}"
 OLD_HERMES_VERSION="v2026.3.12"
-MARKER_FILE="/sandbox/.hermes-data/memories/rebuild-marker.txt"
+MARKER_FILE="/sandbox/.hermes/memories/rebuild-marker.txt"
 MARKER_CONTENT="REBUILD_HM_E2E_$(date +%s)"
 REGISTRY_FILE="$HOME/.nemoclaw/sandboxes.json"
 SESSION_FILE="$HOME/.nemoclaw/onboard-session.json"
@@ -122,10 +122,10 @@ cat >"${TESTDIR}/Dockerfile" <<DOCKERFILE
 FROM ${OLD_BASE_TAG}
 USER sandbox
 WORKDIR /sandbox
-RUN mkdir -p /sandbox/.hermes-data/memories \
-             /sandbox/.hermes-data/sessions \
-             /sandbox/.hermes-data/workspace \
-    && echo '{}' > /sandbox/.hermes-data/config.yaml
+RUN mkdir -p /sandbox/.hermes/memories \
+             /sandbox/.hermes/sessions \
+             /sandbox/.hermes/workspace \
+    && echo '{}' > /sandbox/.hermes/config.yaml
 CMD ["/bin/bash"]
 DOCKERFILE
 
@@ -147,7 +147,7 @@ pass "Old Hermes sandbox created"
 info "Phase 4: Writing markers and registering sandbox..."
 
 openshell sandbox exec --name "${SANDBOX_NAME}" -- \
-  sh -c "mkdir -p /sandbox/.hermes-data/memories && echo '${MARKER_CONTENT}' > ${MARKER_FILE}" \
+  sh -c "mkdir -p /sandbox/.hermes/memories && echo '${MARKER_CONTENT}' > ${MARKER_FILE}" \
   || fail "Failed to write marker file"
 
 VERIFY=$(openshell sandbox exec --name "${SANDBOX_NAME}" -- cat "${MARKER_FILE}" 2>/dev/null || true)

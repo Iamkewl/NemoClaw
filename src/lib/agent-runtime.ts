@@ -60,7 +60,7 @@ export function buildRecoveryScript(agent: AgentDefinition | null, port: number)
   const binaryPath = agent.binary_path || "/usr/local/bin/openclaw";
   const gatewayCmd = agent.gateway_command || "openclaw gateway run";
   const isHermes = agent.name === "hermes";
-  const hermesHome = isHermes ? "export HERMES_HOME=/sandbox/.hermes-data; " : "";
+  const hermesHome = isHermes ? "export HERMES_HOME=/sandbox/.hermes; " : "";
 
   return [
     "[ -f ~/.bashrc ] && . ~/.bashrc 2>/dev/null;",

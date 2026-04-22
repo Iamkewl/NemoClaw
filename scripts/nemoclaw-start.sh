@@ -831,7 +831,37 @@ cleanup() {
   fi
   exit "$gateway_status"
 }
+# ── Legacy layout migration ──────────────────────────────────────
+# Sandboxes created with the OLD base image have:
+#   .openclaw/ containing symlinks → .openclaw-data/<subdir>
+#   .openclaw-data/ containing real state data
+# Migrate to the new layout: real data lives directly in .openclaw/.
+# Idempotent: no-op if .openclaw-data doesn't exist.
+migrate_legacy_layout() {
+  local config_dir="$1" data_dir="$2" label="$3"
+  [ -d "$data_dir" ] || return 0
+  echo "[migration] Detected legacy ${label} layout (${data_dir} exists), migrating..." >&2
+  for entry in "$data_dir"/*; do
+    [ -e "$entry" ] || [ -L "$entry" ] || continue
+    local name
+    name="$(basename "$entry")"
+    local target="${config_dir}/${name}"
+    if [ -L "$target" ]; then
+      rm -f "$target"
+      cp -a "$entry" "$target"
+    elif [ ! -e "$target" ]; then
+      cp -a "$entry" "$target"
+    fi
+  done
+  chown -R sandbox:sandbox "$config_dir" 2>/dev/null || true
+  rm -rf "$data_dir"
+  echo "[migration] Completed ${label} layout migration (${data_dir} removed)" >&2
+}
+
 # ── Main ─────────────────────────────────────────────────────────
+
+# Migrate legacy symlink layout before anything else reads .openclaw
+migrate_legacy_layout "/sandbox/.openclaw" "/sandbox/.openclaw-data" "openclaw"
 
 echo 'Setting up NemoClaw...' >&2
 # Best-effort: .env may not exist.

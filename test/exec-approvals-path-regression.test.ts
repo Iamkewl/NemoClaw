@@ -7,16 +7,13 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("exec approvals path regression guard", () => {
-  it("Dockerfile.base patches and validates OpenClaw exec approvals path across dist bundles", () => {
+  it("Dockerfile.base installs OpenClaw and validates version against blueprint minimum", () => {
     const dockerfileBase = path.join(import.meta.dirname, "..", "Dockerfile.base");
     const src = fs.readFileSync(dockerfileBase, "utf-8");
 
-    expect(src).toContain("LEGACY_EXEC_APPROVALS_PATH=\"$(printf '%b'");
-    expect(src).toContain("DATA_EXEC_APPROVALS_PATH=\"$(printf '%b'");
-    expect(src).toContain('files_with_old_path_file="$(mktemp)"');
-    expect(src).toContain("--include='*.js'");
-    expect(src).toContain("OpenClaw dist directory not found:");
-    expect(src).toContain("Unable to verify OpenClaw exec approvals path in dist");
+    expect(src).toContain("OPENCLAW_VERSION");
+    expect(src).toContain("min_openclaw_version");
+    expect(src).toContain('npm install -g "openclaw@${OPENCLAW_VERSION}"');
   });
 
   it("Dockerfile sets mutable-default permissions on .openclaw", () => {

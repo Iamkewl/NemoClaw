@@ -263,7 +263,32 @@ if [ -w "$_SANDBOX_HOME" ]; then
   _write_proxy_snippet "${_SANDBOX_HOME}/.profile" 2>/dev/null || true
 fi
 
+# ── Legacy layout migration ──────────────────────────────────────
+migrate_legacy_layout() {
+  local config_dir="$1" data_dir="$2" label="$3"
+  [ -d "$data_dir" ] || return 0
+  echo "[migration] Detected legacy ${label} layout (${data_dir} exists), migrating..." >&2
+  for entry in "$data_dir"/*; do
+    [ -e "$entry" ] || [ -L "$entry" ] || continue
+    local name
+    name="$(basename "$entry")"
+    local target="${config_dir}/${name}"
+    if [ -L "$target" ]; then
+      rm -f "$target"
+      cp -a "$entry" "$target"
+    elif [ ! -e "$target" ]; then
+      cp -a "$entry" "$target"
+    fi
+  done
+  chown -R sandbox:sandbox "$config_dir" 2>/dev/null || true
+  rm -rf "$data_dir"
+  echo "[migration] Completed ${label} layout migration (${data_dir} removed)" >&2
+}
+
 # ── Main ─────────────────────────────────────────────────────────
+
+# Migrate legacy symlink layout before anything else reads .hermes
+migrate_legacy_layout "/sandbox/.hermes" "/sandbox/.hermes-data" "hermes"
 
 echo 'Setting up NemoClaw (Hermes)...' >&2
 

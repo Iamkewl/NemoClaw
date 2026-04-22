@@ -36,15 +36,12 @@ function writeBackup(sandboxName, dirName, overrides = {}) {
     agentVersion: null,
     expectedVersion: null,
     stateDirs: [],
-    writableDir: "/sandbox/.openclaw-data",
+    dir: "/sandbox/.openclaw",
     backupPath: dir,
     blueprintDigest: null,
     ...overrides,
   };
-  fs.writeFileSync(
-    path.join(dir, "rebuild-manifest.json"),
-    JSON.stringify(manifest, null, 2),
-  );
+  fs.writeFileSync(path.join(dir, "rebuild-manifest.json"), JSON.stringify(manifest, null, 2));
   return manifest;
 }
 
