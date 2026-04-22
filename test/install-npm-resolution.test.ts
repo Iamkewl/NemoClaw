@@ -218,6 +218,7 @@ exit 98
       console.error("[DEBUG] cwd:", cwd ?? "(repo root)");
       console.error("[DEBUG] installerPath:", installerPath ?? "(default)");
       console.error("[DEBUG] signal:", result.signal);
+      console.error("[DEBUG] error:", result.error);
       console.error("[DEBUG] stderr:", result.stderr?.slice(0, 500));
       console.error("[DEBUG] stdout:", result.stdout?.slice(0, 500));
     }
