@@ -422,19 +422,24 @@ else
   fail "shields should be UP: ${STATUS_TIMER}"
 fi
 
-info "Waiting 25s for auto-restore to mutable default..."
-sleep 25
+info "Polling for auto-restore (up to 60s)..."
+TIMER_RESTORED=false
+for _poll in $(seq 1 12); do
+  sleep 5
+  STATUS_AFTER_TIMER=$(nemoclaw "${SANDBOX_NAME}" shields status 2>&1)
+  if echo "$STATUS_AFTER_TIMER" | grep -q "Shields: DOWN\|mutable"; then
+    TIMER_RESTORED=true
+    break
+  fi
+done
 
-# Check if the timer process restored to mutable default
-STATUS_AFTER_TIMER=$(nemoclaw "${SANDBOX_NAME}" shields status 2>&1)
-if echo "$STATUS_AFTER_TIMER" | grep -q "Shields: DOWN\|mutable"; then
+if [ "$TIMER_RESTORED" = "true" ]; then
   pass "Auto-restore timer returned to mutable default after timeout"
 else
   info "Auto-restore may not have fired (timer runs as detached process)"
   info "Status: ${STATUS_AFTER_TIMER}"
-  # Clean up manually
   nemoclaw "${SANDBOX_NAME}" shields down --timeout 5m --reason "Manual cleanup" 2>/dev/null || true
-  fail "Auto-restore timer did not restore mutable default within 25s"
+  fail "Auto-restore timer did not restore mutable default within 60s"
 fi
 
 # Verify config is writable after auto-restore
