@@ -3382,6 +3382,15 @@ async function createSandbox(
         )
       : null;
 
+  // Drop channels the operator disabled via `nemoclaw <sandbox> channels stop`.
+  // Credentials stay in the keychain; the bridge simply isn't registered with
+  // the gateway on the next rebuild. `channels start` removes the entry and
+  // the bridge comes back.
+  const disabledEnvKeys = new Set(
+    MESSAGING_CHANNELS.filter((c) => registry.getDisabledChannels(sandboxName).includes(c.name))
+      .flatMap((c) => (c.appTokenEnvKey ? [c.envKey, c.appTokenEnvKey] : [c.envKey])),
+  );
+
   const messagingTokenDefs = [
     {
       name: `${sandboxName}-discord-bridge`,
@@ -3403,7 +3412,9 @@ async function createSandbox(
       envKey: "TELEGRAM_BOT_TOKEN",
       token: getMessagingToken("TELEGRAM_BOT_TOKEN"),
     },
-  ].filter(({ envKey }) => !enabledEnvKeys || enabledEnvKeys.has(envKey));
+  ]
+    .filter(({ envKey }) => !enabledEnvKeys || enabledEnvKeys.has(envKey))
+    .filter(({ envKey }) => !disabledEnvKeys.has(envKey));
 
   if (webSearchConfig) {
     messagingTokenDefs.push({
