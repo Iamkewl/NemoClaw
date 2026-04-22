@@ -308,33 +308,6 @@ print_done() {
   printf "  ${C_BOLD}GitHub${C_RESET}  ${C_DIM}https://github.com/nvidia/nemoclaw${C_RESET}\n"
   printf "  ${C_BOLD}Docs${C_RESET}    ${C_DIM}https://docs.nvidia.com/nemoclaw/latest/${C_RESET}\n"
   printf "\n"
-  maybe_offer_shell_reload
-}
-
-# Offer to replace the current process with a fresh login shell so the
-# just-installed Node (and any other PATH additions) is immediately active.
-# Only prompts on a real TTY and when the user didn't pass --non-interactive
-# — preserves scriptability (e.g. `curl | bash && nemoclaw onboard` chains
-# keep working because the prompt is skipped in piped/non-interactive mode).
-# On accept: execs "$SHELL" -l, replacing this script process. On decline:
-# noop — the warning already printed the manual activation command.
-maybe_offer_shell_reload() {
-  [[ -z "$NODE_UPGRADED_VERSION" ]] && return 0
-  [[ "${NON_INTERACTIVE:-}" == "1" ]] && return 0
-  # Both stdin AND stdout must be a TTY — otherwise (e.g. `install.sh > log.txt`)
-  # the prompt writes to the redirected file while `read` blocks on invisible
-  # input, confusing the user.
-  [[ -t 0 && -t 1 ]] || return 0
-  local answer
-  printf "  ${C_BOLD}Reload your shell now to activate Node %s?${C_RESET} [Y/n] " "$NODE_UPGRADED_VERSION"
-  read -r answer || return 0
-  case "${answer,,}" in
-    "" | y | yes)
-      info "Reloading shell — Node ${NODE_UPGRADED_VERSION} will be active in the next prompt…"
-      exec "${SHELL:-/bin/bash}" -l
-      ;;
-    *) ;;
-  esac
 }
 
 usage() {
@@ -470,11 +443,6 @@ NEMOCLAW_RECOVERY_PROFILE=""
 NEMOCLAW_RECOVERY_EXPORT_DIR=""
 NEMOCLAW_SOURCE_ROOT="$(resolve_repo_root)"
 ONBOARD_RAN=false
-# Set to the installed Node version string when install_nodejs runs the nvm
-# upgrade path. Lets print_done offer to spawn a fresh shell so the user
-# lands in a session with the new Node on PATH. Empty string = no upgrade
-# happened (Node was already acceptable).
-NODE_UPGRADED_VERSION=""
 
 # Compare two semver strings (major.minor.patch). Returns 0 if $1 >= $2.
 # Rejects prerelease suffixes (e.g. "22.16.0-rc.1") to avoid arithmetic errors.
@@ -777,13 +745,14 @@ install_nodejs() {
   local installed_version
   installed_version="$(node --version)"
   info "Node.js installed via nvm: ${installed_version} (default alias)"
-  # Flag so print_done can offer an opt-in shell reload at the end. The
-  # installer runs in a subshell; the user's parent shell still resolves
-  # `node` via the pre-install PATH until it's reloaded. See issue #2178.
-  NODE_UPGRADED_VERSION="$installed_version"
-  warn "Your current shell may still resolve \`node\` to an older version until you reload it."
-  printf "        To activate ${installed_version} in this shell:\n"
-  printf "          exec \"\$SHELL\" -l        # (or) nvm use 22\n"
+  # Surface the shell-reload requirement right next to the install line so the
+  # user isn't left thinking the new Node is already active in their terminal.
+  # install.sh runs as a subprocess; the parent shell's PATH genuinely cannot
+  # be mutated from here, so we print the truth and the exact command.
+  # See issue #2178.
+  warn "Your current shell still resolves \`node\` to the previous version."
+  printf "        Open a new terminal, or run this in your existing shell:\n"
+  printf "          source ~/.nvm/nvm.sh && nvm use 22\n"
 }
 
 # ---------------------------------------------------------------------------

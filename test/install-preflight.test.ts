@@ -1543,27 +1543,12 @@ fi`,
     expect(installNodejs).not.toBeNull();
     const body = installNodejs![0];
     // Anchor to the actual warn/printf calls (not the comment) so the test
-    // fails if the executable statements are removed.
-    expect(body).toMatch(/\n\s*warn\s+"Your current shell may still resolve/);
-    // The printf arg is double-quoted so the SHELL reference is backslash-escaped.
-    expect(body).toMatch(/\n\s*printf\s+"[^"]*exec \\"\\\$SHELL\\" -l/);
-  });
-
-  // Issue #2178 — option 2: let the user auto-activate by spawning a fresh
-  // login shell. Gates must be respected so scripted / piped invocations
-  // (e.g. `curl | bash && nemoclaw onboard`) are not broken.
-  it("maybe_offer_shell_reload skips the prompt in non-interactive mode", () => {
-    const script = fs.readFileSync(INSTALLER_PAYLOAD, "utf-8");
-    const helper = script.match(/maybe_offer_shell_reload\(\)\s*\{[\s\S]*?\n\}/);
-    expect(helper).not.toBeNull();
-    const body = helper![0];
-    // Must only prompt when: upgrade actually happened, NON_INTERACTIVE is
-    // not set, AND stdin is a real TTY. And the accept path must exec $SHELL.
-    expect(body).toMatch(/NODE_UPGRADED_VERSION/);
-    expect(body).toMatch(/NON_INTERACTIVE/);
-    // Both stdin and stdout must be a TTY — guards redirected-stdout case.
-    expect(body).toMatch(/\[\[ -t 0 && -t 1 \]\]/);
-    expect(body).toMatch(/exec "\$\{SHELL:-\/bin\/bash\}" -l/);
+    // fails if the executable statements are removed. A child process can't
+    // mutate the parent's PATH, so the honest fix is printing the exact
+    // command the user can run in their existing shell (no exec tricks —
+    // those create a nested shell that masks the problem; see PR #2298).
+    expect(body).toMatch(/\n\s*warn\s+"Your current shell still resolves/);
+    expect(body).toMatch(/\n\s*printf\s+"[^"]*source ~\/\.nvm\/nvm\.sh && nvm use 22/);
   });
 });
 
