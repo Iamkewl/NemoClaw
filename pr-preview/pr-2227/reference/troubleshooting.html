@@ -877,10 +877,11 @@ In non-interactive mode (<code class="docutils literal notranslate"><span class=
 <p>This is expected.
 The sandbox’s OpenClaw configuration (<code class="docutils literal notranslate"><span class="pre">/sandbox/.openclaw/openclaw.json</span></code>) is baked into the container image at build time.
 NemoClaw’s sandbox entrypoint installs a guard that intercepts <code class="docutils literal notranslate"><span class="pre">openclaw</span> <span class="pre">config</span> <span class="pre">set</span></code> and <code class="docutils literal notranslate"><span class="pre">openclaw</span> <span class="pre">config</span> <span class="pre">unset</span></code> and prints an actionable error, because changes made inside the running sandbox do not persist across rebuilds.</p>
-<p>Rebuild the sandbox from the host to change its OpenClaw configuration:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>nemoclaw<span class="w"> </span>&lt;sandbox&gt;<span class="w"> </span>rebuild
+<p>To change your configuration, exit the sandbox and rerun onboarding:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>nemoclaw<span class="w"> </span>onboard<span class="w"> </span>--resume
 </pre></div>
 </div>
+<p>This rebuilds the sandbox with your updated settings.</p>
 </section>
 <section id="openclaw-doctor-fix-cannot-repair-discord-channel-config-inside-the-sandbox">
 <h3><code class="docutils literal notranslate"><span class="pre">openclaw</span> <span class="pre">doctor</span> <span class="pre">--fix</span></code> cannot repair Discord channel config inside the sandbox<a class="headerlink" href="#openclaw-doctor-fix-cannot-repair-discord-channel-config-inside-the-sandbox" title="Link to this heading">#</a></h3>

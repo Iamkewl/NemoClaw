@@ -555,26 +555,64 @@ Changes made only inside the sandbox are also ephemeral and are lost when the sa
 <section id="dynamic-changes">
 <h2>Dynamic Changes<a class="headerlink" href="#dynamic-changes" title="Link to this heading">#</a></h2>
 <p>Dynamic changes apply a policy update to a running sandbox without restarting it.</p>
-<section id="create-a-policy-file">
-<h3>Create a Policy File<a class="headerlink" href="#create-a-policy-file" title="Link to this heading">#</a></h3>
-<p>Create a YAML file with the endpoints to add.
-Follow the same format as the baseline policy in <code class="docutils literal notranslate"><span class="pre">nemoclaw-blueprint/policies/openclaw-sandbox.yaml</span></code>.
-Add a top-level <code class="docutils literal notranslate"><span class="pre">version</span></code> field (for example, <code class="docutils literal notranslate"><span class="pre">version:</span> <span class="pre">1</span></code>).
-OpenShell rejects policy YAML that omits this field.</p>
-</section>
-<section id="apply-the-policy">
-<h3>Apply the Policy<a class="headerlink" href="#apply-the-policy" title="Link to this heading">#</a></h3>
-<p>Use the OpenShell CLI to apply the policy update:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>openshell<span class="w"> </span>policy<span class="w"> </span><span class="nb">set</span><span class="w"> </span>--policy<span class="w"> </span>&lt;policy-file&gt;<span class="w"> </span>&lt;sandbox-name&gt;
+<blockquote>
+<div><p>[!WARNING]
+<code class="docutils literal notranslate"><span class="pre">openshell</span> <span class="pre">policy</span> <span class="pre">set</span></code> <strong>replaces</strong> the sandbox’s live policy with the contents of the file you provide; it does not merge.
+A running sandbox’s live policy is the baseline from <code class="docutils literal notranslate"><span class="pre">openclaw-sandbox.yaml</span></code> plus every preset that was layered on during onboarding.
+Applying a file that contains only the baseline (or only a single preset) silently drops every other preset that was in effect.</p>
+</div></blockquote>
+<section id="option-1-drop-a-preset-file-and-use-policy-add-recommended">
+<h3>Option 1: Drop a Preset File and Use <code class="docutils literal notranslate"><span class="pre">policy-add</span></code> (Recommended)<a class="headerlink" href="#option-1-drop-a-preset-file-and-use-policy-add-recommended" title="Link to this heading">#</a></h3>
+<p>This is the non-destructive path and the only flow NemoClaw supports out of the box for merging new entries into a running policy.</p>
+<ol class="arabic">
+<li><p>Create a preset-format YAML file under <code class="docutils literal notranslate"><span class="pre">nemoclaw-blueprint/policies/presets/</span></code>, for example <code class="docutils literal notranslate"><span class="pre">nemoclaw-blueprint/policies/presets/influxdb.yaml</span></code>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">preset</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">influxdb</span>
+<span class="w">  </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;InfluxDB</span><span class="nv"> </span><span class="s">time-series</span><span class="nv"> </span><span class="s">database&quot;</span>
+<span class="nt">network_policies</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">influxdb</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">influxdb</span>
+<span class="w">    </span><span class="nt">endpoints</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">influxdb.internal.example.com</span>
+<span class="w">        </span><span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8086</span>
+<span class="w">        </span><span class="nt">protocol</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rest</span>
+<span class="w">        </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">enforce</span>
+<span class="w">        </span><span class="nt">tls</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">terminate</span>
+<span class="w">        </span><span class="nt">rules</span><span class="p">:</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">allow</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> method</span><span class="p">:</span><span class="w"> </span><span class="nv">GET</span><span class="p p-Indicator">,</span><span class="nt"> path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/**&quot;</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">allow</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> method</span><span class="p">:</span><span class="w"> </span><span class="nv">POST</span><span class="p p-Indicator">,</span><span class="nt"> path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/api/v2/write&quot;</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="nt">binaries</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> path</span><span class="p">:</span><span class="w"> </span><span class="nv">/usr/bin/curl</span><span class="w"> </span><span class="p p-Indicator">}</span>
 </pre></div>
 </div>
-<p>The change takes effect immediately.</p>
+</li>
+<li><p>Apply it to the running sandbox:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>nemoclaw<span class="w"> </span>my-assistant<span class="w"> </span>policy-add
+</pre></div>
+</div>
+<p>NemoClaw reads the live policy via <code class="docutils literal notranslate"><span class="pre">openshell</span> <span class="pre">policy</span> <span class="pre">get</span> <span class="pre">--full</span></code>, structurally merges your preset’s <code class="docutils literal notranslate"><span class="pre">network_policies</span></code> into it, and writes the merged result back.
+Existing presets and the baseline remain in place.
+The preset file under <code class="docutils literal notranslate"><span class="pre">presets/</span></code> also persists across sandbox recreations.</p>
+</li>
+</ol>
+</section>
+<section id="option-2-snapshot-edit-and-set-via-openshell">
+<h3>Option 2: Snapshot, Edit, and Set via OpenShell<a class="headerlink" href="#option-2-snapshot-edit-and-set-via-openshell" title="Link to this heading">#</a></h3>
+<p>Use this path only when you cannot add a file under the NemoClaw source tree.
+You must start from the <strong>live</strong> policy, not from <code class="docutils literal notranslate"><span class="pre">openclaw-sandbox.yaml</span></code>, so the presets layered on at onboarding are preserved in the file you apply.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>openshell<span class="w"> </span>policy<span class="w"> </span>get<span class="w"> </span>--full<span class="w"> </span>my-assistant<span class="w"> </span>&gt;<span class="w"> </span>live-policy.yaml
+</pre></div>
+</div>
+<p>Edit <code class="docutils literal notranslate"><span class="pre">live-policy.yaml</span></code> to add your entries under <code class="docutils literal notranslate"><span class="pre">network_policies:</span></code>, keeping the existing <code class="docutils literal notranslate"><span class="pre">version</span></code> field intact, then apply:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>openshell<span class="w"> </span>policy<span class="w"> </span><span class="nb">set</span><span class="w"> </span>--policy<span class="w"> </span>live-policy.yaml<span class="w"> </span>my-assistant
+</pre></div>
+</div>
 </section>
 <section id="scope-of-dynamic-changes">
 <h3>Scope of Dynamic Changes<a class="headerlink" href="#scope-of-dynamic-changes" title="Link to this heading">#</a></h3>
 <p>Dynamic changes apply only to the current session.
-When the sandbox stops, the running policy resets to the baseline defined in the policy file.
-To make changes permanent, update the static policy file and re-run setup.</p>
+When the sandbox stops, the running policy resets to the baseline composed from <code class="docutils literal notranslate"><span class="pre">openclaw-sandbox.yaml</span></code> plus the presets recorded for the sandbox.
+To make a custom policy survive a sandbox recreation, ship the preset file in the repository (Option 1 above — the file under <code class="docutils literal notranslate"><span class="pre">presets/</span></code> persists) or edit <code class="docutils literal notranslate"><span class="pre">openclaw-sandbox.yaml</span></code> and re-run <code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">onboard</span></code>.</p>
 </section>
 <section id="approve-requests-interactively">
 <h3>Approve Requests Interactively<a class="headerlink" href="#approve-requests-interactively" title="Link to this heading">#</a></h3>
@@ -736,8 +774,8 @@ See <a class="reference internal" href="../reference/commands.html#nemoclaw-name
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#dynamic-changes">Dynamic Changes</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#create-a-policy-file">Create a Policy File</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#apply-the-policy">Apply the Policy</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#option-1-drop-a-preset-file-and-use-policy-add-recommended">Option 1: Drop a Preset File and Use <code class="docutils literal notranslate"><span class="pre">policy-add</span></code> (Recommended)</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#option-2-snapshot-edit-and-set-via-openshell">Option 2: Snapshot, Edit, and Set via OpenShell</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#scope-of-dynamic-changes">Scope of Dynamic Changes</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#approve-requests-interactively">Approve Requests Interactively</a></li>
 </ul>
