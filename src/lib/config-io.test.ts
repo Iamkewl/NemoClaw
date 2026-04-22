@@ -36,7 +36,10 @@ describe("config-io", () => {
   });
 
   it("rejects a symlink in place of the config directory", () => {
-    const tmp = makeTempDir();
+    // Place temp dir under HOME so rejectSymlinksOnPath inspects it.
+    const home = process.env.HOME || os.homedir();
+    const tmp = fs.mkdtempSync(path.join(home, ".nemoclaw-test-"));
+    tmpDirs.push(tmp);
     const attackerDir = path.join(tmp, "attacker");
     fs.mkdirSync(attackerDir);
     const symlinkPath = path.join(tmp, ".nemoclaw");
@@ -47,7 +50,9 @@ describe("config-io", () => {
   });
 
   it("rejects a symlink in an ancestor of the config directory", () => {
-    const tmp = makeTempDir();
+    const home = process.env.HOME || os.homedir();
+    const tmp = fs.mkdtempSync(path.join(home, ".nemoclaw-test-"));
+    tmpDirs.push(tmp);
     const attackerDir = path.join(tmp, "attacker");
     fs.mkdirSync(attackerDir);
     const symlinkPath = path.join(tmp, ".nemoclaw");
@@ -58,7 +63,10 @@ describe("config-io", () => {
   });
 
   it("allows a normal directory (no symlinks)", () => {
-    const dir = path.join(makeTempDir(), ".nemoclaw");
+    const home = process.env.HOME || os.homedir();
+    const tmp = fs.mkdtempSync(path.join(home, ".nemoclaw-test-"));
+    tmpDirs.push(tmp);
+    const dir = path.join(tmp, ".nemoclaw");
     ensureConfigDir(dir);
     expect(fs.existsSync(dir)).toBe(true);
     expect(fs.lstatSync(dir).isSymbolicLink()).toBe(false);

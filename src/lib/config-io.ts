@@ -91,9 +91,19 @@ function rejectSymlinksOnPath(dirPath: string): void {
   const resolved = path.resolve(dirPath);
   const resolvedHome = path.resolve(home);
 
-  // Walk from dirPath up to (but not including) HOME, checking each component.
+  // Only check the path components between HOME and dirPath — those are
+  // the user-controllable segments where a symlink attack could be planted.
+  // System-level symlinks above HOME (e.g. /var -> private/var on macOS)
+  // are legitimate and must not trigger rejection.
+  const relToHome = path.relative(resolvedHome, resolved);
+  if (relToHome === "" || relToHome.startsWith("..") || path.isAbsolute(relToHome)) {
+    // dirPath is not under HOME — nothing user-controllable to check.
+    return;
+  }
+
+  // Walk from dirPath up to (but not including) HOME.
   let current = resolved;
-  while (current.length > resolvedHome.length && current !== path.dirname(current)) {
+  while (current !== resolvedHome && current !== path.dirname(current)) {
     try {
       const stat = fs.lstatSync(current);
       if (stat.isSymbolicLink()) {
@@ -101,7 +111,7 @@ function rejectSymlinksOnPath(dirPath: string): void {
         throw new Error(
           `Refusing to use config directory: ${current} is a symbolic link ` +
             `(target: ${target}). This may indicate a symlink attack. ` +
-            `Remove the symlink and retry: rm ${current}`,
+            `Remove the symlink and retry: rm ${shellQuote(current)}`,
         );
       }
     } catch (error) {
