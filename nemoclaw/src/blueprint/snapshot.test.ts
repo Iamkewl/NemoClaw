@@ -190,16 +190,7 @@ describe("snapshot", () => {
       expect(mockExeca).toHaveBeenNthCalledWith(
         2,
         "openshell",
-        [
-          "sandbox",
-          "exec",
-          "mybox",
-          "--",
-          "chown",
-          "-R",
-          "sandbox:sandbox",
-          "/sandbox/.openclaw",
-        ],
+        ["sandbox", "exec", "mybox", "--", "chown", "-R", "sandbox:sandbox", "/sandbox/.openclaw"],
         { reject: false },
       );
     });

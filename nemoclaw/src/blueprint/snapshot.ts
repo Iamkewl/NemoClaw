@@ -105,16 +105,7 @@ export async function restoreIntoSandbox(
   // doesn't trip on a missing chown binary or a tightened exec policy.
   const chownResult = await execa(
     "openshell",
-    [
-      "sandbox",
-      "exec",
-      sandboxName,
-      "--",
-      "chown",
-      "-R",
-      "sandbox:sandbox",
-      "/sandbox/.openclaw",
-    ],
+    ["sandbox", "exec", sandboxName, "--", "chown", "-R", "sandbox:sandbox", "/sandbox/.openclaw"],
     { reject: false },
   );
   if (chownResult.exitCode !== 0) {
