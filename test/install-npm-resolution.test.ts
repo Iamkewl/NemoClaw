@@ -44,8 +44,10 @@ function runInstallerFunction(
   extraEnv: NodeJS.ProcessEnv = {},
   cwd?: string,
   spawnOptions: { uid?: number; gid?: number } = {},
+  installerPath?: string,
 ) {
-  return spawnSync("bash", ["-c", `source "${INSTALLER_PAYLOAD}" >/dev/null 2>&1; ${bashSnippet}`], {
+  const payload = installerPath ?? INSTALLER_PAYLOAD;
+  return spawnSync("bash", ["-c", `source "${payload}" >/dev/null 2>&1; ${bashSnippet}`], {
     cwd: cwd ?? path.join(import.meta.dirname, ".."),
     encoding: "utf-8",
     env: {
@@ -186,6 +188,18 @@ exit 98
     fs.chmodSync(prefixBin, spawnOptions.uid !== undefined ? 0o777 : 0o755);
     fs.chmodSync(prefixLib, 0o555);
 
+    // When dropping to nobody, the repo checkout may not be traversable.
+    // Copy the installer payload into the temp dir so nobody can read it,
+    // and use tmp as cwd so nobody can cd into it.
+    let installerPath: string | undefined;
+    let cwd: string | undefined;
+    if (spawnOptions.uid !== undefined) {
+      installerPath = path.join(tmp, "install.sh");
+      fs.copyFileSync(INSTALLER_PAYLOAD, installerPath);
+      fs.chmodSync(installerPath, 0o644);
+      cwd = tmp;
+    }
+
     const result = runInstallerFunction(
       'if npm_link_targets_writable "$TARGET_PREFIX"; then echo WRITABLE; else echo BLOCKED; fi',
       fakeBin,
@@ -193,8 +207,9 @@ exit 98
         HOME: tmp,
         TARGET_PREFIX: prefix,
       },
-      undefined,
+      cwd,
       spawnOptions,
+      installerPath,
     );
 
     expect(result.status).toBe(0);
