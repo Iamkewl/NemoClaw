@@ -1547,6 +1547,22 @@ fi`,
     // The printf arg is double-quoted so the SHELL reference is backslash-escaped.
     expect(body).toMatch(/exec \\"\\\$SHELL\\" -l/);
   });
+
+  // Issue #2178 — option 2: let the user auto-activate by spawning a fresh
+  // login shell. Gates must be respected so scripted / piped invocations
+  // (e.g. `curl | bash && nemoclaw onboard`) are not broken.
+  it("maybe_offer_shell_reload skips the prompt in non-interactive mode", () => {
+    const script = fs.readFileSync(INSTALLER_PAYLOAD, "utf-8");
+    const helper = script.match(/maybe_offer_shell_reload\(\)\s*\{[\s\S]*?\n\}/);
+    expect(helper).not.toBeNull();
+    const body = helper![0];
+    // Must only prompt when: upgrade actually happened, NON_INTERACTIVE is
+    // not set, AND stdin is a real TTY. And the accept path must exec $SHELL.
+    expect(body).toMatch(/NODE_UPGRADED_VERSION/);
+    expect(body).toMatch(/NON_INTERACTIVE/);
+    expect(body).toMatch(/\[\[ -t 0 \]\]/);
+    expect(body).toMatch(/exec "\$\{SHELL:-\/bin\/bash\}" -l/);
+  });
 });
 
 // ---------------------------------------------------------------------------
