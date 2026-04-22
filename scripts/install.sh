@@ -1021,6 +1021,16 @@ install_nemoclaw() {
     spin "Building NemoClaw CLI modules" bash -c "cd \"$nemoclaw_src\" && npm run --if-present build:cli"
     spin "Building NemoClaw plugin" bash -c "cd \"$nemoclaw_src\"/nemoclaw && npm install --ignore-scripts && npm run build"
     spin "Linking NemoClaw CLI" bash -c "cd \"$nemoclaw_src\" && npm link"
+
+    # Install/upgrade the OpenShell CLI on the GitHub-clone path (curl|bash).
+    # Without this, install.sh defers the openshell version gate entirely to
+    # `nemoclaw onboard`, so any later skip of onboard (preflight blocking,
+    # interrupted session) leaves openshell stale below blueprint's
+    # min_openshell_version even though the new NemoClaw declared a higher
+    # floor. The source-checkout branch intentionally skips this — a developer
+    # running ./scripts/install.sh manages their own openshell. The script is
+    # idempotent on the happy path. See #2272.
+    spin "Installing OpenShell CLI" bash "${NEMOCLAW_SOURCE_ROOT}/scripts/install-openshell.sh"
   fi
 
   # Install/upgrade the OpenShell CLI now rather than deferring to `nemoclaw
