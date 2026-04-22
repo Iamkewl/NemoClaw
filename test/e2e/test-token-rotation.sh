@@ -97,6 +97,11 @@ if [ "$DISCORD_BOT_TOKEN_A" = "$DISCORD_BOT_TOKEN_B" ]; then
   exit 0
 fi
 
+# Determinism: `messagingTokenDefs` (src/lib/onboard.ts:3395-3416) reads ALL
+# messaging env vars. Clear ambient SLACK_* so an extra slack-bridge provider
+# doesn't break the provider-isolation checks.
+unset SLACK_BOT_TOKEN SLACK_APP_TOKEN
+
 # ── Helpers ───────────────────────────────────────────────────────
 
 cleanup() {
