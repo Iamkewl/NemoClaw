@@ -480,17 +480,6 @@ PYSLACK
 # Ref: https://github.com/NVIDIA/NemoClaw/issues/2340
 
 validate_slack_auth() {
-  [ -n "${SLACK_BOT_TOKEN:-}" ] || return 0
-
-  # Only validate tokens with the correct prefix — if the prefix is wrong,
-  # apply_slack_token_override already skipped placeholder resolution and
-  # Bolt's synchronous format check will reject the token without an
-  # unhandled promise rejection.
-  case "${SLACK_BOT_TOKEN}" in
-    xoxb-*) ;;
-    *) return 0 ;;
-  esac
-
   local config_file="/sandbox/.openclaw/openclaw.json"
   local hash_file="/sandbox/.openclaw/.config-hash"
 
@@ -499,6 +488,83 @@ validate_slack_auth() {
     printf '[SECURITY] Refusing Slack auth validation — config or hash path is a symlink\n' >&2
     return 1
   fi
+
+  # Helper: disable all Slack accounts in openclaw.json and recompute hash.
+  _disable_slack_channel() {
+    python3 - "$config_file" <<'PYSLACKDISABLE'
+import json, sys
+
+config_file = sys.argv[1]
+with open(config_file) as f:
+    cfg = json.load(f)
+
+slack = cfg.get("channels", {}).get("slack", {})
+for acct in slack.get("accounts", {}).values():
+    if isinstance(acct, dict):
+        acct["enabled"] = False
+
+with open(config_file, "w") as f:
+    json.dump(cfg, f, indent=2)
+PYSLACKDISABLE
+
+    (cd /sandbox/.openclaw && sha256sum openclaw.json >"$hash_file")
+    printf '[channels] Config hash recomputed after disabling Slack channel\n' >&2
+  }
+
+  # ── Check 1: unresolved placeholders ──────────────────────────
+  # After apply_slack_token_override runs, the config may still contain
+  # openshell:resolve:env: placeholder tokens. This happens when the real
+  # token is not injected into the container env (OpenShell provider model
+  # stores the token in the L7 proxy, not the container). Slack's Bolt SDK
+  # validates token format in-process (botToken must start with xoxb-,
+  # appToken with xapp-), so an unresolved placeholder will crash the
+  # gateway with an unhandled rejection. Disable the channel preemptively.
+  local has_placeholder
+  has_placeholder=$(python3 - "$config_file" <<'PYCHECKPLACEHOLDER'
+import json, sys
+config_file = sys.argv[1]
+try:
+    cfg = json.load(open(config_file))
+    slack = cfg.get("channels", {}).get("slack", {})
+    accounts = slack.get("accounts", {})
+    for acct in accounts.values():
+        if not isinstance(acct, dict):
+            continue
+        if not acct.get("enabled", False):
+            continue
+        for key in ("botToken", "appToken"):
+            val = acct.get(key, "")
+            if val.startswith("openshell:resolve:env:"):
+                print("placeholder:" + key)
+                sys.exit(0)
+    print("resolved")
+except Exception as e:
+    print("error:" + str(e)[:200])
+PYCHECKPLACEHOLDER
+  ) || has_placeholder="error:python3_failed"
+
+  case "$has_placeholder" in
+    placeholder:*)
+      local field="${has_placeholder#placeholder:}"
+      printf '[channels] [slack][default] Slack %s contains unresolved placeholder — Bolt will reject token format; channel disabled\n' "$field" >&2
+      _disable_slack_channel
+      return 0
+      ;;
+    error:*)
+      printf '[channels] Could not check Slack config for placeholders (%s) — continuing\n' "${has_placeholder#error:}" >&2
+      ;;
+  esac
+
+  # ── Check 2: validate resolved token via Slack API ────────────
+  # If the real token was resolved into the config (SLACK_BOT_TOKEN with
+  # xoxb- prefix was available in the container env), validate it against
+  # auth.test before the gateway starts.
+  [ -n "${SLACK_BOT_TOKEN:-}" ] || return 0
+
+  case "${SLACK_BOT_TOKEN}" in
+    xoxb-*) ;;
+    *) return 0 ;;
+  esac
 
   printf '[channels] Validating Slack bot token against auth.test...\n' >&2
 
@@ -543,25 +609,7 @@ PYAUTHTEST
       # shellcheck disable=SC2076  # we want literal match, not pattern
       if [[ " $_fatal_auth_errors " =~ " $slack_error " ]]; then
         printf '[channels] [slack][default] provider failed to start: %s — channel disabled\n' "$slack_error" >&2
-
-        python3 - "$config_file" <<'PYSLACKDISABLE'
-import json, sys
-
-config_file = sys.argv[1]
-with open(config_file) as f:
-    cfg = json.load(f)
-
-slack = cfg.get("channels", {}).get("slack", {})
-for acct in slack.get("accounts", {}).values():
-    if isinstance(acct, dict):
-        acct["enabled"] = False
-
-with open(config_file, "w") as f:
-    json.dump(cfg, f, indent=2)
-PYSLACKDISABLE
-
-        (cd /sandbox/.openclaw && sha256sum openclaw.json >"$hash_file")
-        printf '[channels] Config hash recomputed after disabling Slack channel\n' >&2
+        _disable_slack_channel
       else
         printf '[channels] Slack auth.test returned transient error: %s — channel left enabled\n' "$slack_error" >&2
       fi
