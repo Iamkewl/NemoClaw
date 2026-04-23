@@ -389,12 +389,13 @@ PYCORS
 apply_slack_token_override() {
   [ -n "${SLACK_BOT_TOKEN:-}" ] || return 0
 
-  # SECURITY: Only root can write to /sandbox/.openclaw (root:root 444).
-  # Non-root with SLACK_BOT_TOKEN set means the placeholder can never be resolved —
-  # Bolt will crash with invalid_auth. Fail fast rather than silently skip.
+  # Non-root cannot write to /sandbox/.openclaw (root:root 444), so the
+  # placeholder token cannot be resolved here. Log a warning and continue —
+  # the Slack channel guard will catch the inevitable auth failure at runtime
+  # without crashing the gateway. Ref: #2340
   if [ "$(id -u)" -ne 0 ]; then
-    printf '[SECURITY] Slack Socket Mode requires a root container — SLACK_BOT_TOKEN is set but token placeholder resolution needs root. Run the container as root or remove SLACK_BOT_TOKEN.\n' >&2
-    return 1
+    printf '[channels] Slack token override skipped (non-root) — channel guard will handle auth failure at runtime\n' >&2
+    return 0
   fi
 
   local config_file="/sandbox/.openclaw/openclaw.json"
