@@ -497,13 +497,19 @@ describe("Slack auth pre-validation (#2340)", () => {
     expect(rootBlock).toBeTruthy();
   });
 
-  it("disables the channel if config still has unresolved placeholders", () => {
+  it("emits trace logging at function entry", () => {
     const fn = src.match(/validate_slack_auth\(\) \{([\s\S]*?)^}/m);
     expect(fn).toBeTruthy();
-    expect(fn[1]).toContain("openshell:resolve:env:");
-    expect(fn[1]).toContain("placeholder:");
-    expect(fn[1]).toContain("unresolved placeholder");
-    expect(fn[1]).toContain("_disable_slack_channel");
+    expect(fn[1]).toContain("validate_slack_auth: starting");
+  });
+
+  it("disables the channel if config has unresolved Slack placeholders via grep", () => {
+    const fn = src.match(/validate_slack_auth\(\) \{([\s\S]*?)^}/m);
+    expect(fn).toBeTruthy();
+    // Uses grep (not python3) to detect placeholders — simpler and more robust
+    expect(fn[1]).toContain('grep -q \'"openshell:resolve:env:SLACK_\'');
+    expect(fn[1]).toContain("unresolved Slack placeholder");
+    expect(fn[1]).toContain("channel disabled");
   });
 
   it("skips API validation when SLACK_BOT_TOKEN is not set", () => {
