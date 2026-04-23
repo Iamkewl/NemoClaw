@@ -846,6 +846,7 @@ async function ensureLiveSandboxOrExit(sandboxName, { allowNonReadyPhase = false
   process.exit(1);
 }
 
+/** Print user-facing guidance when OpenShell is too old to support `openshell logs`. */
 function printOldLogsCompatibilityGuidance(installedVersion = null) {
   const versionText = installedVersion ? ` (${installedVersion})` : "";
   console.error(
@@ -2318,11 +2319,14 @@ async function sandboxRebuild(sandboxName, args = [], opts = {}) {
   // lets us abort with the sandbox still intact.  See #2273.
   const session = onboardSession.loadSession();
   if (session && session.sandboxName && session.sandboxName !== sandboxName) {
-    log(`Preflight warning: session belongs to '${session.sandboxName}', not '${sandboxName}'`);
-    console.log(
-      `  ${D}Note: onboard session belongs to '${session.sandboxName}', not '${sandboxName}'. ` +
-      `Provider/credential info may be stale.${R}`,
+    log(`Preflight error: session belongs to '${session.sandboxName}', not '${sandboxName}'`);
+    console.error(
+      `  ${_RD}Rebuild preflight failed:${R} onboard session belongs to '${session.sandboxName}', not '${sandboxName}'.`,
     );
+    console.error("  Run `nemoclaw onboard` for this sandbox before rebuilding.");
+    console.error("  Sandbox is untouched — no data was lost.");
+    bail(`Stale onboard session for '${session.sandboxName}'`);
+    return;
   }
   const rebuildCredentialEnv = session?.credentialEnv || null;
   if (rebuildCredentialEnv) {
@@ -2527,7 +2531,7 @@ async function sandboxRebuild(sandboxName, args = [], opts = {}) {
     console.error(`    2. Run: nemoclaw onboard --resume`);
     console.error(`       This will recreate sandbox '${sandboxName}'.`);
     console.error(`    3. Then restore your workspace state:`);
-    console.error(`       nemoclaw ${sandboxName} snapshot restore ${backup.manifest.backupPath}`);
+    console.error(`       nemoclaw ${sandboxName} snapshot restore "${backup.manifest.timestamp}"`);
     console.error("");
     bail(`Recreate failed (sandbox destroyed). Backup: ${backup.manifest.backupPath}`, onboardExitCode);
     return;

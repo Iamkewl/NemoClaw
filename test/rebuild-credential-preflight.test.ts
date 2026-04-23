@@ -413,14 +413,12 @@ describe("Issue #2273: atomic rebuild", () => {
     );
 
     it(
-      "throwOnError mode throws instead of exiting on recreate failure",
+      "preflight failure exits non-zero when credential is missing",
       { timeout: 60_000 },
       () => {
-        // This tests the upgrade-sandboxes batch mode where throwOnError
-        // is set.  We can't easily test throwOnError from a subprocess,
-        // but we can verify the process exits non-zero (which is the
-        // observable behavior in batch mode since bail() does process.exit
-        // when throwOnError is not set from CLI).
+        // Verifies that missing credentials cause rebuild to exit non-zero.
+        // This is the observable CLI behavior — the preflight check fails
+        // and bail() calls process.exit with a non-zero code.
         const f = createFixture({
           credentialEnv: "NVIDIA_API_KEY",
           // No credential — preflight will fail and exit non-zero
