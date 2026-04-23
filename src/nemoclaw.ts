@@ -2296,17 +2296,20 @@ async function sandboxRebuild(sandboxName, args = [], opts = {}) {
   // credential when onboard runs in non-interactive mode.  Checking now
   // lets us abort with the sandbox still intact.  See #2273.
   const session = onboardSession.loadSession();
+  let rebuildCredentialEnv: string | null = null;
   if (session && session.sandboxName && session.sandboxName !== sandboxName) {
-    log(`Preflight error: session belongs to '${session.sandboxName}', not '${sandboxName}'`);
-    console.error(
-      `  ${_RD}Rebuild preflight failed:${R} onboard session belongs to '${session.sandboxName}', not '${sandboxName}'.`,
+    // Session belongs to a different sandbox — its credentialEnv may be
+    // wrong (e.g. hermes session while rebuilding openclaw).  Skip the
+    // credential preflight; the agent sync from the registry (#2201)
+    // and onboard itself will handle provider selection.
+    log(`Preflight warning: session belongs to '${session.sandboxName}', not '${sandboxName}' — skipping credential preflight`);
+    console.log(
+      `  ${D}Note: onboard session belongs to '${session.sandboxName}', not '${sandboxName}'. ` +
+      `Skipping credential preflight.${R}`,
     );
-    console.error("  Run `nemoclaw onboard` for this sandbox before rebuilding.");
-    console.error("  Sandbox is untouched — no data was lost.");
-    bail(`Stale onboard session for '${session.sandboxName}'`);
-    return;
+  } else {
+    rebuildCredentialEnv = session?.credentialEnv || null;
   }
-  const rebuildCredentialEnv = session?.credentialEnv || null;
   if (rebuildCredentialEnv) {
     const credentialValue = getCredential(rebuildCredentialEnv);
     log(`Preflight credential check: ${rebuildCredentialEnv} → ${credentialValue ? "present" : "MISSING"}`);
