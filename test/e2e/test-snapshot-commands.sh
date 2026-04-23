@@ -254,12 +254,15 @@ fi
 info "Phase 9: Verifying snapshot help output..."
 
 run_capture HELP_OUTPUT nemoclaw "${SANDBOX_NAME}" snapshot
+if [ "$_CAPTURE_RC" -ne 0 ]; then
+  fail "snapshot help exited with code $_CAPTURE_RC: ${HELP_OUTPUT}"
+fi
 if echo "$HELP_OUTPUT" | grep -q "snapshot create" \
   && echo "$HELP_OUTPUT" | grep -q "snapshot list" \
   && echo "$HELP_OUTPUT" | grep -q "snapshot restore"; then
   pass "snapshot help shows create/list/restore"
 else
-  fail "snapshot help incomplete (code $_CAPTURE_RC): ${HELP_OUTPUT}"
+  fail "snapshot help incomplete: ${HELP_OUTPUT}"
 fi
 
 # ── Cleanup ─────────────────────────────────────────────────────────
