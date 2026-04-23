@@ -465,98 +465,129 @@ PYSLACK
   printf '[channels] Config hash recomputed after Slack token override\n' >&2
 }
 
-# ── Slack auth pre-validation ────────────────────────────────────
-# Pre-validates the resolved Slack bot token against the Slack auth.test
-# API before launching the gateway. If the token is invalid (e.g., revoked
-# or expired), the Slack channel is disabled in openclaw.json so the
-# gateway starts without it — preventing an unhandled promise rejection
-# from @slack/web-api that would crash the entire gateway process.
-# Node v22 treats unhandled rejections as fatal, taking down inference,
-# chat, and TUI along with the failed channel.
+# ── Slack channel guard (unhandled-rejection safety net) ─────────
+# Prevents the gateway from crashing when a Slack channel fails to
+# initialize (e.g., invalid_auth, token_revoked, unresolved placeholder
+# tokens). Instead of modifying openclaw.json (which is Landlock
+# read-only at runtime), this injects a Node.js preload via
+# NODE_OPTIONS that catches unhandled promise rejections originating
+# from Slack channel initialization and logs them as warnings instead
+# of letting Node v22 treat them as fatal.
 #
-# Network errors (proxy not ready, Slack API unreachable) are treated as
-# transient: the channel is left enabled and the gateway is allowed to
-# retry on its own. Only a definitive auth failure disables the channel.
+# Same pattern as the HTTP proxy fix (_PROXY_FIX_SCRIPT) and the
+# WebSocket CONNECT fix (_WS_FIX_SCRIPT).
+#
 # Ref: https://github.com/NVIDIA/NemoClaw/issues/2340
+_SLACK_GUARD_SCRIPT="/tmp/nemoclaw-slack-channel-guard.js"
 
-validate_slack_auth() {
-  [ -n "${SLACK_BOT_TOKEN:-}" ] || return 0
-
-  # Only validate tokens with the correct prefix — if the prefix is wrong,
-  # apply_slack_token_override already skipped placeholder resolution and
-  # Bolt's synchronous format check will reject the token without an
-  # unhandled promise rejection.
-  case "${SLACK_BOT_TOKEN}" in
-    xoxb-*) ;;
-    *) return 0 ;;
-  esac
-
+install_slack_channel_guard() {
   local config_file="/sandbox/.openclaw/openclaw.json"
-  local hash_file="/sandbox/.openclaw/.config-hash"
 
-  # SECURITY: Refuse to write through symlinks to prevent symlink-following attacks.
-  if [ -L "$config_file" ] || [ -L "$hash_file" ]; then
-    printf '[SECURITY] Refusing Slack auth validation — config or hash path is a symlink\n' >&2
-    return 1
+  # Only install if a Slack channel is configured
+  if ! grep -q '"slack"' "$config_file" 2>/dev/null; then
+    return 0
   fi
 
-  printf '[channels] Validating Slack bot token against auth.test...\n' >&2
+  printf '[channels] Installing Slack channel guard (unhandled-rejection safety net)\n' >&2
 
-  local auth_result
-  auth_result=$(
-    SLACK_BOT_TOKEN="$SLACK_BOT_TOKEN" python3 <<'PYAUTHTEST'
-import json, os, sys, urllib.request
+  emit_sandbox_sourced_file "$_SLACK_GUARD_SCRIPT" <<'SLACK_GUARD_EOF'
+// SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+//
+// slack-channel-guard.js — catches unhandled promise rejections from Slack
+// channel initialization so a single channel auth failure does not crash
+// the entire OpenClaw gateway. Node v22 treats unhandled rejections as
+// fatal (--unhandled-rejections=throw is the default), taking down
+// inference, chat, and TUI alongside the failed Slack channel.
+//
+// This preload installs a process-level handler that detects Slack-specific
+// rejections (by error code or stack trace) and logs a warning instead of
+// crashing. Non-Slack rejections are re-thrown to preserve normal behavior.
+//
+// Ref: https://github.com/NVIDIA/NemoClaw/issues/2340
 
-token = os.environ["SLACK_BOT_TOKEN"]
-try:
-    req = urllib.request.Request(
-        "https://slack.com/api/auth.test",
-        headers={"Authorization": "Bearer " + token,
-                 "Content-Type": "application/x-www-form-urlencoded"},
-        data=b"",
-    )
-    with urllib.request.urlopen(req, timeout=10) as resp:
-        data = json.loads(resp.read())
-    if data.get("ok"):
-        print("ok")
-    else:
-        print("error:" + data.get("error", "unknown"))
-except Exception as e:
-    print("network_error:" + str(e)[:200])
-PYAUTHTEST
-  ) || auth_result="network_error:python3_failed"
+(function () {
+  'use strict';
 
-  case "$auth_result" in
-    ok)
-      printf '[channels] Slack bot token validated successfully\n' >&2
-      ;;
-    error:*)
-      local slack_error="${auth_result#error:}"
-      printf '[channels] [slack][default] provider failed to start: %s — channel disabled\n' "$slack_error" >&2
+  // Slack-specific error codes from @slack/web-api that indicate auth failure.
+  // These appear as error.code on the WebAPIRequestError or CodedError objects.
+  var SLACK_AUTH_ERRORS = [
+    'slack_webapi_platform_error',
+    'slack_webapi_request_error',
+    'slackbot_error',
+  ];
 
-      python3 - "$config_file" <<'PYSLACKDISABLE'
-import json, sys
+  // Slack-specific error messages that indicate auth/token problems.
+  var SLACK_AUTH_MESSAGES = [
+    'invalid_auth',
+    'not_authed',
+    'token_revoked',
+    'token_expired',
+    'account_inactive',
+    'missing_scope',
+    'not_allowed_token_type',
+    'An API error occurred: invalid_auth',
+  ];
 
-config_file = sys.argv[1]
-with open(config_file) as f:
-    cfg = json.load(f)
+  function isSlackRejection(reason) {
+    if (!reason) return false;
 
-slack = cfg.get("channels", {}).get("slack", {})
-for acct in slack.get("accounts", {}).values():
-    if isinstance(acct, dict):
-        acct["enabled"] = False
+    // Check error code (Slack SDK sets .code on its errors)
+    var code = reason.code || '';
+    for (var i = 0; i < SLACK_AUTH_ERRORS.length; i++) {
+      if (code === SLACK_AUTH_ERRORS[i]) return true;
+    }
 
-with open(config_file, "w") as f:
-    json.dump(cfg, f, indent=2)
-PYSLACKDISABLE
+    // Check error message
+    var msg = String(reason.message || reason);
+    for (var j = 0; j < SLACK_AUTH_MESSAGES.length; j++) {
+      if (msg.indexOf(SLACK_AUTH_MESSAGES[j]) !== -1) return true;
+    }
 
-      (cd /sandbox/.openclaw && sha256sum openclaw.json >"$hash_file")
-      printf '[channels] Config hash recomputed after disabling Slack channel\n' >&2
-      ;;
-    network_error:*)
-      printf '[channels] Could not reach Slack API for token validation (%s) — channel left enabled\n' "${auth_result#network_error:}" >&2
-      ;;
-  esac
+    // Check stack trace for @slack/ packages
+    var stack = reason.stack || '';
+    if (stack.indexOf('@slack/') !== -1 || stack.indexOf('slack-') !== -1) {
+      return true;
+    }
+
+    return false;
+  }
+
+  function handleSlackError(reason, source) {
+    if (isSlackRejection(reason)) {
+      var msg = (reason && reason.message) ? reason.message : String(reason);
+      process.stderr.write(
+        '[channels] [slack] provider failed to start: ' + msg +
+        ' \u2014 ' + source + ' caught by safety net, gateway continues\n'
+      );
+      return true; // handled
+    }
+    return false;
+  }
+
+  // Catch async Slack errors (rejected promises from @slack/web-api).
+  process.on('unhandledRejection', function (reason, promise) {
+    if (handleSlackError(reason, 'unhandledRejection')) return;
+    // Non-Slack: re-throw to preserve default --unhandled-rejections=throw.
+    throw reason;
+  });
+
+  // Catch sync Slack errors (e.g., Bolt token format validation throws
+  // synchronously when appToken doesn't start with xapp-).
+  process.on('uncaughtException', function (err, origin) {
+    if (handleSlackError(err, 'uncaughtException')) return;
+    // Non-Slack: re-throw to preserve normal crash behavior.
+    // Print the error first since re-throw inside uncaughtException handler
+    // may not print the original stack.
+    process.stderr.write(err.stack || String(err));
+    process.stderr.write('\n');
+    process.exit(1);
+  });
+})();
+SLACK_GUARD_EOF
+
+  export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--require $_SLACK_GUARD_SCRIPT"
+  printf '[channels] Slack channel guard installed (NODE_OPTIONS updated)\n' >&2
 }
 
 _read_gateway_token() {
@@ -1090,7 +1121,7 @@ if [ "$(id -u)" -ne 0 ]; then
   apply_model_override
   apply_cors_override
   apply_slack_token_override
-  validate_slack_auth
+  install_slack_channel_guard
   export_gateway_token
   install_configure_guard
   configure_messaging_channels
@@ -1206,7 +1237,7 @@ verify_config_integrity /sandbox/.openclaw
 apply_model_override
 apply_cors_override
 apply_slack_token_override
-validate_slack_auth
+install_slack_channel_guard
 export_gateway_token
 install_configure_guard
 
