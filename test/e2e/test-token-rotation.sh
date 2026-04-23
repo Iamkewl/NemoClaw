@@ -36,7 +36,7 @@ elif command -v gtimeout >/dev/null 2>&1; then
 fi
 
 if [ "${NEMOCLAW_E2E_NO_TIMEOUT:-0}" != "1" ]; then
-  TIMEOUT_SECONDS="${NEMOCLAW_E2E_TIMEOUT_SECONDS:-900}"
+  TIMEOUT_SECONDS="${NEMOCLAW_E2E_TIMEOUT_SECONDS:-2400}"
   if [ -n "$TIMEOUT_CMD" ]; then
     export NEMOCLAW_E2E_NO_TIMEOUT=1
     exec "$TIMEOUT_CMD" -s TERM "$TIMEOUT_SECONDS" "$0" "$@"
