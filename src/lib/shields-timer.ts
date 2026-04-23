@@ -6,13 +6,14 @@
 // restores the captured policy snapshot.
 //
 // Usage (internal — called by shields.ts via fork()):
-//   node shields-timer.js <sandbox-name> <snapshot-path> <restore-at-iso>
+//   node shields-timer.js <sandbox-name> <snapshot-path> <restore-at-iso> <config-path> <config-dir>
 
 import fs from "node:fs";
 import path from "node:path";
 
 import { buildPolicySetCommand } from "./policies";
 import { run } from "./runner";
+import { lockAgentConfig } from "./shields";
 
 type UnknownRecord = { [key: string]: unknown };
 
@@ -32,6 +33,8 @@ interface TimerArgs {
   delayMs: number;
   stateFile: string;
   markerPath: string;
+  configPath?: string;
+  configDir?: string;
 }
 
 const STATE_DIR = path.join(process.env.HOME ?? "/tmp", ".nemoclaw", "state");
@@ -42,7 +45,7 @@ function isRecord(value: unknown): value is UnknownRecord {
 }
 
 function parseTimerArgs(argv: string[]): TimerArgs | null {
-  const [sandboxName, snapshotPath, restoreAtIso] = argv;
+  const [sandboxName, snapshotPath, restoreAtIso, configPath, configDir] = argv;
   const restoreAtMs = restoreAtIso ? new Date(restoreAtIso).getTime() : Number.NaN;
 
   if (!sandboxName || !snapshotPath || !restoreAtIso || Number.isNaN(restoreAtMs)) {
@@ -57,6 +60,8 @@ function parseTimerArgs(argv: string[]): TimerArgs | null {
     delayMs: Math.max(0, restoreAtMs - Date.now()),
     stateFile: path.join(STATE_DIR, `shields-${sandboxName}.json`),
     markerPath: path.join(STATE_DIR, `shields-timer-${sandboxName}.json`),
+    configPath,
+    configDir,
   };
 }
 
@@ -117,16 +122,6 @@ function runRestoreTimer(args: TimerArgs): void {
       return;
     }
 
-    // Update state first — policy restore can take seconds and callers
-    // check state to determine whether shields are up or down.
-    updateState(args.stateFile, {
-      shieldsDown: false,
-      shieldsDownAt: null,
-      shieldsDownTimeout: null,
-      shieldsDownReason: null,
-      shieldsDownPolicy: null,
-    });
-
     // Restore policy (slow — openshell policy set --wait blocks)
     const result = run(buildPolicySetCommand(args.snapshotPath, args.sandboxName), {
       ignoreError: true,
@@ -134,9 +129,6 @@ function runRestoreTimer(args: TimerArgs): void {
     const status = typeof result.status === "number" ? result.status : 1;
 
     if (status !== 0) {
-      // Policy restore failed — revert state so callers know shields are
-      // still down. The sandbox remains relaxed.
-      updateState(args.stateFile, { shieldsDown: true });
       appendAudit({
         action: "shields_up_failed",
         sandbox: args.sandboxName,
@@ -148,14 +140,73 @@ function runRestoreTimer(args: TimerArgs): void {
       return;
     }
 
+    // Re-lock config file using the shared lockAgentConfig from shields.ts.
+    // lockAgentConfig runs each operation independently and verifies the
+    // on-disk state — it throws if verification fails.
+    let lockVerified = true;
+    const lockTarget = args.configPath && args.configDir
+      ? { configPath: args.configPath, configDir: args.configDir }
+      : null;
+
+    if (args.configPath && !lockTarget) {
+      lockVerified = false;
+      appendAudit({
+        action: "shields_auto_restore_lock_warning",
+        sandbox: args.sandboxName,
+        timestamp: now,
+        restored_by: "auto_timer",
+        warning: "Missing config directory for auto-restore re-lock verification",
+        lock_verified: false,
+      });
+    } else if (lockTarget) {
+      try {
+        lockAgentConfig(args.sandboxName, lockTarget);
+      } catch (error: unknown) {
+        lockVerified = false;
+        appendAudit({
+          action: "shields_auto_restore_lock_warning",
+          sandbox: args.sandboxName,
+          timestamp: now,
+          restored_by: "auto_timer",
+          warning: error instanceof Error ? error.message : String(error),
+          lock_verified: false,
+        });
+      }
+    }
+
+    // Only mark shields as UP if the lock was verified (or no config path).
+    if (lockVerified) {
+      updateState(args.stateFile, {
+        shieldsDown: false,
+        shieldsDownAt: null,
+        shieldsDownTimeout: null,
+        shieldsDownReason: null,
+        shieldsDownPolicy: null,
+      });
+
+      appendAudit({
+        action: "shields_auto_restore",
+        sandbox: args.sandboxName,
+        timestamp: now,
+        restored_by: "auto_timer",
+        policy_snapshot: args.snapshotPath,
+        restore_at: args.restoreAtIso,
+      });
+      return;
+    }
+
+    // Explicitly ensure state reflects shields are still DOWN.
+    // shieldsDown() already wrote shieldsDown: true, but be explicit rather
+    // than relying on the absence of an update.
+    updateState(args.stateFile, { shieldsDown: true });
     appendAudit({
-      action: "shields_auto_restore",
+      action: "shields_up_failed",
       sandbox: args.sandboxName,
       timestamp: now,
       restored_by: "auto_timer",
-      policy_snapshot: args.snapshotPath,
-      restore_at: args.restoreAtIso,
+      error: "Config re-lock verification failed — shields remain DOWN",
     });
+    exitCode = 1;
   } catch (error: unknown) {
     appendAudit({
       action: "shields_up_failed",

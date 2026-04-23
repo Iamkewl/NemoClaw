@@ -2217,6 +2217,7 @@ function getEffectiveProviderName(providerKey) {
     case "nim-local":
       return "nvidia-nim";
     case "ollama":
+    case "install-ollama":
       return "ollama-local";
     case "vllm":
       return "vllm-local";
@@ -2614,11 +2615,12 @@ function getNonInteractiveProvider() {
     "custom",
     "nim-local",
     "vllm",
+    "install-ollama",
   ]);
   if (!validProviders.has(normalized)) {
     console.error(`  Unsupported NEMOCLAW_PROVIDER: ${providerKey}`);
     console.error(
-      "  Valid values: build, openai, anthropic, anthropicCompatible, gemini, ollama, custom, nim-local, vllm",
+      "  Valid values: build, openai, anthropic, anthropicCompatible, gemini, ollama, custom, nim-local, vllm, install-ollama",
     );
     process.exit(1);
   }
@@ -2689,7 +2691,7 @@ async function preflight() {
       // Source of truth: min_openshell_version in nemoclaw-blueprint/blueprint.yaml.
       // Fall back to the Landlock-enforcement floor (also MIN_VERSION in
       // scripts/install-openshell.sh) if the blueprint cannot be read.
-      const minOpenshellVersion = getBlueprintMinOpenshellVersion() ?? "0.0.29";
+      const minOpenshellVersion = getBlueprintMinOpenshellVersion() ?? "0.0.32";
       const needsUpgrade = !versionGte(currentVersion, minOpenshellVersion);
       if (needsUpgrade) {
         console.log(
@@ -3382,6 +3384,16 @@ async function createSandbox(
         )
       : null;
 
+  // Drop channels the operator disabled via `nemoclaw <sandbox> channels stop`.
+  // Credentials stay in the keychain; the bridge simply isn't registered with
+  // the gateway on the next rebuild. `channels start` removes the entry and
+  // the bridge comes back.
+  const disabledChannels = registry.getDisabledChannels(sandboxName);
+  const disabledEnvKeys = new Set(
+    MESSAGING_CHANNELS.filter((c) => disabledChannels.includes(c.name))
+      .flatMap((c) => (c.appTokenEnvKey ? [c.envKey, c.appTokenEnvKey] : [c.envKey])),
+  );
+
   const messagingTokenDefs = [
     {
       name: `${sandboxName}-discord-bridge`,
@@ -3403,7 +3415,9 @@ async function createSandbox(
       envKey: "TELEGRAM_BOT_TOKEN",
       token: getMessagingToken("TELEGRAM_BOT_TOKEN"),
     },
-  ].filter(({ envKey }) => !enabledEnvKeys || enabledEnvKeys.has(envKey));
+  ]
+    .filter(({ envKey }) => !enabledEnvKeys || enabledEnvKeys.has(envKey))
+    .filter(({ envKey }) => !disabledEnvKeys.has(envKey));
 
   if (webSearchConfig) {
     messagingTokenDefs.push({
@@ -3583,6 +3597,10 @@ async function createSandbox(
 
   // Stage build context — use the custom Dockerfile path when provided,
   // otherwise use the optimised default that only sends what the build needs.
+  // The build context contains source code, scripts, and potentially API keys
+  // in env args, so it must not persist in /tmp after a failed sandbox create.
+  // run() calls process.exit() on failure (bypassing normal control flow), so
+  // we register a process 'exit' handler to guarantee cleanup in all cases.
   let buildCtx, stagedDockerfile;
   if (fromDockerfile) {
     const fromResolved = path.resolve(fromDockerfile);
@@ -3627,6 +3645,19 @@ async function createSandbox(
   } else {
     ({ buildCtx, stagedDockerfile } = stageOptimizedSandboxBuildContext(ROOT));
   }
+  // Returns true if the build context was fully removed, false otherwise.
+  // The caller uses this to decide whether the process 'exit' safety net
+  // can be deregistered — if inline cleanup fails, we leave the handler
+  // armed so the temp dir is still removed on process exit.
+  const cleanupBuildCtx = (): boolean => {
+    try {
+      fs.rmSync(buildCtx, { recursive: true, force: true });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  process.on("exit", cleanupBuildCtx);
 
   // Create sandbox (use -- echo to avoid dropping into interactive shell)
   // Pass the base policy so sandbox starts in proxy mode (required for policy updates later)
@@ -3851,8 +3882,14 @@ async function createSandbox(
     },
   });
 
-  // Clean up build context regardless of outcome
-  run(["rm", "-rf", buildCtx], { ignoreError: true });
+  // Clean up build context regardless of outcome.
+  // Use fs.rmSync instead of run() to avoid spawning a shell process.
+  // Only deregister the 'exit' safety net when inline cleanup succeeded;
+  // otherwise leave it armed so a later process.exit() still removes the
+  // temp dir (which may hold source and env-arg API keys).
+  if (cleanupBuildCtx()) {
+    process.removeListener("exit", cleanupBuildCtx);
+  }
 
   if (createResult.status !== 0) {
     const failure = classifySandboxCreateFailure(createResult.output);
@@ -3955,6 +3992,7 @@ async function createSandbox(
     providerCredentialHashes:
       Object.keys(providerCredentialHashes).length > 0 ? providerCredentialHashes : undefined,
     messagingChannels: activeMessagingChannels,
+    disabledChannels: disabledChannels.length > 0 ? [...disabledChannels] : undefined,
   });
 
   // Restore workspace state if we backed it up during credential rotation.
@@ -4081,9 +4119,14 @@ async function setupNim(gpu) {
       label: "Local vLLM [experimental] — running",
     });
   }
-  // On macOS without Ollama, offer to install it
-  if (!hasOllama && process.platform === "darwin") {
-    options.push({ key: "install-ollama", label: "Install Ollama (macOS)" });
+  // Without Ollama, offer to install it so users always have a local fallback
+  // (e.g. when the NVIDIA API server is down and cloud keys are unavailable)
+  if (!hasOllama && !ollamaRunning) {
+    if (process.platform === "darwin") {
+      options.push({ key: "install-ollama", label: "Install Ollama (macOS)" });
+    } else if (process.platform === "linux") {
+      options.push({ key: "install-ollama", label: "Install Ollama (Linux)" });
+    }
   }
 
   if (options.length > 1) {
@@ -4094,10 +4137,17 @@ async function setupNim(gpu) {
         const providerKey = requestedProvider || "build";
         selected = options.find((o) => o.key === providerKey);
         if (!selected) {
-          console.error(
-            `  Requested provider '${providerKey}' is not available in this environment.`,
-          );
-          process.exit(1);
+          // install-ollama is valid even when Ollama is already installed —
+          // fall back to the existing ollama option silently
+          if (providerKey === "install-ollama") {
+            selected = options.find((o) => o.key === "ollama");
+          }
+          if (!selected) {
+            console.error(
+              `  Requested provider '${providerKey}' is not available in this environment.`,
+            );
+            process.exit(1);
+          }
         }
         note(`  [non-interactive] Provider: ${selected.key}`);
       } else {
@@ -4614,9 +4664,13 @@ async function setupNim(gpu) {
         }
         break;
       } else if (selected.key === "install-ollama") {
-        // macOS only — this option is gated by process.platform === "darwin" above
-        console.log("  Installing Ollama via Homebrew...");
-        run(["brew", "install", "ollama"], { ignoreError: true });
+        if (process.platform === "darwin") {
+          console.log("  Installing Ollama via Homebrew...");
+          run(["brew", "install", "ollama"], { ignoreError: true });
+        } else {
+          console.log("  Installing Ollama via official installer...");
+          run("set -o pipefail; curl -fsSL https://ollama.com/install.sh | sh");
+        }
         console.log("  Starting Ollama...");
         // Shell required: backgrounding (&), env var prefix, output redirection.
         run(`OLLAMA_HOST=0.0.0.0:${OLLAMA_PORT} ollama serve > /dev/null 2>&1 &`, {
@@ -6184,6 +6238,7 @@ function getDashboardGuidanceLines(dashboardAccess = [], options = {}) {
   return guidance;
 }
 
+/** Print the post-onboard dashboard with sandbox status and reconfiguration hints. */
 function printDashboard(sandboxName, model, provider, nimContainer = null, agent = null) {
   const nimStat = nimContainer ? nim.nimStatusByName(nimContainer) : nim.nimStatus(sandboxName);
   const nimLabel = nimStat.running ? "running" : "not running";
@@ -6233,7 +6288,9 @@ function printDashboard(sandboxName, model, provider, nimContainer = null, agent
       },
     });
   } else if (token) {
-    console.log("  OpenClaw UI (tokenized URL; treat it like a password)");
+    console.log(
+      "  OpenClaw UI (tokenized URL; treat it like a password; save it now - it will not be printed again)",
+    );
     for (const line of guidanceLines) {
       console.log(`  ${line}`);
     }
@@ -6257,6 +6314,11 @@ function printDashboard(sandboxName, model, provider, nimContainer = null, agent
     );
   }
   console.log(`  ${"─".repeat(50)}`);
+  console.log("");
+  console.log("  To change settings later:");
+  console.log(`    Model:       openshell inference set -g nemoclaw -m <model> -p <provider>`);
+  console.log(`    Policies:    nemoclaw ${sandboxName} policy-add`);
+  console.log("    Credentials: nemoclaw credentials reset <KEY>  then  nemoclaw onboard");
   console.log("");
 }
 
