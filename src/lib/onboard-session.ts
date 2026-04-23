@@ -207,16 +207,27 @@ function parseLockInfo(value: unknown): LockInfo | null {
 
 export function redactSensitiveText(value: unknown): string | null {
   if (typeof value !== "string") return null;
-  return value
-    .replace(
-      /(NVIDIA_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|GEMINI_API_KEY|COMPATIBLE_API_KEY|COMPATIBLE_ANTHROPIC_API_KEY|BRAVE_API_KEY)=\S+/gi,
-      "$1=<REDACTED>",
-    )
-    .replace(/Bearer\s+\S+/gi, "Bearer <REDACTED>")
-    .replace(/nvapi-[A-Za-z0-9_-]{10,}/g, "<REDACTED>")
-    .replace(/ghp_[A-Za-z0-9]{20,}/g, "<REDACTED>")
-    .replace(/sk-[A-Za-z0-9_-]{10,}/g, "<REDACTED>")
-    .slice(0, 240);
+  return (
+    value
+      .replace(
+        /(NVIDIA_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|GEMINI_API_KEY|COMPATIBLE_API_KEY|COMPATIBLE_ANTHROPIC_API_KEY|BRAVE_API_KEY|SLACK_BOT_TOKEN|SLACK_APP_TOKEN|DISCORD_BOT_TOKEN|TELEGRAM_BOT_TOKEN)=\S+/gi,
+        "$1=<REDACTED>",
+      )
+      .replace(/Bearer\s+\S+/gi, "Bearer <REDACTED>")
+      .replace(/nvapi-[A-Za-z0-9_-]{10,}/g, "<REDACTED>")
+      .replace(/nvcf-[A-Za-z0-9_-]{10,}/g, "<REDACTED>")
+      .replace(/ghp_[A-Za-z0-9]{20,}/g, "<REDACTED>")
+      .replace(/github_pat_[A-Za-z0-9_]{30,}/g, "<REDACTED>")
+      .replace(/sk-[A-Za-z0-9_-]{10,}/g, "<REDACTED>")
+      .replace(/(?:xox[bpas]|xapp)-[A-Za-z0-9-]{10,}/g, "<REDACTED>")
+      .replace(/\bbot\d{8,10}:[A-Za-z0-9_-]{35}\b/g, "bot<REDACTED>")
+      .replace(/\b\d{8,10}:[A-Za-z0-9_-]{35}\b/g, "<REDACTED>")
+      .replace(
+        /\b[A-Za-z0-9]{24}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27,}\b/g,
+        "<REDACTED>",
+      )
+      .slice(0, 240)
+  );
 }
 
 export function sanitizeFailure(
