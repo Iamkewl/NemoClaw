@@ -579,17 +579,20 @@ print('yes' if 'slack' in d else 'no')
   if [ "$slack_configured" = "yes" ]; then
     pass "M11e: Slack channel configured with placeholder tokens (guard needed)"
 
-    # Dump gateway.log early (while container is alive) for Slack crash diagnostics.
-    # SSH runs as sandbox user who cannot read gateway.log (600 gateway:gateway).
-    # openshell sandbox exec runs as root and CAN read it.
-    info "Gateway log (early capture via openshell exec — Slack-related lines):"
-    gw_log_early=$(openshell sandbox exec --name "$SANDBOX_NAME" -- cat /tmp/gateway.log 2>/dev/null || true)
-    echo "$gw_log_early" | grep -iE "slack|channel|guard|safety|unhandled|reject|Error|fatal" | head -20 | while IFS= read -r line; do
-      info "  $line"
+    # Diagnostics: check if the guard was installed and what NODE_OPTIONS looks like
+    info "Checking guard installation diagnostics (via openshell exec as root):"
+    guard_exists=$(openshell sandbox exec --name "$SANDBOX_NAME" -- ls -la /tmp/nemoclaw-slack-channel-guard.js 2>/dev/null || echo "EXEC_FAILED")
+    info "  Guard file: $guard_exists"
+    node_opts=$(openshell sandbox exec --name "$SANDBOX_NAME" -- bash -c 'echo "$NODE_OPTIONS"' 2>/dev/null || echo "EXEC_FAILED")
+    info "  NODE_OPTIONS: $node_opts"
+    proxy_fix=$(openshell sandbox exec --name "$SANDBOX_NAME" -- ls -la /tmp/nemoclaw-http-proxy-fix.js 2>/dev/null || echo "EXEC_FAILED")
+    info "  Proxy fix file: $proxy_fix"
+    # Check what processes are running
+    procs=$(openshell sandbox exec --name "$SANDBOX_NAME" -- ps aux 2>/dev/null | head -10 || echo "EXEC_FAILED")
+    info "  Processes:"
+    echo "$procs" | while IFS= read -r line; do
+      info "    $line"
     done
-    if [ -z "$gw_log_early" ]; then
-      info "  (gateway.log empty or not accessible)"
-    fi
   else
     skip "M11e: No Slack channel in config"
   fi
