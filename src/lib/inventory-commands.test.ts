@@ -170,6 +170,33 @@ describe("inventory commands", () => {
     expect(lines).toContain("      (onboarded: model=configured-alpha)");
   });
 
+  it("annotates only the provider field when the live gateway provider drifts", async () => {
+    const lines: string[] = [];
+    await listSandboxesCommand({
+      recoverRegistryEntries: async () => ({
+        sandboxes: [
+          {
+            name: "alpha",
+            model: "configured-alpha",
+            provider: "configured-provider",
+            gpuEnabled: true,
+            policies: [],
+          },
+        ],
+        defaultSandbox: "alpha",
+      }),
+      // Only the provider changed at the gateway; model matches onboarded.
+      getLiveInference: () => ({ provider: "live-provider", model: "configured-alpha" }),
+      loadLastSession: () => null,
+      log: (message = "") => lines.push(message),
+    });
+
+    expect(lines).toContain(
+      "      model: configured-alpha  provider: live-provider  GPU  policies: none",
+    );
+    expect(lines).toContain("      (onboarded: provider=configured-provider)");
+  });
+
   it("flags messaging bridge as degraded when checkMessagingBridgeHealth reports conflicts", () => {
     const lines: string[] = [];
     const checkMessagingBridgeHealth = vi.fn().mockReturnValue([
@@ -367,5 +394,22 @@ describe("inventory commands", () => {
 
     expect(lines).toContain("    alpha * (nvidia/nemotron-3-super-120b-a12b)");
     expect(lines.some((l) => l.includes("onboarded"))).toBe(false);
+  });
+
+  it("annotates status drift with 'unknown' when the onboarded model is missing", () => {
+    const lines: string[] = [];
+    showStatusCommand({
+      listSandboxes: () => ({
+        // sandbox registered without a model (possible per SandboxEntry type).
+        sandboxes: [{ name: "alpha" }],
+        defaultSandbox: "alpha",
+      }),
+      getLiveInference: () => ({ provider: "nvidia-prod", model: "moonshotai/kimi-k2.5" }),
+      showServiceStatus: vi.fn(),
+      log: (message = "") => lines.push(message),
+    });
+
+    expect(lines).toContain("    alpha * (moonshotai/kimi-k2.5)");
+    expect(lines).toContain("      (onboarded: unknown)");
   });
 });

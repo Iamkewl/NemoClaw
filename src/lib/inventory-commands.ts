@@ -133,8 +133,8 @@ export function showStatusCommand(deps: ShowStatusCommandDeps): void {
       const liveModel = isDefault && live ? live.model : null;
       const model = liveModel || sb.model;
       log(`    ${sb.name}${def}${model ? ` (${model})` : ""}`);
-      if (isDefault && liveModel && sb.model && liveModel !== sb.model) {
-        log(`      (onboarded: ${sb.model})`);
+      if (isDefault && liveModel && liveModel !== sb.model) {
+        log(`      (onboarded: ${sb.model || "unknown"})`);
       }
     }
     log("");

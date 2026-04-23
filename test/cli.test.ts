@@ -2364,10 +2364,15 @@ describe("list shows live gateway inference", () => {
     });
 
     expect(r.code).toBe(0);
-    // Live gateway values are shown for the default sandbox's row.
-    expect(r.out).toContain("nvidia/nemotron-3-super-120b-a12b");
-    expect(r.out).toContain("nvidia-prod");
-    // Onboarded values appear in the drift annotation, not the main row.
+    // Live gateway values render on the default sandbox's main row.
+    expect(r.out).toContain(
+      "model: nvidia/nemotron-3-super-120b-a12b  provider: nvidia-prod  GPU  policies: pypi, npm",
+    );
+    // The stale (stored) row must not appear.
+    expect(r.out).not.toContain(
+      "model: configured-model  provider: configured-provider  GPU  policies: pypi, npm",
+    );
+    // Onboarded values appear in the drift annotation.
     expect(r.out).toContain("(onboarded: model=configured-model, provider=configured-provider)");
   });
 
