@@ -972,7 +972,7 @@ PROXYEOF
   fi
   # Git TLS CA bundle for connect sessions (NemoClaw#2270)
   if [ -n "${GIT_SSL_CAINFO:-}" ]; then
-    echo "export GIT_SSL_CAINFO=\"$GIT_SSL_CAINFO\""
+    printf 'export GIT_SSL_CAINFO=%q\n' "$GIT_SSL_CAINFO"
   fi
   # Tool cache redirects — generated from _TOOL_REDIRECTS (single source of truth)
   echo '# Tool cache redirects — /sandbox is Landlock read-only (#804)'

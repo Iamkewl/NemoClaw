@@ -120,7 +120,9 @@ describe("credential exposure in process arguments", () => {
     // Extract the TLS array from both files and compare
     const extractTLS = (src) => {
       const match = src.match(/const TLS = \[([\s\S]*?)\];/);
-      return match ? match[1].replace(/\s/g, "") : "";
+      if (!match) return "";
+      const entries = match[1].match(/"[^"]+"/g) ?? [];
+      return entries.join(",");
     };
     expect(extractTLS(cliSrc)).toBe(extractTLS(pluginSrc));
   });
