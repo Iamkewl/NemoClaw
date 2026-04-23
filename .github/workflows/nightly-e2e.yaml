@@ -44,7 +44,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: nightly-e2e
+  group: nightly-e2e-${{ github.event_name }}-${{ github.event_name == 'workflow_dispatch' && github.ref || 'schedule' }}
   cancel-in-progress: true
 
 jobs:
@@ -670,6 +670,7 @@ jobs:
     needs:
       [
         cloud-e2e,
+        cloud-experimental-e2e,
         messaging-providers-e2e,
         token-rotation-e2e,
         sandbox-survival-e2e,
@@ -687,7 +688,7 @@ jobs:
         rebuild-hermes-e2e,
         gpu-e2e,
       ]
-    if: ${{ always() && contains(needs.*.result, 'failure') }}
+    if: ${{ always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
     permissions:
       issues: write
     steps:
@@ -697,6 +698,14 @@ jobs:
           script: |
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const title = 'Nightly E2E failed';
+
+            const needs = ${{ toJSON(needs) }};
+            const failed = Object.entries(needs).filter(([, v]) => v.result === 'failure').map(([k]) => k);
+            const cancelled = Object.entries(needs).filter(([, v]) => v.result === 'cancelled').map(([k]) => k);
+            const summary = [
+              failed.length ? `**Failed:** ${failed.join(', ')}` : '',
+              cancelled.length ? `**Cancelled:** ${cancelled.join(', ')}` : '',
+            ].filter(Boolean).join('\n');
 
             const { data: existing } = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
@@ -712,14 +721,14 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: match.number,
-                body: `Failed again on ${new Date().toISOString().split('T')[0]}.\n\n**Run:** ${runUrl}\n**Artifacts:** Check the run artifacts for install/test logs (artifact names vary by job).`,
+                body: `Failed again on ${new Date().toISOString().split('T')[0]}.\n\n**Run:** ${runUrl}\n${summary}\n**Artifacts:** Check the run artifacts for install/test logs (artifact names vary by job).`,
               });
             } else {
               await github.rest.issues.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 title: `${title} — ${new Date().toISOString().split('T')[0]}`,
-                body: `The nightly E2E pipeline failed.\n\n**Run:** ${runUrl}\n**Artifacts:** Check the run artifacts for install/test logs (artifact names vary by job).`,
+                body: `The nightly E2E pipeline failed.\n\n**Run:** ${runUrl}\n${summary}\n**Artifacts:** Check the run artifacts for install/test logs (artifact names vary by job).`,
                 labels: ['bug', 'CI/CD'],
               });
             }
