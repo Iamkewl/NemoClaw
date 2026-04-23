@@ -50,7 +50,7 @@ describe("inventory commands", () => {
     );
   });
 
-  it("shows stored sandbox inference instead of live gateway inference in list output", async () => {
+  it("uses live gateway inference for the default sandbox and annotates drift from onboarded config", async () => {
     const lines: string[] = [];
     await listSandboxesCommand({
       recoverRegistryEntries: async () => ({
@@ -77,22 +77,107 @@ describe("inventory commands", () => {
       log: (message = "") => lines.push(message),
     });
 
+    // Default sandbox reflects live gateway state (#2369).
     expect(lines).toContain(
-      "      model: configured-alpha  provider: configured-provider  GPU  policies: none",
-    );
-    expect(lines).not.toContain(
       "      model: live-model  provider: live-provider  GPU  policies: none",
     );
+    expect(lines).toContain(
+      "      (onboarded: model=configured-alpha, provider=configured-provider)",
+    );
+    expect(lines).not.toContain(
+      "      model: configured-alpha  provider: configured-provider  GPU  policies: none",
+    );
+    // Non-default sandboxes keep their stored config — the gateway inference
+    // only applies to whichever sandbox is currently connected/active.
     expect(lines).toContain(
       "      model: configured-beta  provider: beta-provider  CPU  policies: none",
     );
   });
 
+  it("does not annotate the default sandbox when live gateway matches onboarded config", async () => {
+    const lines: string[] = [];
+    await listSandboxesCommand({
+      recoverRegistryEntries: async () => ({
+        sandboxes: [
+          {
+            name: "alpha",
+            model: "configured-alpha",
+            provider: "configured-provider",
+            gpuEnabled: true,
+            policies: [],
+          },
+        ],
+        defaultSandbox: "alpha",
+      }),
+      getLiveInference: () => ({ provider: "configured-provider", model: "configured-alpha" }),
+      loadLastSession: () => null,
+      log: (message = "") => lines.push(message),
+    });
+
+    expect(lines).toContain(
+      "      model: configured-alpha  provider: configured-provider  GPU  policies: none",
+    );
+    expect(lines.some((l) => l.includes("onboarded"))).toBe(false);
+  });
+
+  it("falls back to onboarded config when the gateway is unreachable", async () => {
+    const lines: string[] = [];
+    await listSandboxesCommand({
+      recoverRegistryEntries: async () => ({
+        sandboxes: [
+          {
+            name: "alpha",
+            model: "configured-alpha",
+            provider: "configured-provider",
+            gpuEnabled: true,
+            policies: [],
+          },
+        ],
+        defaultSandbox: "alpha",
+      }),
+      getLiveInference: () => null,
+      loadLastSession: () => null,
+      log: (message = "") => lines.push(message),
+    });
+
+    expect(lines).toContain(
+      "      model: configured-alpha  provider: configured-provider  GPU  policies: none",
+    );
+    expect(lines.some((l) => l.includes("onboarded"))).toBe(false);
+  });
+
+  it("annotates only the drifting field when the live gateway reports partial overrides", async () => {
+    const lines: string[] = [];
+    await listSandboxesCommand({
+      recoverRegistryEntries: async () => ({
+        sandboxes: [
+          {
+            name: "alpha",
+            model: "configured-alpha",
+            provider: "configured-provider",
+            gpuEnabled: true,
+            policies: [],
+          },
+        ],
+        defaultSandbox: "alpha",
+      }),
+      // Only the model changed at the gateway; provider matches onboarded.
+      getLiveInference: () => ({ provider: "configured-provider", model: "live-model" }),
+      loadLastSession: () => null,
+      log: (message = "") => lines.push(message),
+    });
+
+    expect(lines).toContain(
+      "      model: live-model  provider: configured-provider  GPU  policies: none",
+    );
+    expect(lines).toContain("      (onboarded: model=configured-alpha)");
+  });
+
   it("flags messaging bridge as degraded when checkMessagingBridgeHealth reports conflicts", () => {
     const lines: string[] = [];
-    const checkMessagingBridgeHealth = vi.fn().mockReturnValue([
-      { channel: "telegram", conflicts: 7 },
-    ]);
+    const checkMessagingBridgeHealth = vi
+      .fn()
+      .mockReturnValue([{ channel: "telegram", conflicts: 7 }]);
     showStatusCommand({
       listSandboxes: () => ({
         sandboxes: [
@@ -136,9 +221,9 @@ describe("inventory commands", () => {
 
   it("prints a cross-sandbox overlap warning when backfillAndFindOverlaps reports overlaps", () => {
     const lines: string[] = [];
-    const backfillAndFindOverlaps = vi.fn().mockReturnValue([
-      { channel: "telegram", sandboxes: ["alice", "bob"] },
-    ]);
+    const backfillAndFindOverlaps = vi
+      .fn()
+      .mockReturnValue([{ channel: "telegram", sandboxes: ["alice", "bob"] }]);
     showStatusCommand({
       listSandboxes: () => ({
         sandboxes: [
@@ -154,20 +239,22 @@ describe("inventory commands", () => {
     });
 
     expect(backfillAndFindOverlaps).toHaveBeenCalled();
-    expect(
-      lines.some((l) => l.includes("telegram is enabled on both 'alice' and 'bob'")),
-    ).toBe(true);
+    expect(lines.some((l) => l.includes("telegram is enabled on both 'alice' and 'bob'"))).toBe(
+      true,
+    );
   });
 
   it("surfaces Hermes gateway log when messaging is degraded", () => {
     const lines: string[] = [];
-    const checkMessagingBridgeHealth = vi.fn().mockReturnValue([
-      { channel: "telegram", conflicts: 3 },
-    ]);
-    const readGatewayLog = vi.fn().mockReturnValue(
-      "2026-04-17 getUpdates conflict: terminated by other getUpdates\n" +
-      "2026-04-17 retrying in 5s",
-    );
+    const checkMessagingBridgeHealth = vi
+      .fn()
+      .mockReturnValue([{ channel: "telegram", conflicts: 3 }]);
+    const readGatewayLog = vi
+      .fn()
+      .mockReturnValue(
+        "2026-04-17 getUpdates conflict: terminated by other getUpdates\n" +
+          "2026-04-17 retrying in 5s",
+      );
     showStatusCommand({
       listSandboxes: () => ({
         sandboxes: [
@@ -194,9 +281,9 @@ describe("inventory commands", () => {
 
   it("does not show gateway log for non-Hermes sandboxes", () => {
     const lines: string[] = [];
-    const checkMessagingBridgeHealth = vi.fn().mockReturnValue([
-      { channel: "telegram", conflicts: 3 },
-    ]);
+    const checkMessagingBridgeHealth = vi
+      .fn()
+      .mockReturnValue([{ channel: "telegram", conflicts: 3 }]);
     const readGatewayLog = vi.fn();
     showStatusCommand({
       listSandboxes: () => ({
@@ -219,7 +306,7 @@ describe("inventory commands", () => {
     expect(readGatewayLog).not.toHaveBeenCalled();
   });
 
-  it("prints stored sandbox models in status and delegates service status", () => {
+  it("shows live gateway model for the default sandbox in status and delegates service status (#2369)", () => {
     const lines: string[] = [];
     const showServiceStatus = vi.fn();
     showStatusCommand({
@@ -242,9 +329,47 @@ describe("inventory commands", () => {
     });
 
     expect(lines).toContain("  Sandboxes:");
-    expect(lines).toContain("    alpha * (nvidia/nemotron-3-super-120b-a12b)");
-    expect(lines).not.toContain("    alpha * (moonshotai/kimi-k2.5)");
+    expect(lines).toContain("    alpha * (moonshotai/kimi-k2.5)");
+    expect(lines).toContain("      (onboarded: nvidia/nemotron-3-super-120b-a12b)");
+    expect(lines).not.toContain("    alpha * (nvidia/nemotron-3-super-120b-a12b)");
+    // Non-default sandbox keeps its stored model, because the gateway applies
+    // to whichever sandbox is currently connected.
     expect(lines).toContain("    beta (z-ai/glm5)");
     expect(showServiceStatus).toHaveBeenCalledWith({ sandboxName: "alpha" });
+  });
+
+  it("does not annotate status when the live gateway matches onboarded model", () => {
+    const lines: string[] = [];
+    showStatusCommand({
+      listSandboxes: () => ({
+        sandboxes: [{ name: "alpha", model: "nvidia/nemotron-3-super-120b-a12b" }],
+        defaultSandbox: "alpha",
+      }),
+      getLiveInference: () => ({
+        provider: "nvidia-prod",
+        model: "nvidia/nemotron-3-super-120b-a12b",
+      }),
+      showServiceStatus: vi.fn(),
+      log: (message = "") => lines.push(message),
+    });
+
+    expect(lines).toContain("    alpha * (nvidia/nemotron-3-super-120b-a12b)");
+    expect(lines.some((l) => l.includes("onboarded"))).toBe(false);
+  });
+
+  it("falls back to stored status model when the gateway is unreachable", () => {
+    const lines: string[] = [];
+    showStatusCommand({
+      listSandboxes: () => ({
+        sandboxes: [{ name: "alpha", model: "nvidia/nemotron-3-super-120b-a12b" }],
+        defaultSandbox: "alpha",
+      }),
+      getLiveInference: () => null,
+      showServiceStatus: vi.fn(),
+      log: (message = "") => lines.push(message),
+    });
+
+    expect(lines).toContain("    alpha * (nvidia/nemotron-3-super-120b-a12b)");
+    expect(lines.some((l) => l.includes("onboarded"))).toBe(false);
   });
 });

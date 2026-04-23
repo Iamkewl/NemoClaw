@@ -43,13 +43,62 @@ export interface ShowStatusCommandDeps {
   listSandboxes: () => { sandboxes: SandboxEntry[]; defaultSandbox?: string | null };
   getLiveInference: () => GatewayInference | null;
   showServiceStatus: (options: { sandboxName?: string }) => void;
-  checkMessagingBridgeHealth?: (
-    sandboxName: string,
-    channels: string[],
-  ) => MessagingBridgeHealth[];
+  checkMessagingBridgeHealth?: (sandboxName: string, channels: string[]) => MessagingBridgeHealth[];
   backfillAndFindOverlaps?: () => MessagingOverlap[];
   readGatewayLog?: (sandboxName: string) => string | null;
   log?: (message?: string) => void;
+}
+
+/**
+ * Resolve the model/provider to display for a sandbox row, preferring the
+ * live gateway inference for the default sandbox so `nemoclaw list`/`status`
+ * reflect what `openshell inference set` most recently applied (#2369).
+ *
+ * The gateway holds a single active inference config; it can only apply to
+ * one sandbox at a time — the currently-connected one, which we treat as the
+ * default. Non-default sandboxes keep their onboarded config, because that is
+ * what they'll swap the gateway to on their next `connect`.
+ */
+function resolveDisplayInference(
+  sb: SandboxEntry,
+  isDefault: boolean,
+  live: GatewayInference | null,
+): {
+  model: string;
+  provider: string;
+  onboardedDrift: { model: string | null; provider: string | null } | null;
+} {
+  const storedModel = sb.model || "unknown";
+  const storedProvider = sb.provider || "unknown";
+
+  if (!isDefault || !live) {
+    return { model: storedModel, provider: storedProvider, onboardedDrift: null };
+  }
+
+  const modelDrifted = !!live.model && live.model !== sb.model;
+  const providerDrifted = !!live.provider && live.provider !== sb.provider;
+
+  return {
+    model: live.model || storedModel,
+    provider: live.provider || storedProvider,
+    onboardedDrift:
+      modelDrifted || providerDrifted
+        ? {
+            model: modelDrifted ? storedModel : null,
+            provider: providerDrifted ? storedProvider : null,
+          }
+        : null,
+  };
+}
+
+function formatOnboardedDriftLabel(drift: {
+  model: string | null;
+  provider: string | null;
+}): string {
+  const parts: string[] = [];
+  if (drift.model) parts.push(`model=${drift.model}`);
+  if (drift.provider) parts.push(`provider=${drift.provider}`);
+  return `(onboarded: ${parts.join(", ")})`;
 }
 
 export async function listSandboxesCommand(deps: ListSandboxesCommandDeps): Promise<void> {
@@ -74,7 +123,7 @@ export async function listSandboxesCommand(deps: ListSandboxesCommandDeps): Prom
     return;
   }
 
-  deps.getLiveInference();
+  const live = deps.getLiveInference();
 
   log("");
   if (recovery.recoveredFromSession) {
@@ -83,21 +132,25 @@ export async function listSandboxesCommand(deps: ListSandboxesCommandDeps): Prom
   }
   if ((recovery.recoveredFromGateway || 0) > 0) {
     const count = recovery.recoveredFromGateway || 0;
-    log(`  Recovered ${count} sandbox entr${count === 1 ? "y" : "ies"} from the live OpenShell gateway.`);
+    log(
+      `  Recovered ${count} sandbox entr${count === 1 ? "y" : "ies"} from the live OpenShell gateway.`,
+    );
     log("");
   }
   log("  Sandboxes:");
   for (const sb of sandboxes) {
     const isDefault = sb.name === defaultSandbox;
     const def = isDefault ? " *" : "";
-    const model = sb.model || "unknown";
-    const provider = sb.provider || "unknown";
+    const { model, provider, onboardedDrift } = resolveDisplayInference(sb, isDefault, live);
     const gpu = sb.gpuEnabled ? "GPU" : "CPU";
     const presets = sb.policies && sb.policies.length > 0 ? sb.policies.join(", ") : "none";
     const sessionCount = deps.getActiveSessionCount ? deps.getActiveSessionCount(sb.name) : null;
     const connected = sessionCount !== null && sessionCount > 0 ? " ●" : "";
     log(`    ${sb.name}${def}${connected}`);
     log(`      model: ${model}  provider: ${provider}  ${gpu}  policies: ${presets}`);
+    if (onboardedDrift) {
+      log(`      ${formatOnboardedDriftLabel(onboardedDrift)}`);
+    }
   }
   log("");
   log("  * = default sandbox");
@@ -108,14 +161,20 @@ export function showStatusCommand(deps: ShowStatusCommandDeps): void {
   const log = deps.log ?? console.log;
   const { sandboxes, defaultSandbox } = deps.listSandboxes();
   if (sandboxes.length > 0) {
-    deps.getLiveInference();
+    const live = deps.getLiveInference();
     log("");
     log("  Sandboxes:");
     for (const sb of sandboxes) {
       const isDefault = sb.name === defaultSandbox;
       const def = isDefault ? " *" : "";
-      const model = sb.model;
+      // Prefer live gateway model for the default sandbox so `status` agrees
+      // with what `openshell inference get` reports (#2369).
+      const liveModel = isDefault && live ? live.model : null;
+      const model = liveModel || sb.model;
       log(`    ${sb.name}${def}${model ? ` (${model})` : ""}`);
+      if (isDefault && liveModel && sb.model && liveModel !== sb.model) {
+        log(`      (onboarded: ${sb.model})`);
+      }
     }
     log("");
   }
@@ -149,9 +208,7 @@ export function showStatusCommand(deps: ShowStatusCommandDeps): void {
       if (degraded.length > 0) {
         log("");
         for (const { channel, conflicts } of degraded) {
-          log(
-            `  ⚠ ${channel} bridge: degraded (${conflicts} conflict errors in /tmp/gateway.log)`,
-          );
+          log(`  ⚠ ${channel} bridge: degraded (${conflicts} conflict errors in /tmp/gateway.log)`);
         }
         log(
           "    Another sandbox is likely polling with the same bot token. See docs/reference/troubleshooting.md.",
