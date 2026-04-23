@@ -526,12 +526,17 @@ function loadPresetFromFile(filePath) {
     console.error(`  Preset file must be .yaml or .yml: ${filePath}`);
     return null;
   }
-  const content = fs.readFileSync(abs, "utf-8");
+  let content;
   let parsed;
   try {
+    content = fs.readFileSync(abs, "utf-8");
     parsed = YAML.parse(content);
   } catch (err) {
-    console.error(`  Invalid YAML in ${filePath}: ${err.message}`);
+    const msg =
+      err.code === "ENOENT" || err.code === "EACCES"
+        ? `Cannot read ${filePath}: ${err.message}`
+        : `Invalid YAML in ${filePath}: ${err.message}`;
+    console.error(`  ${msg}`);
     return null;
   }
   const presetName = parsed?.preset?.name;

@@ -2194,7 +2194,7 @@ async function sandboxPolicyRemove(sandboxName, args = []) {
 
   if (!skipConfirm) {
     const confirm = await askPrompt(`  Remove '${answer}' from sandbox '${sandboxName}'? [Y/n]: `);
-    if (confirm.toLowerCase() === "n") return;
+    if (confirm.trim().toLowerCase().startsWith("n")) return;
   }
 
   if (!policies.removePreset(sandboxName, answer)) {
