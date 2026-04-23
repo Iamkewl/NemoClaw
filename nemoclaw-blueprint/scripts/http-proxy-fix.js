@@ -70,19 +70,19 @@
         return origRequest.apply(http, arguments);
       }
       var https = require('https');
-      return https.request(
-        {
-          method: options.method || 'GET',
-          hostname: target.hostname,
-          host: target.hostname,
-          port: target.port || 443,
-          path: target.pathname + target.search,
-          protocol: 'https:',
-          headers: options.headers,
-          timeout: options.timeout,
-        },
-        callback,
-      );
+      // Clone caller's options and overwrite only the proxy-specific
+      // routing fields. Preserves signal (AbortController), lookup,
+      // TLS fields (ca/cert/key/rejectUnauthorized), auth, timeout,
+      // and any other per-request setting the caller supplied.
+      var rewritten = Object.assign({}, options, {
+        method: options.method || 'GET',
+        hostname: target.hostname,
+        host: target.hostname,
+        port: target.port || 443,
+        path: target.pathname + target.search,
+        protocol: 'https:',
+      });
+      return https.request(rewritten, callback);
     }
     return origRequest.apply(http, arguments);
   };
