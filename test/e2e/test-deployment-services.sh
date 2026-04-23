@@ -155,7 +155,8 @@ preflight() {
         return 0
         ;;
     esac
-    if curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${arch}" -o /tmp/cloudflared \
+    local cf_url="${CLOUDFLARED_DOWNLOAD_URL:-https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${arch}}"
+    if curl -fsSL "$cf_url" -o /tmp/cloudflared \
       && chmod +x /tmp/cloudflared \
       && sudo mv /tmp/cloudflared /usr/local/bin/cloudflared 2>/dev/null; then
       log "cloudflared installed"
