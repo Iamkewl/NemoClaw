@@ -578,6 +578,18 @@ print('yes' if 'slack' in d else 'no')
 " 2>/dev/null || true)
   if [ "$slack_configured" = "yes" ]; then
     pass "M11e: Slack channel configured with placeholder tokens (guard needed)"
+
+    # Dump gateway.log early (while container is alive) for Slack crash diagnostics.
+    # SSH runs as sandbox user who cannot read gateway.log (600 gateway:gateway).
+    # openshell sandbox exec runs as root and CAN read it.
+    info "Gateway log (early capture via openshell exec — Slack-related lines):"
+    gw_log_early=$(openshell sandbox exec --name "$SANDBOX_NAME" -- cat /tmp/gateway.log 2>/dev/null || true)
+    echo "$gw_log_early" | grep -iE "slack|channel|guard|safety|unhandled|reject|Error|fatal" | head -20 | while IFS= read -r line; do
+      info "  $line"
+    done
+    if [ -z "$gw_log_early" ]; then
+      info "  (gateway.log empty or not accessible)"
+    fi
   else
     skip "M11e: No Slack channel in config"
   fi
@@ -1087,18 +1099,28 @@ else
   fail "S1: Gateway is not serving on port 18789 (${gw_port:0:200})"
 fi
 
-# S2: Gateway log contains the guard's catch message
-gw_log=$(sandbox_exec "cat /tmp/gateway.log 2>/dev/null" 2>/dev/null || true)
+# S2: Dump gateway.log for diagnostics (must use openshell exec — SSH user
+# cannot read the file because it's 600 gateway:gateway).
+gw_log=$(openshell sandbox exec --name "$SANDBOX_NAME" -- cat /tmp/gateway.log 2>/dev/null || true)
+if [ -z "$gw_log" ]; then
+  # Container may have already exited
+  gw_log=$(nemoclaw "$SANDBOX_NAME" logs 2>&1 | tail -200 || true)
+fi
+
+info "Gateway log (last 30 lines):"
+echo "$gw_log" | tail -30 | while IFS= read -r line; do
+  info "  $line"
+done
+
 if echo "$gw_log" | grep -q "provider failed to start:.*gateway continues"; then
   pass "S2: Gateway log shows Slack rejection was caught by channel guard"
-elif echo "$gw_log" | grep -q "slack"; then
-  # Some Slack-related output exists but not our exact message
-  info "Slack-related gateway log: $(echo "$gw_log" | grep -i slack | head -3)"
-  skip "S2: Gateway log has Slack output but not the guard message (Slack may have connected)"
+elif echo "$gw_log" | grep -qi "slack"; then
+  info "Slack-related lines: $(echo "$gw_log" | grep -i slack | head -5)"
+  skip "S2: Gateway log has Slack output but not the guard catch message"
 elif [ -z "$gw_log" ]; then
-  skip "S2: Could not read gateway log"
+  skip "S2: Could not read gateway log (container may have exited)"
 else
-  skip "S2: No Slack-related output in gateway log (guard may not have been triggered yet)"
+  skip "S2: No Slack-related output in gateway log"
 fi
 
 # ══════════════════════════════════════════════════════════════════
