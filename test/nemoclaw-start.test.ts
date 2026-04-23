@@ -521,10 +521,11 @@ describe("Slack channel guard preload (#2340)", () => {
     expect(fn[1]).toContain("--require $_SLACK_GUARD_SCRIPT");
   });
 
-  it("catches unhandledRejection from Slack SDK errors", () => {
+  it("catches both unhandledRejection and uncaughtException from Slack", () => {
     const fn = src.match(/install_slack_channel_guard\(\) \{([\s\S]*?)^\w+\(\) \{/m);
     expect(fn).toBeTruthy();
     expect(fn[1]).toContain("process.on('unhandledRejection'");
+    expect(fn[1]).toContain("process.on('uncaughtException'");
     expect(fn[1]).toContain("isSlackRejection");
   });
 

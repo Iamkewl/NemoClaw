@@ -553,20 +553,35 @@ install_slack_channel_guard() {
     return false;
   }
 
-  process.on('unhandledRejection', function (reason, promise) {
+  function handleSlackError(reason, source) {
     if (isSlackRejection(reason)) {
       var msg = (reason && reason.message) ? reason.message : String(reason);
       process.stderr.write(
         '[channels] [slack] provider failed to start: ' + msg +
-        ' \u2014 channel error caught by safety net, gateway continues\n'
+        ' \u2014 ' + source + ' caught by safety net, gateway continues\n'
       );
-      // Swallow the rejection — do not re-throw.
-      // The Slack channel is effectively dead but the gateway survives.
-      return;
+      return true; // handled
     }
-    // Non-Slack rejection: let Node's default handler deal with it.
-    // Re-throw to trigger the default --unhandled-rejections=throw behavior.
+    return false;
+  }
+
+  // Catch async Slack errors (rejected promises from @slack/web-api).
+  process.on('unhandledRejection', function (reason, promise) {
+    if (handleSlackError(reason, 'unhandledRejection')) return;
+    // Non-Slack: re-throw to preserve default --unhandled-rejections=throw.
     throw reason;
+  });
+
+  // Catch sync Slack errors (e.g., Bolt token format validation throws
+  // synchronously when appToken doesn't start with xapp-).
+  process.on('uncaughtException', function (err, origin) {
+    if (handleSlackError(err, 'uncaughtException')) return;
+    // Non-Slack: re-throw to preserve normal crash behavior.
+    // Print the error first since re-throw inside uncaughtException handler
+    // may not print the original stack.
+    process.stderr.write(err.stack || String(err));
+    process.stderr.write('\n');
+    process.exit(1);
   });
 })();
 SLACK_GUARD_EOF
