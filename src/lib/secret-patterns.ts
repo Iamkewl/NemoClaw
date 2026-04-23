@@ -18,6 +18,10 @@ export const TOKEN_PREFIX_PATTERNS: RegExp[] = [
   /nvcf-[A-Za-z0-9_-]{10,}/g,
   /ghp_[A-Za-z0-9_-]{10,}/g,
   /(?:github_pat_)[A-Za-z0-9_]{30,}/g,
+  /(?:xox[bpas]|xapp)-[A-Za-z0-9-]{10,}/g,
+  /\bbot\d{8,10}:[A-Za-z0-9_-]{35}\b/g,
+  /\b\d{8,10}:[A-Za-z0-9_-]{35}\b/g,
+  /\b[A-Za-z0-9]{24}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27,}\b/g,
 ];
 
 /** Context-anchored patterns (require a prefix like KEY=, Bearer, etc.). */
@@ -41,4 +45,6 @@ export const EXPECTED_SHELL_PREFIXES = [
   "nvcf-",
   "ghp_",
   "github_pat_",
+  "xox",
+  "xapp",
 ];
