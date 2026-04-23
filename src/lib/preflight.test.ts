@@ -11,6 +11,7 @@ import {
   getMemoryInfo,
   ensureSwap,
   planHostRemediation,
+  probeContainerDns,
 } from "../../dist/lib/preflight";
 
 describe("checkPortAvailable", () => {
@@ -563,5 +564,90 @@ describe("ensureSwap", () => {
     });
     expect(called).toBe(true);
     expect(result.ok).toBe(true);
+  });
+});
+
+describe("probeContainerDns", () => {
+  const BUSYBOX_SUCCESS =
+    "Server:\t\t172.17.0.1\n" +
+    "Address:\t172.17.0.1:53\n" +
+    "\n" +
+    "Non-authoritative answer:\n" +
+    "Name:\tregistry.npmjs.org\n" +
+    "Address: 104.16.26.35\n" +
+    "Address: 104.16.27.35\n";
+
+  const BUSYBOX_FAILURE =
+    ";; connection timed out; no servers could be reached\n";
+
+  it("returns ok when busybox nslookup succeeds", () => {
+    const result = probeContainerDns({ outputOverride: BUSYBOX_SUCCESS });
+    expect(result.ok).toBe(true);
+    expect(result.reason).toBeUndefined();
+  });
+
+  it("flags resolution_failed when output has no Address line", () => {
+    const result = probeContainerDns({ outputOverride: BUSYBOX_FAILURE });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("resolution_failed");
+    expect(result.details).toContain("connection timed out");
+  });
+
+  it("flags no_output when docker run returns empty", () => {
+    const result = probeContainerDns({ outputOverride: "" });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("no_output");
+  });
+
+  it("flags no_output when runCapture returns null", () => {
+    const result = probeContainerDns({ outputOverride: null });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("no_output");
+  });
+
+  it("captures the spawned command for runCapture override", () => {
+    const captured: string[] = [];
+    const result = probeContainerDns({
+      runCaptureImpl: (command) => {
+        captured.push(command);
+        return BUSYBOX_SUCCESS;
+      },
+    });
+    expect(result.ok).toBe(true);
+    expect(captured).toHaveLength(1);
+    expect(captured[0]).toContain("docker run");
+    expect(captured[0]).toContain("busybox");
+    expect(captured[0]).toContain("registry.npmjs.org");
+  });
+
+  it("allows the command to be overridden", () => {
+    let seen = "";
+    probeContainerDns({
+      command: "echo OVERRIDDEN",
+      runCaptureImpl: (command) => {
+        seen = command;
+        return "Name:\tregistry.npmjs.org\nAddress: 1.2.3.4\n";
+      },
+    });
+    expect(seen).toBe("echo OVERRIDDEN");
+  });
+
+  it("treats thrown runCapture errors as error reason", () => {
+    const result = probeContainerDns({
+      runCaptureImpl: () => {
+        throw new Error("docker daemon unreachable");
+      },
+    });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("error");
+    expect(result.details).toContain("docker daemon unreachable");
+  });
+
+  it("truncates long failure details to the last 400 bytes", () => {
+    const huge = "X".repeat(2000) + "real_error_here";
+    const result = probeContainerDns({ outputOverride: huge });
+    expect(result.ok).toBe(false);
+    expect(result.details?.length).toBeLessThanOrEqual(400);
+    expect(result.details).toContain("real_error_here");
   });
 });

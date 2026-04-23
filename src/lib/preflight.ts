@@ -788,3 +788,76 @@ export function ensureSwap(minTotalMB?: number, opts: EnsureSwapOpts = {}): Swap
 
   return createSwapfile(mem);
 }
+
+// ── Container DNS probe (#2101) ───────────────────────────────────
+// The sandbox build's `npm ci` step resolves `registry.npmjs.org` from inside
+// a docker container. Networks that block outbound UDP:53 to public resolvers
+// (common in corporate environments that force DNS-over-TLS on the host) leave
+// the container unable to resolve anything — npm retries for ~15 min and then
+// prints the cryptic `Exit handler never called`. This probe catches that
+// state in a few seconds so the user gets a targeted error up front.
+
+export interface DnsProbeResult {
+  ok: boolean;
+  reason?: "no_output" | "resolution_failed" | "error";
+  details?: string;
+}
+
+export interface ProbeContainerDnsOpts {
+  /** Override the docker run command. */
+  command?: string;
+  /** Inject captured output (bypasses shell). */
+  outputOverride?: string | null;
+  /** Override runCapture. */
+  runCaptureImpl?: (command: string, opts?: { ignoreError?: boolean }) => string | null;
+}
+
+/**
+ * Probe whether DNS resolution works from inside a docker container.
+ * Returns `{ ok: true }` when a busybox test container resolves
+ * `registry.npmjs.org` within the image's nslookup timeout; otherwise
+ * returns a `reason` + truncated `details` that callers can show.
+ */
+export function probeContainerDns(opts: ProbeContainerDnsOpts = {}): DnsProbeResult {
+  const command =
+    opts.command ??
+    "docker run --rm --pull=missing busybox:latest " +
+      "nslookup registry.npmjs.org 2>&1";
+
+  let output: string | null | undefined = opts.outputOverride;
+  if (output === undefined) {
+    try {
+      const runCaptureImpl =
+        opts.runCaptureImpl ??
+        ((cmd: string, o?: { ignoreError?: boolean }) =>
+          runCapture(cmd, { ignoreError: o?.ignoreError ?? false }));
+      output = runCaptureImpl(command, { ignoreError: true });
+    } catch (e) {
+      return {
+        ok: false,
+        reason: "error",
+        details: String((e as Error)?.message ?? e),
+      };
+    }
+  }
+
+  if (!output) {
+    return {
+      ok: false,
+      reason: "no_output",
+      details: "docker run produced no output (timed out or failed to start)",
+    };
+  }
+
+  // busybox nslookup prints "Name:" and "Address:" lines for each answer on
+  // success; on DNS failure it emits "can't resolve" or times out silently.
+  if (/\bName:\s*registry\.npmjs\.org\b/.test(output) && /\bAddress:\s*\d/.test(output)) {
+    return { ok: true };
+  }
+
+  return {
+    ok: false,
+    reason: "resolution_failed",
+    details: output.slice(-400),
+  };
+}
