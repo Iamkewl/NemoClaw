@@ -50,7 +50,7 @@ describe("inventory commands", () => {
     );
   });
 
-  it("uses live gateway inference for the default sandbox and annotates drift from onboarded config", async () => {
+  it("uses live gateway inference for the default sandbox in list output (#2369)", async () => {
     const lines: string[] = [];
     await listSandboxesCommand({
       recoverRegistryEntries: async () => ({
@@ -77,18 +77,15 @@ describe("inventory commands", () => {
       log: (message = "") => lines.push(message),
     });
 
-    // Default sandbox reflects live gateway state (#2369).
+    // Default sandbox reflects live gateway state, with an onboarded drift note.
     expect(lines).toContain(
       "      model: live-model  provider: live-provider  GPU  policies: none",
     );
     expect(lines).toContain(
       "      (onboarded: model=configured-alpha, provider=configured-provider)",
     );
-    expect(lines).not.toContain(
-      "      model: configured-alpha  provider: configured-provider  GPU  policies: none",
-    );
-    // Non-default sandboxes keep their stored config — the gateway inference
-    // only applies to whichever sandbox is currently connected/active.
+    // Non-default sandbox keeps its stored config — the gateway only applies
+    // to whichever sandbox is currently connected.
     expect(lines).toContain(
       "      model: configured-beta  provider: beta-provider  CPU  policies: none",
     );
@@ -175,9 +172,9 @@ describe("inventory commands", () => {
 
   it("flags messaging bridge as degraded when checkMessagingBridgeHealth reports conflicts", () => {
     const lines: string[] = [];
-    const checkMessagingBridgeHealth = vi
-      .fn()
-      .mockReturnValue([{ channel: "telegram", conflicts: 7 }]);
+    const checkMessagingBridgeHealth = vi.fn().mockReturnValue([
+      { channel: "telegram", conflicts: 7 },
+    ]);
     showStatusCommand({
       listSandboxes: () => ({
         sandboxes: [
@@ -221,9 +218,9 @@ describe("inventory commands", () => {
 
   it("prints a cross-sandbox overlap warning when backfillAndFindOverlaps reports overlaps", () => {
     const lines: string[] = [];
-    const backfillAndFindOverlaps = vi
-      .fn()
-      .mockReturnValue([{ channel: "telegram", sandboxes: ["alice", "bob"] }]);
+    const backfillAndFindOverlaps = vi.fn().mockReturnValue([
+      { channel: "telegram", sandboxes: ["alice", "bob"] },
+    ]);
     showStatusCommand({
       listSandboxes: () => ({
         sandboxes: [
@@ -239,22 +236,20 @@ describe("inventory commands", () => {
     });
 
     expect(backfillAndFindOverlaps).toHaveBeenCalled();
-    expect(lines.some((l) => l.includes("telegram is enabled on both 'alice' and 'bob'"))).toBe(
-      true,
-    );
+    expect(
+      lines.some((l) => l.includes("telegram is enabled on both 'alice' and 'bob'")),
+    ).toBe(true);
   });
 
   it("surfaces Hermes gateway log when messaging is degraded", () => {
     const lines: string[] = [];
-    const checkMessagingBridgeHealth = vi
-      .fn()
-      .mockReturnValue([{ channel: "telegram", conflicts: 3 }]);
-    const readGatewayLog = vi
-      .fn()
-      .mockReturnValue(
-        "2026-04-17 getUpdates conflict: terminated by other getUpdates\n" +
-          "2026-04-17 retrying in 5s",
-      );
+    const checkMessagingBridgeHealth = vi.fn().mockReturnValue([
+      { channel: "telegram", conflicts: 3 },
+    ]);
+    const readGatewayLog = vi.fn().mockReturnValue(
+      "2026-04-17 getUpdates conflict: terminated by other getUpdates\n" +
+      "2026-04-17 retrying in 5s",
+    );
     showStatusCommand({
       listSandboxes: () => ({
         sandboxes: [
@@ -281,9 +276,9 @@ describe("inventory commands", () => {
 
   it("does not show gateway log for non-Hermes sandboxes", () => {
     const lines: string[] = [];
-    const checkMessagingBridgeHealth = vi
-      .fn()
-      .mockReturnValue([{ channel: "telegram", conflicts: 3 }]);
+    const checkMessagingBridgeHealth = vi.fn().mockReturnValue([
+      { channel: "telegram", conflicts: 3 },
+    ]);
     const readGatewayLog = vi.fn();
     showStatusCommand({
       listSandboxes: () => ({
@@ -306,7 +301,7 @@ describe("inventory commands", () => {
     expect(readGatewayLog).not.toHaveBeenCalled();
   });
 
-  it("shows live gateway model for the default sandbox in status and delegates service status (#2369)", () => {
+  it("prints sandbox models in status and delegates service status", () => {
     const lines: string[] = [];
     const showServiceStatus = vi.fn();
     showStatusCommand({
@@ -329,16 +324,17 @@ describe("inventory commands", () => {
     });
 
     expect(lines).toContain("  Sandboxes:");
+    // Default sandbox shows the live gateway model (#2369), annotated with
+    // the onboarded model when they differ.
     expect(lines).toContain("    alpha * (moonshotai/kimi-k2.5)");
     expect(lines).toContain("      (onboarded: nvidia/nemotron-3-super-120b-a12b)");
-    expect(lines).not.toContain("    alpha * (nvidia/nemotron-3-super-120b-a12b)");
-    // Non-default sandbox keeps its stored model, because the gateway applies
+    // Non-default sandbox keeps its stored model — the gateway only applies
     // to whichever sandbox is currently connected.
     expect(lines).toContain("    beta (z-ai/glm5)");
     expect(showServiceStatus).toHaveBeenCalledWith({ sandboxName: "alpha" });
   });
 
-  it("does not annotate status when the live gateway matches onboarded model", () => {
+  it("does not annotate status when the live gateway matches the onboarded model", () => {
     const lines: string[] = [];
     showStatusCommand({
       listSandboxes: () => ({

@@ -2319,7 +2319,7 @@ describe("CLI dispatch", () => {
 });
 
 describe("list shows live gateway inference", () => {
-  it("shows stored sandbox inference instead of live gateway inference", () => {
+  it("shows live gateway inference for the default sandbox (#2369)", () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-cli-list-live-"));
     const localBin = path.join(home, "bin");
     const registryDir = path.join(home, ".nemoclaw");
@@ -2364,10 +2364,11 @@ describe("list shows live gateway inference", () => {
     });
 
     expect(r.code).toBe(0);
-    expect(r.out).toContain("configured-model");
-    expect(r.out).toContain("configured-provider");
-    expect(r.out).not.toContain("nvidia/nemotron-3-super-120b-a12b");
-    expect(r.out).not.toContain("nvidia-prod");
+    // Live gateway values are shown for the default sandbox's row.
+    expect(r.out).toContain("nvidia/nemotron-3-super-120b-a12b");
+    expect(r.out).toContain("nvidia-prod");
+    // Onboarded values appear in the drift annotation, not the main row.
+    expect(r.out).toContain("(onboarded: model=configured-model, provider=configured-provider)");
   });
 
   it("falls back to registry values when openshell inference get fails", () => {
