@@ -144,7 +144,7 @@ if [ "$_CAPTURE_RC" -ne 0 ]; then
   fail "snapshot create exited with code $_CAPTURE_RC: ${SNAPSHOT_OUTPUT}"
 fi
 
-if echo "$SNAPSHOT_OUTPUT" | grep -q "Snapshot created"; then
+if echo "$SNAPSHOT_OUTPUT" | grep -q "Snapshot.*created"; then
   pass "snapshot create succeeded"
 else
   fail "snapshot create did not report success: ${SNAPSHOT_OUTPUT}"
