@@ -5991,8 +5991,14 @@ async function setupPoliciesWithSelection(sandboxName, options = {}) {
  * selection" works identically in both. Fixes #2177 (non-interactive path
  * was apply-only, so deselected presets lingered).
  *
- * `accessByName` is optional; when provided, applyPreset receives it per
- * preset so the gateway can distinguish read vs read-write installs.
+ * @param {string} sandboxName  Target sandbox.
+ * @param {string[]} applied    Preset names currently applied to the sandbox.
+ * @param {string[]} target     Preset names the user wants applied after this call.
+ * @param {Object<string, string>|null} [accessByName=null]
+ *   Optional map of preset name → access mode ("read" | "read-write").
+ *   When provided, applyPreset receives the mode per preset so the gateway
+ *   can distinguish read vs read-write installs.
+ * @returns {void}
  */
 function syncPresetSelection(sandboxName, applied, target, accessByName = null) {
   const targetSet = new Set(target);
