@@ -85,7 +85,10 @@ describe("private-networks.yaml schema", () => {
     const keys = [
       ...doc.ipv4.map((e) => `cidr:${e.address}/${String(e.prefix)}`),
       ...doc.ipv6.map((e) => `cidr:${e.address}/${String(e.prefix)}`),
-      ...doc.names.map((e) => `name:${e.name.toLowerCase()}`),
+      // Normalise exactly like runtime (strip trailing dot, lowercase)
+      // so `localhost` and `localhost.` collapse to the same key and
+      // cannot slip past as "different" entries.
+      ...doc.names.map((e) => `name:${e.name.replace(/\.$/, "").toLowerCase()}`),
     ];
     expect(new Set(keys).size).toBe(keys.length);
   });
