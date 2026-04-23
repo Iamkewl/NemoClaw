@@ -983,8 +983,13 @@ if [ "$(id -u)" -ne 0 ]; then
   _NONROOT_GATEWAY_TOKEN="$(python3 -c "import secrets; print(secrets.token_hex(32), end='')")"
   export OPENCLAW_GATEWAY_TOKEN="$_NONROOT_GATEWAY_TOKEN"
   # Write token file so host-side retrieval (openshell sandbox download) works.
-  mkdir -p "$GATEWAY_TOKEN_DIR" 2>/dev/null || true
-  printf '%s' "$_NONROOT_GATEWAY_TOKEN" >"$GATEWAY_TOKEN_FILE" 2>/dev/null || true
+  # Try default location first; if not writable, fall back to user-writable location.
+  if ! mkdir -p "$GATEWAY_TOKEN_DIR" 2>/dev/null; then
+    GATEWAY_TOKEN_DIR="${XDG_RUNTIME_DIR:-/tmp}/nemoclaw"
+    GATEWAY_TOKEN_FILE="${GATEWAY_TOKEN_DIR}/gateway-token"
+    mkdir -p "$GATEWAY_TOKEN_DIR"
+  fi
+  printf '%s' "$_NONROOT_GATEWAY_TOKEN" >"$GATEWAY_TOKEN_FILE"
   printf '[SECURITY] Non-root mode — gateway token generated but not isolated (no privilege separation)\n' >&2
   install_configure_guard
   configure_messaging_channels
