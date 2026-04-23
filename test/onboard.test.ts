@@ -2378,7 +2378,7 @@ runner.run = (command, opts = {}) => {
 runner.runCapture = (command) => {
   if (_n(command).includes("sandbox get my-assistant")) return "";
   if (_n(command).includes("sandbox list")) return "my-assistant Ready";
-  if (_n(command).includes("sandbox exec my-assistant curl -sf http://localhost:18789/")) return "ok";
+  if (_n(command).includes("sandbox exec my-assistant curl -sf http://localhost:18789/health")) return "ok";
   if (_n(command).includes("forward list")) return "my-assistant 127.0.0.1 18789 12345 running";
   return "";
 };
@@ -2486,7 +2486,7 @@ runner.run = (command, opts = {}) => {
 runner.runCapture = (command) => {
   if (_n(command).includes("sandbox get my-assistant")) return "";
   if (_n(command).includes("sandbox list")) return "my-assistant Ready";
-  if (_n(command).includes("sandbox exec my-assistant curl -sf http://localhost:18789/")) return "ok";
+  if (_n(command).includes("sandbox exec my-assistant curl -sf http://localhost:18789/health")) return "ok";
   if (_n(command).includes("forward list")) return "my-assistant 127.0.0.1 18789 12345 running";
   return "";
 };
@@ -2539,6 +2539,188 @@ const { createSandbox } = require(${onboardPath});
         entry.command.includes("forward start --background 0.0.0.0:18789 my-assistant"),
       ),
       "expected remote dashboard forward target",
+    );
+  });
+
+  it("injects NEMOCLAW_CORS_ORIGIN into sandbox envArgs when CHAT_UI_URL is non-loopback (#2342)", async () => {
+    const repoRoot = path.join(import.meta.dirname, "..");
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-onboard-cors-origin-"));
+    const fakeBin = path.join(tmpDir, "bin");
+    const scriptPath = path.join(tmpDir, "cors-origin-envargs.js");
+    const onboardPath = JSON.stringify(path.join(repoRoot, "dist", "lib", "onboard.js"));
+    const runnerPath = JSON.stringify(path.join(repoRoot, "dist", "lib", "runner.js"));
+    const registryPath = JSON.stringify(path.join(repoRoot, "dist", "lib", "registry.js"));
+    const preflightPath = JSON.stringify(path.join(repoRoot, "dist", "lib", "preflight.js"));
+    const credentialsPath = JSON.stringify(path.join(repoRoot, "dist", "lib", "credentials.js"));
+
+    fs.mkdirSync(fakeBin, { recursive: true });
+    fs.writeFileSync(path.join(fakeBin, "openshell"), "#!/usr/bin/env bash\nexit 0\n", {
+      mode: 0o755,
+    });
+
+    const script = String.raw`
+const runner = require(${runnerPath});
+const _n = (c) => (Array.isArray(c) ? c.join(" ") : String(c)).replace(/'/g, "");
+const registry = require(${registryPath});
+const preflight = require(${preflightPath});
+const credentials = require(${credentialsPath});
+const childProcess = require("node:child_process");
+const { EventEmitter } = require("node:events");
+
+const commands = [];
+runner.run = (command, opts = {}) => {
+  commands.push({ command: _n(command), env: opts.env || null });
+  return { status: 0 };
+};
+runner.runCapture = (command) => {
+  if (_n(command).includes("sandbox get my-assistant")) return "";
+  if (_n(command).includes("sandbox list")) return "my-assistant Ready";
+  if (_n(command).includes("sandbox exec my-assistant curl -sf http://localhost:18789/health")) return "ok";
+  if (_n(command).includes("forward list")) return "my-assistant 127.0.0.1 18789 12345 running";
+  return "";
+};
+registry.registerSandbox = () => true;
+registry.removeSandbox = () => true;
+preflight.checkPortAvailable = async () => ({ ok: true });
+credentials.prompt = async () => "";
+
+childProcess.spawn = (...args) => {
+  const child = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  commands.push({ command: _n(args[1][1]), env: args[2]?.env || null });
+  process.nextTick(() => {
+    child.stdout.emit("data", Buffer.from("Created sandbox: my-assistant\n"));
+    child.emit("close", 0);
+  });
+  return child;
+};
+
+const { createSandbox } = require(${onboardPath});
+
+(async () => {
+  process.env.OPENSHELL_GATEWAY = "nemoclaw";
+  process.env.CHAT_UI_URL = "https://nemoclaw0-abc123.brevlab.com";
+  await createSandbox(null, "gpt-5.4");
+  console.log(JSON.stringify(commands));
+})().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
+`;
+    fs.writeFileSync(scriptPath, script);
+
+    const result = spawnSync(process.execPath, [scriptPath], {
+      cwd: repoRoot,
+      encoding: "utf-8",
+      env: {
+        ...process.env,
+        HOME: tmpDir,
+        PATH: `${fakeBin}:${process.env.PATH || ""}`,
+        NEMOCLAW_NON_INTERACTIVE: "1",
+      },
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    const commands = JSON.parse(result.stdout.trim().split("\n").pop());
+    // The sandbox create command should include NEMOCLAW_CORS_ORIGIN with the
+    // Brev public URL origin so apply_cors_override() adds it to allowedOrigins.
+    const createCmd = commands.find((entry) => entry.command.includes("sandbox create"));
+    assert.ok(createCmd, "expected a sandbox create command");
+    assert.ok(
+      createCmd.command.includes("NEMOCLAW_CORS_ORIGIN=https://nemoclaw0-abc123.brevlab.com"),
+      `expected NEMOCLAW_CORS_ORIGIN in sandbox create envArgs, got: ${createCmd.command}`,
+    );
+  });
+
+  it("does not inject NEMOCLAW_CORS_ORIGIN when CHAT_UI_URL is loopback (#2342)", async () => {
+    const repoRoot = path.join(import.meta.dirname, "..");
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-onboard-cors-loopback-"));
+    const fakeBin = path.join(tmpDir, "bin");
+    const scriptPath = path.join(tmpDir, "cors-loopback-envargs.js");
+    const onboardPath = JSON.stringify(path.join(repoRoot, "dist", "lib", "onboard.js"));
+    const runnerPath = JSON.stringify(path.join(repoRoot, "dist", "lib", "runner.js"));
+    const registryPath = JSON.stringify(path.join(repoRoot, "dist", "lib", "registry.js"));
+    const preflightPath = JSON.stringify(path.join(repoRoot, "dist", "lib", "preflight.js"));
+    const credentialsPath = JSON.stringify(path.join(repoRoot, "dist", "lib", "credentials.js"));
+
+    fs.mkdirSync(fakeBin, { recursive: true });
+    fs.writeFileSync(path.join(fakeBin, "openshell"), "#!/usr/bin/env bash\nexit 0\n", {
+      mode: 0o755,
+    });
+
+    const script = String.raw`
+const runner = require(${runnerPath});
+const _n = (c) => (Array.isArray(c) ? c.join(" ") : String(c)).replace(/'/g, "");
+const registry = require(${registryPath});
+const preflight = require(${preflightPath});
+const credentials = require(${credentialsPath});
+const childProcess = require("node:child_process");
+const { EventEmitter } = require("node:events");
+
+const commands = [];
+runner.run = (command, opts = {}) => {
+  commands.push({ command: _n(command), env: opts.env || null });
+  return { status: 0 };
+};
+runner.runCapture = (command) => {
+  if (_n(command).includes("sandbox get my-assistant")) return "";
+  if (_n(command).includes("sandbox list")) return "my-assistant Ready";
+  if (_n(command).includes("sandbox exec my-assistant curl -sf http://localhost:18789/health")) return "ok";
+  if (_n(command).includes("forward list")) return "my-assistant 127.0.0.1 18789 12345 running";
+  return "";
+};
+registry.registerSandbox = () => true;
+registry.removeSandbox = () => true;
+preflight.checkPortAvailable = async () => ({ ok: true });
+credentials.prompt = async () => "";
+
+childProcess.spawn = (...args) => {
+  const child = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  commands.push({ command: _n(args[1][1]), env: args[2]?.env || null });
+  process.nextTick(() => {
+    child.stdout.emit("data", Buffer.from("Created sandbox: my-assistant\n"));
+    child.emit("close", 0);
+  });
+  return child;
+};
+
+const { createSandbox } = require(${onboardPath});
+
+(async () => {
+  process.env.OPENSHELL_GATEWAY = "nemoclaw";
+  process.env.CHAT_UI_URL = "http://127.0.0.1:18789";
+  await createSandbox(null, "gpt-5.4");
+  console.log(JSON.stringify(commands));
+})().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
+`;
+    fs.writeFileSync(scriptPath, script);
+
+    const result = spawnSync(process.execPath, [scriptPath], {
+      cwd: repoRoot,
+      encoding: "utf-8",
+      env: {
+        ...process.env,
+        HOME: tmpDir,
+        PATH: `${fakeBin}:${process.env.PATH || ""}`,
+        NEMOCLAW_NON_INTERACTIVE: "1",
+      },
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    const commands = JSON.parse(result.stdout.trim().split("\n").pop());
+    // Loopback CHAT_UI_URL should NOT inject NEMOCLAW_CORS_ORIGIN —
+    // the Dockerfile-baked allowedOrigins already contains the loopback origin.
+    const createCmd = commands.find((entry) => entry.command.includes("sandbox create"));
+    assert.ok(createCmd, "expected a sandbox create command");
+    assert.ok(
+      !createCmd.command.includes("NEMOCLAW_CORS_ORIGIN"),
+      `NEMOCLAW_CORS_ORIGIN should not be set for loopback URL, got: ${createCmd.command}`,
     );
   });
 
@@ -4087,7 +4269,7 @@ runner.runCapture = (command) => {
     sandboxListCalls += 1;
     return sandboxListCalls >= 2 ? "my-assistant Ready" : "my-assistant Pending";
   }
-  if (_n(command).includes("sandbox exec my-assistant curl -sf http://localhost:18789/")) return "ok";
+  if (_n(command).includes("sandbox exec my-assistant curl -sf http://localhost:18789/health")) return "ok";
   if (_n(command).includes("forward list")) return "my-assistant 127.0.0.1 18789 12345 running";
   return "";
 };
@@ -4476,7 +4658,7 @@ runner.run = (command, opts = {}) => {
 runner.runCapture = (command) => {
   if (_n(command).includes("sandbox get my-assistant")) return "";
   if (_n(command).includes("sandbox list")) return "my-assistant Ready";
-  if (_n(command).includes("sandbox exec my-assistant curl -sf http://localhost:18789/")) return "ok";
+  if (_n(command).includes("sandbox exec my-assistant curl -sf http://localhost:18789/health")) return "ok";
   if (_n(command).includes("forward list")) return "my-assistant 127.0.0.1 18789 12345 running";
   return "";
 };
@@ -4604,7 +4786,7 @@ runner.run = (command, opts = {}) => {
 runner.runCapture = (command) => {
   if (_n(command).includes("sandbox get my-assistant")) return "";
   if (_n(command).includes("sandbox list")) return "my-assistant Ready";
-  if (_n(command).includes("sandbox exec my-assistant curl -sf http://localhost:18789/")) return "ok";
+  if (_n(command).includes("sandbox exec my-assistant curl -sf http://localhost:18789/health")) return "ok";
   if (_n(command).includes("forward list")) return "my-assistant 127.0.0.1 18789 12345 running";
   return "";
 };
@@ -4880,7 +5062,7 @@ runner.run = (command, opts = {}) => {
 runner.runCapture = (command) => {
   if (_n(command).includes("sandbox get my-assistant")) return "";
   if (_n(command).includes("sandbox list")) return "my-assistant Ready";
-  if (_n(command).includes("sandbox exec my-assistant curl -sf http://localhost:18789/")) return "ok";
+  if (_n(command).includes("sandbox exec my-assistant curl -sf http://localhost:18789/health")) return "ok";
   if (_n(command).includes("forward list")) return "my-assistant 127.0.0.1 18789 12345 running";
   return "";
 };

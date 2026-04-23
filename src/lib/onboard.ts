@@ -3817,6 +3817,27 @@ async function createSandbox(
   if (process.env.NEMOCLAW_DASHBOARD_PORT) {
     envArgs.push(formatEnvAssignment("NEMOCLAW_DASHBOARD_PORT", String(DASHBOARD_PORT)));
   }
+  // When CHAT_UI_URL points to a non-loopback address (Brev Launchable,
+  // remote host, custom domain), pass NEMOCLAW_CORS_ORIGIN into the sandbox
+  // so nemoclaw-start.sh's apply_cors_override() adds the browser's origin
+  // to gateway.controlUi.allowedOrigins at startup. Without this, the
+  // Dockerfile-baked allowedOrigins only contains http://127.0.0.1:PORT
+  // and the gateway rejects WebSocket/API connections from the external URL.
+  // See: https://github.com/NVIDIA/NemoClaw/issues/2342
+  const corsOrigin = process.env.NEMOCLAW_CORS_ORIGIN;
+  if (corsOrigin) {
+    envArgs.push(formatEnvAssignment("NEMOCLAW_CORS_ORIGIN", corsOrigin));
+  } else {
+    try {
+      const parsed = new URL(chatUiUrl);
+      if (!isLoopbackHostname(parsed.hostname)) {
+        const origin = `${parsed.protocol}//${parsed.host}`;
+        envArgs.push(formatEnvAssignment("NEMOCLAW_CORS_ORIGIN", origin));
+      }
+    } catch {
+      // Invalid chatUiUrl — skip CORS auto-detection
+    }
+  }
   if (webSearchConfig?.fetchEnabled) {
     const braveKey =
       getCredential(webSearch.BRAVE_API_KEY_ENV) || process.env[webSearch.BRAVE_API_KEY_ENV];
@@ -3926,14 +3947,32 @@ async function createSandbox(
   // Wait for NemoClaw dashboard to become fully ready (web server live)
   // This prevents port forwards from connecting to a non-existent port
   // or seeing 502/503 errors during initial load.
+  // Probe /health instead of / — the root path returns 401 when device auth
+  // is enabled (standard for Brev Launchable and headless deployments),
+  // causing this readiness check to false-negative for 30s. /health returns
+  // 200 unconditionally when the gateway is up. Falls back to accepting any
+  // HTTP response (including 401) from / as proof the server is listening.
+  // See: https://github.com/NVIDIA/NemoClaw/issues/2342
   console.log("  Waiting for NemoClaw dashboard to become ready...");
   const openshellBin = getOpenshellBinary();
   for (let i = 0; i < 15; i++) {
-    const readyMatch = runCaptureOpenshell(
-      ["sandbox", "exec", sandboxName, "curl", "-sf", `http://localhost:${effectivePort}/`],
+    // Primary: /health endpoint (no auth required, returns 200 when gateway is up)
+    const healthMatch = runCaptureOpenshell(
+      ["sandbox", "exec", sandboxName, "curl", "-sf", `http://localhost:${effectivePort}/health`],
       { ignoreError: true },
     );
-    if (readyMatch) {
+    if (healthMatch) {
+      console.log("  ✓ Dashboard is live");
+      break;
+    }
+    // Fallback: accept any HTTP response from / (including 401) as proof
+    // the server is listening — curl -s -o /dev/null -w '%{http_code}' returns
+    // the status code; any 1xx-5xx means the gateway process is up.
+    const httpCode = runCaptureOpenshell(
+      ["sandbox", "exec", sandboxName, "curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", `http://localhost:${effectivePort}/`],
+      { ignoreError: true },
+    );
+    if (httpCode && /^[1-5]\d\d$/.test(String(httpCode).trim())) {
       console.log("  ✓ Dashboard is live");
       break;
     }
