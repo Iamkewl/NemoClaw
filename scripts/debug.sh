@@ -131,6 +131,7 @@ redact() {
     -e 's/nvcf-[A-Za-z0-9_-]{10,}/<REDACTED>/g' \
     -e 's/ghp_[A-Za-z0-9_-]{10,}/<REDACTED>/g' \
     -e 's/github_pat_[A-Za-z0-9_]{30,}/<REDACTED>/g' \
+    -e 's/sk-[A-Za-z0-9_-]{10,}/<REDACTED>/g' \
     -e 's/(xox[bpas]|xapp)-[A-Za-z0-9-]{10,}/<REDACTED>/g' \
     -e 's/\bbot[0-9]{8,10}:[A-Za-z0-9_-]{35}\b/bot<REDACTED>/g' \
     -e 's/\b[0-9]{8,10}:[A-Za-z0-9_-]{35}\b/<REDACTED>/g' \

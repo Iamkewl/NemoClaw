@@ -41,6 +41,7 @@ describe("secret redaction consistency (#1736)", () => {
       name: "GitHub PAT (fine-grained)",
       token: "github_pat_" + "d".repeat(50),
     },
+    { name: "OpenAI API key", token: "sk-" + "e".repeat(40) },
   ];
 
   // Tokens added for messaging integrations (#2336). debug.sh uses
@@ -131,6 +132,18 @@ describe("secret redaction consistency (#1736)", () => {
       const text = redactSensitiveText(
         `Failed to reach https://api.telegram.org/bot${token}/getMe`,
       );
+      expect(text).not.toContain(token);
+    });
+
+    it("redacts Telegram token with 8-digit chat ID (boundary)", () => {
+      const token = "12345678:" + "B".repeat(35);
+      const text = redactSensitiveText(`bot returned ${token} in error`);
+      expect(text).not.toContain(token);
+    });
+
+    it("redacts Telegram token with 9-digit chat ID", () => {
+      const token = "123456789:" + "C".repeat(35);
+      const text = redactSensitiveText(`bot returned ${token} in error`);
       expect(text).not.toContain(token);
     });
 
