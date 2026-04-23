@@ -88,6 +88,7 @@ const {
   assessHost,
   checkPortAvailable,
   ensureSwap,
+  getDockerBridgeGatewayIp,
   getMemoryInfo,
   planHostRemediation,
   probeContainerDns,
@@ -2667,15 +2668,26 @@ async function preflight() {
       console.error("  1. Use host networking for this build only (quickest):");
       console.error("       NEMOCLAW_DOCKER_BUILD_NETWORK=host nemoclaw onboard");
       console.error("");
+      const detectedBridgeIp = getDockerBridgeGatewayIp();
+      const bridgeIp = detectedBridgeIp || "172.17.0.1";
+      let bridgeNote: string | null = null;
+      if (detectedBridgeIp && detectedBridgeIp !== "172.17.0.1") {
+        bridgeNote = `     (detected your docker bridge gateway at ${detectedBridgeIp})`;
+      } else if (!detectedBridgeIp) {
+        bridgeNote =
+          "     (could not auto-detect bridge IP; using docker's default — verify with:\n" +
+          "      docker network inspect bridge --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}')";
+      }
       console.error("  2. Make systemd-resolved reachable from containers (persistent):");
+      if (bridgeNote) console.error(bridgeNote);
       console.error("       sudo mkdir -p /etc/systemd/resolved.conf.d/");
       console.error("       sudo tee /etc/systemd/resolved.conf.d/docker-bridge.conf <<EOF");
       console.error("       [Resolve]");
-      console.error("       DNSStubListenerExtra=172.17.0.1");
+      console.error(`       DNSStubListenerExtra=${bridgeIp}`);
       console.error("       EOF");
       console.error("       sudo systemctl restart systemd-resolved");
       console.error(
-        "       echo '{\"dns\":[\"172.17.0.1\"]}' | sudo tee /etc/docker/daemon.json",
+        `       echo '{"dns":["${bridgeIp}"]}' | sudo tee /etc/docker/daemon.json`,
       );
       console.error("       sudo systemctl restart docker");
       console.error("");

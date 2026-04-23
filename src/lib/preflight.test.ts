@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import {
   assessHost,
   checkPortAvailable,
+  getDockerBridgeGatewayIp,
   getMemoryInfo,
   ensureSwap,
   planHostRemediation,
@@ -649,5 +650,45 @@ describe("probeContainerDns", () => {
     expect(result.ok).toBe(false);
     expect(result.details?.length).toBeLessThanOrEqual(400);
     expect(result.details).toContain("real_error_here");
+  });
+});
+
+describe("getDockerBridgeGatewayIp", () => {
+  it("returns the parsed IPv4 address from docker network inspect", () => {
+    const result = getDockerBridgeGatewayIp(() => "172.17.0.1\n");
+    expect(result).toBe("172.17.0.1");
+  });
+
+  it("returns non-default IPs too (user has changed bip)", () => {
+    const result = getDockerBridgeGatewayIp(() => "10.42.0.1");
+    expect(result).toBe("10.42.0.1");
+  });
+
+  it("returns null for empty output", () => {
+    expect(getDockerBridgeGatewayIp(() => "")).toBeNull();
+    expect(getDockerBridgeGatewayIp(() => null)).toBeNull();
+  });
+
+  it("returns null for garbage / IPv6 / non-IP output", () => {
+    expect(getDockerBridgeGatewayIp(() => "not-an-ip")).toBeNull();
+    expect(getDockerBridgeGatewayIp(() => "fe80::1")).toBeNull();
+    expect(getDockerBridgeGatewayIp(() => "172.17.0")).toBeNull();
+  });
+
+  it("returns null when runCapture throws", () => {
+    const result = getDockerBridgeGatewayIp(() => {
+      throw new Error("docker: command not found");
+    });
+    expect(result).toBeNull();
+  });
+
+  it("uses the expected docker network inspect command shape", () => {
+    let captured = "";
+    getDockerBridgeGatewayIp((cmd) => {
+      captured = cmd;
+      return "172.17.0.1";
+    });
+    expect(captured).toContain("docker network inspect bridge");
+    expect(captured).toContain("Gateway");
   });
 });

@@ -813,6 +813,35 @@ export interface ProbeContainerDnsOpts {
 }
 
 /**
+ * Discover the IPv4 gateway address of docker's default bridge network.
+ * Returns null if docker isn't running, the inspect command fails, or the
+ * output doesn't parse. Callers use this to tailor DNS remediation hints
+ * to the user's actual bridge IP instead of assuming the conventional
+ * `172.17.0.1`.
+ */
+export function getDockerBridgeGatewayIp(
+  runCaptureImpl: (command: string, opts?: { ignoreError?: boolean }) => string | null = (
+    cmd,
+    o,
+  ) => runCapture(cmd, { ignoreError: o?.ignoreError ?? false }),
+): string | null {
+  let raw: string | null;
+  try {
+    raw = runCaptureImpl(
+      "docker network inspect bridge --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}' 2>/dev/null",
+      { ignoreError: true },
+    );
+  } catch {
+    return null;
+  }
+  if (!raw) return null;
+  const trimmed = String(raw).trim();
+  // Accept only a dotted-quad IPv4 address. Empty / garbage / IPv6 → null.
+  if (!/^\d{1,3}(?:\.\d{1,3}){3}$/.test(trimmed)) return null;
+  return trimmed;
+}
+
+/**
  * Probe whether DNS resolution works from inside a docker container.
  * Returns `{ ok: true }` when a busybox test container resolves
  * `registry.npmjs.org` within the image's nslookup timeout; otherwise
