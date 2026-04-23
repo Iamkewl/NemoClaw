@@ -113,8 +113,8 @@ pass "NemoClaw installed"
 info "Phase 2: Writing marker files into sandbox..."
 
 openshell sandbox exec --name "${SANDBOX_NAME}" -- \
-  sh -c "mkdir -p /sandbox/.openclaw-data/workspace && echo '${MARKER_CONTENT}' > ${MARKER_FILE}" ||
-  fail "Failed to write marker file"
+  sh -c "mkdir -p /sandbox/.openclaw-data/workspace && echo '${MARKER_CONTENT}' > ${MARKER_FILE}" \
+  || fail "Failed to write marker file"
 
 VERIFY=$(openshell sandbox exec --name "${SANDBOX_NAME}" -- cat "${MARKER_FILE}" 2>/dev/null || true)
 [ "$VERIFY" = "${MARKER_CONTENT}" ] || fail "Marker verification failed: got '${VERIFY}'"
@@ -185,8 +185,8 @@ info "Snapshot timestamp: ${SNAPSHOT_TIMESTAMP}"
 info "Phase 5: Modifying sandbox state and creating second snapshot..."
 
 openshell sandbox exec --name "${SANDBOX_NAME}" -- \
-  sh -c "rm -f ${MARKER_FILE} && echo '${SECOND_CONTENT}' > ${SECOND_MARKER}" ||
-  fail "Failed to modify sandbox state"
+  sh -c "rm -f ${MARKER_FILE} && echo '${SECOND_CONTENT}' > ${SECOND_MARKER}" \
+  || fail "Failed to modify sandbox state"
 
 # Verify first marker is gone
 GONE=$(openshell sandbox exec --name "${SANDBOX_NAME}" -- cat "${MARKER_FILE}" 2>/dev/null || echo "GONE")
@@ -200,8 +200,8 @@ pass "State modified, second snapshot created"
 
 # Perturb workspace so restore has to do real work
 openshell sandbox exec --name "${SANDBOX_NAME}" -- \
-  sh -c "rm -f ${SECOND_MARKER} && echo 'BROKEN' > ${MARKER_FILE}" ||
-  fail "Failed to perturb sandbox before latest restore"
+  sh -c "rm -f ${SECOND_MARKER} && echo 'BROKEN' > ${MARKER_FILE}" \
+  || fail "Failed to perturb sandbox before latest restore"
 
 # ── Phase 6: snapshot restore (latest) ──────────────────────────────
 info "Phase 6: Restoring latest snapshot..."
@@ -263,9 +263,9 @@ run_capture HELP_OUTPUT nemoclaw "${SANDBOX_NAME}" snapshot
 if [ "$_CAPTURE_RC" -ne 0 ]; then
   fail "snapshot help exited with code $_CAPTURE_RC: ${HELP_OUTPUT}"
 fi
-if echo "$HELP_OUTPUT" | grep -q "snapshot create" &&
-  echo "$HELP_OUTPUT" | grep -q "snapshot list" &&
-  echo "$HELP_OUTPUT" | grep -q "snapshot restore"; then
+if echo "$HELP_OUTPUT" | grep -q "snapshot create" \
+  && echo "$HELP_OUTPUT" | grep -q "snapshot list" \
+  && echo "$HELP_OUTPUT" | grep -q "snapshot restore"; then
   pass "snapshot help shows create/list/restore"
 else
   fail "snapshot help incomplete: ${HELP_OUTPUT}"
