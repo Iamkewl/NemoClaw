@@ -109,7 +109,10 @@ info "Phase 3: Creating snapshot..."
 SNAPSHOT_OUTPUT=$(nemoclaw "${SANDBOX_NAME}" snapshot create 2>&1)
 echo "$SNAPSHOT_OUTPUT"
 
-if echo "$SNAPSHOT_OUTPUT" | grep -q "Snapshot created"; then
+# The success marker is `✓ Snapshot v<N> created (<count> directories)` — the
+# version token between "Snapshot" and "created" broke the old literal grep
+# for "Snapshot created". Use a regex that tolerates the version field.
+if echo "$SNAPSHOT_OUTPUT" | grep -qE "Snapshot v[0-9]+.*created"; then
   pass "snapshot create succeeded"
 else
   fail "snapshot create did not report success: ${SNAPSHOT_OUTPUT}"
