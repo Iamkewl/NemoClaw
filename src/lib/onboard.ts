@@ -682,6 +682,7 @@ const {
   classifyValidationFailure,
   classifyApplyFailure,
   classifySandboxCreateFailure,
+  classifyGatewayStartFailure,
   validateNvidiaApiKeyValue,
   isSafeModelId,
   isNvcfFunctionNotFoundForAccount,
@@ -3011,6 +3012,7 @@ async function startGatewayWithOptions(_gpu, { exitOnFailure = true } = {}) {
   // the second attempt benefit from cached images and cleaner cgroup state.
   // See: https://github.com/NVIDIA/OpenShell/issues/433
   const retries = exitOnFailure ? 2 : 0;
+  let dockerUnreachable = false;
   try {
     await pRetry(
       async () => {
@@ -3029,6 +3031,18 @@ async function startGatewayWithOptions(_gpu, { exitOnFailure = true } = {}) {
             .map((l) => `    ${l}`);
           if (lines.length > 0) {
             console.log(`  Gateway start returned before healthy:\n${lines.join("\n")}`);
+          }
+          // Fast-fail when the underlying Docker daemon is unreachable
+          // (e.g. `colima stop` on macOS). Retrying the health poll against
+          // a dead socket wastes ~5–15 minutes and produces an unactionable
+          // error; short-circuit with a "start Docker" message instead.
+          // See NemoClaw #2347.
+          const failure = classifyGatewayStartFailure(startResult.output || "");
+          if (failure.kind === "docker_unreachable") {
+            dockerUnreachable = true;
+            throw new pRetry.AbortError(
+              "Docker daemon is not reachable (gateway cannot start).",
+            );
           }
         }
         console.log("  Waiting for gateway health...");
@@ -3084,6 +3098,21 @@ async function startGatewayWithOptions(_gpu, { exitOnFailure = true } = {}) {
     );
   } catch {
     if (exitOnFailure) {
+      if (dockerUnreachable) {
+        // Unrecoverable-by-retry: the Docker daemon is stopped. Give the
+        // user the exact command to run instead of dumping openshell logs.
+        console.error("  Docker daemon is not running — cannot start the gateway.");
+        console.error("");
+        console.error("  Start Docker, then rerun `nemoclaw onboard`:");
+        if (process.platform === "darwin") {
+          console.error("    colima start            # or start Docker Desktop");
+        } else if (process.platform === "linux") {
+          console.error("    sudo systemctl start docker");
+        } else {
+          console.error("    Start the Docker daemon.");
+        }
+        process.exit(1);
+      }
       console.error(`  Gateway failed to start after ${retries + 1} attempts.`);
       console.error("  Gateway state preserved for diagnostics.");
       console.error("");
@@ -6816,6 +6845,7 @@ module.exports = {
   buildSandboxConfigSyncScript,
   compactText,
   copyBuildContextDir,
+  classifyGatewayStartFailure,
   classifySandboxCreateFailure,
   configureWebSearch,
   createSandbox,
