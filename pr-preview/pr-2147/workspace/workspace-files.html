@@ -543,6 +543,37 @@ These files live at <code class="docutils literal notranslate"><span class="pre"
 </pre></div>
 </div>
 </section>
+<section id="multi-agent-deployments">
+<h2>Multi-Agent Deployments<a class="headerlink" href="#multi-agent-deployments" title="Link to this heading">#</a></h2>
+<p>A single NemoClaw sandbox can host more than one OpenClaw agent.
+When OpenClaw is configured with multiple named agents (e.g., a shared <code class="docutils literal notranslate"><span class="pre">main</span></code> agent
+plus per-user agents for a Teams-integrated deployment), each agent gets its own
+workspace directory alongside the default <code class="docutils literal notranslate"><span class="pre">workspace/</span></code>:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>/sandbox/.openclaw/
+├── workspace/           # default agent (single-agent deployments)
+├── workspace-main/      # named agent &quot;main&quot;
+├── workspace-support/   # named agent &quot;support&quot;
+└── workspace-ops/       # named agent &quot;ops&quot;
+</pre></div>
+</div>
+<p>Each per-agent workspace contains the same Markdown file structure as the default
+(<code class="docutils literal notranslate"><span class="pre">SOUL.md</span></code>, <code class="docutils literal notranslate"><span class="pre">USER.md</span></code>, <code class="docutils literal notranslate"><span class="pre">IDENTITY.md</span></code>, <code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code>, <code class="docutils literal notranslate"><span class="pre">MEMORY.md</span></code>, <code class="docutils literal notranslate"><span class="pre">memory/</span></code>).
+Files are per-agent — changes in <code class="docutils literal notranslate"><span class="pre">workspace-main/AGENTS.md</span></code> are not visible to
+<code class="docutils literal notranslate"><span class="pre">workspace-support/</span></code>.</p>
+<p>Persistence and snapshots are handled automatically for per-agent workspaces:
+the sandbox entrypoint provisions each <code class="docutils literal notranslate"><span class="pre">workspace-&lt;name&gt;/</span></code> as a symlink into the
+writable <code class="docutils literal notranslate"><span class="pre">.openclaw-data/</span></code> tree so state survives sandbox restart, and
+<code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">&lt;name&gt;</span> <span class="pre">snapshot</span> <span class="pre">create</span></code> discovers every <code class="docutils literal notranslate"><span class="pre">workspace-&lt;name&gt;/</span></code> directory
+and includes it in the snapshot bundle alongside the default <code class="docutils literal notranslate"><span class="pre">workspace/</span></code>.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Files that operators typically want consistent across every agent workspace
+(<code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code>, shared skills, common templates) are not synced automatically.
+Each workspace is independent; changes in one don’t propagate. Tracking
+shared-file tooling (shared mount, <code class="docutils literal notranslate"><span class="pre">workspaces</span> <span class="pre">list</span></code> command) in
+<a class="reference external" href="https://github.com/NVIDIA/NemoClaw/issues/1260" rel="noreferer noopener" target="_blank">#1260</a>.</p>
+</div>
+</section>
 <section id="persistence-behavior">
 <h2>Persistence Behavior<a class="headerlink" href="#persistence-behavior" title="Link to this heading">#</a></h2>
 <p>Understanding when these files persist and when they are lost is critical.</p>
@@ -631,6 +662,7 @@ You can edit them in two ways:</p>
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#file-reference">File Reference</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#where-they-live">Where They Live</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#multi-agent-deployments">Multi-Agent Deployments</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#persistence-behavior">Persistence Behavior</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#survives-sandbox-restart">Survives: Sandbox Restart</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#lost-sandbox-destroy">Lost: Sandbox Destroy</a></li>

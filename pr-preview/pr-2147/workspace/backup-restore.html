@@ -596,6 +596,29 @@ For full details, see the <a class="reference internal" href="../reference/comma
 </pre></div>
 </div>
 </section>
+<section id="multi-agent-deployments">
+<h2>Multi-Agent Deployments<a class="headerlink" href="#multi-agent-deployments" title="Link to this heading">#</a></h2>
+<p>When OpenClaw is configured with multiple named agents, each agent has its own
+workspace directory (<code class="docutils literal notranslate"><span class="pre">workspace-main/</span></code>, <code class="docutils literal notranslate"><span class="pre">workspace-support/</span></code>, <code class="docutils literal notranslate"><span class="pre">workspace-ops/</span></code>,
+and so on — see <a class="reference internal" href="workspace-files.html#multi-agent-deployments"><span class="std std-ref">Multi-Agent Deployments</span></a>).</p>
+<p><code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">&lt;name&gt;</span> <span class="pre">snapshot</span> <span class="pre">create</span></code> automatically discovers every <code class="docutils literal notranslate"><span class="pre">workspace-*/</span></code>
+directory under the sandbox state tree and includes it in the snapshot bundle
+alongside the default <code class="docutils literal notranslate"><span class="pre">workspace/</span></code>. <code class="docutils literal notranslate"><span class="pre">snapshot</span> <span class="pre">restore</span></code> re-applies the full
+per-agent set. No manual per-workspace backup pattern is needed.</p>
+<p>The sandbox entrypoint ensures every per-agent workspace is backed by the
+persistent <code class="docutils literal notranslate"><span class="pre">.openclaw-data/</span></code> tree (via a symlink from
+<code class="docutils literal notranslate"><span class="pre">.openclaw/workspace-&lt;name&gt;/</span></code>) so state also survives <code class="docutils literal notranslate"><span class="pre">openshell</span> <span class="pre">sandbox</span> <span class="pre">restart</span></code>.</p>
+<section id="shared-files-across-agents">
+<h3>Shared files across agents<a class="headerlink" href="#shared-files-across-agents" title="Link to this heading">#</a></h3>
+<p>Files that operators typically want consistent across every per-agent workspace
+(<code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code>, shared skills, common templates) are <strong>not</strong> synced automatically.
+Each workspace is independent; changes in one don’t propagate. Operators that
+need this either copy the shared files explicitly to each workspace after
+editing, or maintain a host-side sync layer. Tracking shared-file tooling
+(shared mount, <code class="docutils literal notranslate"><span class="pre">workspaces</span> <span class="pre">list</span></code> command) in
+<a class="reference external" href="https://github.com/NVIDIA/NemoClaw/issues/1260" rel="noreferer noopener" target="_blank">#1260</a>.</p>
+</section>
+</section>
 <section id="next-steps">
 <h2>Next Steps<a class="headerlink" href="#next-steps" title="Link to this heading">#</a></h2>
 <ul class="simple">
@@ -664,6 +687,10 @@ For full details, see the <a class="reference internal" href="../reference/comma
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#verifying-a-backup">Verifying a Backup</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#multi-agent-deployments">Multi-Agent Deployments</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-files-across-agents">Shared files across agents</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#next-steps">Next Steps</a></li>
 </ul>
   </nav></div>
