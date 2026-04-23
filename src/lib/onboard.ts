@@ -5893,10 +5893,7 @@ async function setupPoliciesWithSelection(sandboxName, options = {}) {
       process.exit(1);
     }
     note(`  [resume] Reapplying policy presets: ${chosen.join(", ")}`);
-    for (const name of chosen) {
-      if (applied.includes(name)) continue;
-      policies.applyPreset(sandboxName, name);
-    }
+    syncPresetSelection(sandboxName, applied, chosen);
     return chosen;
   }
 
