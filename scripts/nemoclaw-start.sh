@@ -977,9 +977,15 @@ if [ "$(id -u)" -ne 0 ]; then
   apply_model_override
   apply_cors_override
   apply_slack_token_override
-  # Non-root: no privilege separation, so we cannot isolate the token from
-  # the sandbox user. OpenClaw will auto-generate a token at gateway startup.
-  printf '[SECURITY] Non-root mode — gateway token not externalized (no privilege separation)\n' >&2
+  # Non-root: no privilege separation — the sandbox user can read the token.
+  # Generate a token anyway so the gateway has valid auth credentials.
+  # Without this, openclaw.json has an empty token and the gateway will fail.
+  _NONROOT_GATEWAY_TOKEN="$(python3 -c "import secrets; print(secrets.token_hex(32), end='')")"
+  export OPENCLAW_GATEWAY_TOKEN="$_NONROOT_GATEWAY_TOKEN"
+  # Write token file so host-side retrieval (openshell sandbox download) works.
+  mkdir -p "$GATEWAY_TOKEN_DIR" 2>/dev/null || true
+  printf '%s' "$_NONROOT_GATEWAY_TOKEN" >"$GATEWAY_TOKEN_FILE" 2>/dev/null || true
+  printf '[SECURITY] Non-root mode — gateway token generated but not isolated (no privilege separation)\n' >&2
   install_configure_guard
   configure_messaging_channels
   validate_openclaw_symlinks

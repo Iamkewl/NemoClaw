@@ -155,6 +155,19 @@ describe("nemoclaw-start externalized gateway token", () => {
     );
     expect(rootBlock).toBeTruthy();
   });
+
+  it("generates a token in non-root mode for gateway auth", () => {
+    const nonRootBlock = src.match(
+      /if \[ "\$\(id -u\)" -ne 0 \]; then([\s\S]*?)^fi$/m,
+    );
+    expect(nonRootBlock).toBeTruthy();
+    const body = nonRootBlock[1];
+    // Non-root path must generate a token so the gateway has valid auth
+    expect(body).toContain("secrets.token_hex(32)");
+    expect(body).toContain("OPENCLAW_GATEWAY_TOKEN");
+    // Must also write token file for host-side retrieval
+    expect(body).toContain("GATEWAY_TOKEN_FILE");
+  });
 });
 
 describe("Dockerfile gateway token externalization", () => {
