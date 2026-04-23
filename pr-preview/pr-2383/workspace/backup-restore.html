@@ -596,64 +596,26 @@ For full details, see the <a class="reference internal" href="../reference/comma
 </pre></div>
 </div>
 </section>
-<section id="backing-up-multi-agent-deployments">
-<h2>Backing Up Multi-Agent Deployments<a class="headerlink" href="#backing-up-multi-agent-deployments" title="Link to this heading">#</a></h2>
+<section id="multi-agent-deployments">
+<h2>Multi-Agent Deployments<a class="headerlink" href="#multi-agent-deployments" title="Link to this heading">#</a></h2>
 <p>When OpenClaw is configured with multiple named agents, each agent has its own
 workspace directory (<code class="docutils literal notranslate"><span class="pre">workspace-main/</span></code>, <code class="docutils literal notranslate"><span class="pre">workspace-support/</span></code>, <code class="docutils literal notranslate"><span class="pre">workspace-ops/</span></code>,
 and so on — see <a class="reference internal" href="workspace-files.html#multi-agent-deployments"><span class="std std-ref">Multi-Agent Deployments</span></a>).</p>
-<p>The built-in snapshot command and <code class="docutils literal notranslate"><span class="pre">scripts/backup-workspace.sh</span></code> currently target
-only the default <code class="docutils literal notranslate"><span class="pre">workspace/</span></code> path. Per-agent workspaces need to be backed up
-manually until multi-workspace support lands.</p>
-<section id="manual-per-agent-backup">
-<h3>Manual per-agent backup<a class="headerlink" href="#manual-per-agent-backup" title="Link to this heading">#</a></h3>
-<p>Discover the active workspaces inside the sandbox and download each with
-<code class="docutils literal notranslate"><span class="pre">openshell</span> <span class="pre">sandbox</span> <span class="pre">download</span></code>:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span><span class="nv">SANDBOX</span><span class="o">=</span>my-assistant
-<span class="gp">$ </span><span class="nv">BACKUP_DIR</span><span class="o">=</span>~/.nemoclaw/backups/<span class="k">$(</span>date<span class="w"> </span>+%Y%m%d-%H%M%S<span class="k">)</span>
-<span class="gp">$ </span>mkdir<span class="w"> </span>-p<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BACKUP_DIR</span><span class="s2">&quot;</span>
-
-<span class="gp">$ </span><span class="c1"># List per-agent workspaces</span>
-<span class="gp">$ </span>openshell<span class="w"> </span>sandbox<span class="w"> </span><span class="nb">exec</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$SANDBOX</span><span class="s2">&quot;</span><span class="w"> </span>--<span class="w"> </span><span class="se">\</span>
-<span class="w">    </span>sh<span class="w"> </span>-c<span class="w"> </span><span class="s1">&#39;ls -d /sandbox/.openclaw/workspace-*/ 2&gt;/dev/null&#39;</span>
-<span class="go">/sandbox/.openclaw/workspace-main/</span>
-<span class="go">/sandbox/.openclaw/workspace-support/</span>
-<span class="go">/sandbox/.openclaw/workspace-ops/</span>
-
-<span class="gp">$ </span><span class="c1"># Download each agent&#39;s workspace tree</span>
-<span class="gp">$ </span><span class="k">for</span><span class="w"> </span>ws<span class="w"> </span><span class="k">in</span><span class="w"> </span>workspace-main<span class="w"> </span>workspace-support<span class="w"> </span>workspace-ops<span class="p">;</span><span class="w"> </span><span class="k">do</span>
-<span class="go">    mkdir -p &quot;$BACKUP_DIR/$ws&quot;</span>
-<span class="go">    for f in SOUL.md USER.md IDENTITY.md AGENTS.md MEMORY.md; do</span>
-<span class="go">      openshell sandbox download &quot;$SANDBOX&quot; \</span>
-<span class="go">        &quot;/sandbox/.openclaw/$ws/$f&quot; &quot;$BACKUP_DIR/$ws/&quot; 2&gt;/dev/null</span>
-<span class="go">    done</span>
-<span class="go">    openshell sandbox download &quot;$SANDBOX&quot; \</span>
-<span class="go">      &quot;/sandbox/.openclaw/$ws/memory/&quot; &quot;$BACKUP_DIR/$ws/memory/&quot; 2&gt;/dev/null</span>
-<span class="go">  done</span>
-</pre></div>
-</div>
-</section>
-<section id="id1">
-<h3>Restore<a class="headerlink" href="#id1" title="Link to this heading">#</a></h3>
-<p>Upload each per-agent tree back into the same named workspace paths:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span><span class="k">for</span><span class="w"> </span>ws<span class="w"> </span><span class="k">in</span><span class="w"> </span>workspace-main<span class="w"> </span>workspace-support<span class="w"> </span>workspace-ops<span class="p">;</span><span class="w"> </span><span class="k">do</span>
-<span class="go">    for f in &quot;$BACKUP_DIR/$ws/&quot;*.md; do</span>
-<span class="go">      [ -f &quot;$f&quot; ] &amp;&amp; openshell sandbox upload &quot;$SANDBOX&quot; &quot;$f&quot; \</span>
-<span class="go">        &quot;/sandbox/.openclaw/$ws/&quot;</span>
-<span class="go">    done</span>
-<span class="go">    [ -d &quot;$BACKUP_DIR/$ws/memory&quot; ] &amp;&amp; openshell sandbox upload &quot;$SANDBOX&quot; \</span>
-<span class="go">      &quot;$BACKUP_DIR/$ws/memory/&quot; &quot;/sandbox/.openclaw/$ws/memory/&quot;</span>
-<span class="go">  done</span>
-</pre></div>
-</div>
-</section>
+<p><code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">&lt;name&gt;</span> <span class="pre">snapshot</span> <span class="pre">create</span></code> automatically discovers every <code class="docutils literal notranslate"><span class="pre">workspace-*/</span></code>
+directory under the sandbox state tree and includes it in the snapshot bundle
+alongside the default <code class="docutils literal notranslate"><span class="pre">workspace/</span></code>. <code class="docutils literal notranslate"><span class="pre">snapshot</span> <span class="pre">restore</span></code> re-applies the full
+per-agent set. No manual per-workspace backup pattern is needed.</p>
+<p>The sandbox entrypoint ensures every per-agent workspace is backed by the
+persistent <code class="docutils literal notranslate"><span class="pre">.openclaw-data/</span></code> tree (via a symlink from
+<code class="docutils literal notranslate"><span class="pre">.openclaw/workspace-&lt;name&gt;/</span></code>) so state also survives <code class="docutils literal notranslate"><span class="pre">openshell</span> <span class="pre">sandbox</span> <span class="pre">restart</span></code>.</p>
 <section id="shared-files-across-agents">
 <h3>Shared files across agents<a class="headerlink" href="#shared-files-across-agents" title="Link to this heading">#</a></h3>
 <p>Files that operators typically want consistent across every per-agent workspace
-(<code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code>, shared skills, common templates) are <strong>not</strong> synced automatically
-today. Each workspace is independent; changes in one don’t propagate. Operators
-that need this either copy the shared files explicitly to each workspace after
-editing, or maintain a host-side sync layer. Tracking multi-workspace tooling
-(discovery, shared mount, <code class="docutils literal notranslate"><span class="pre">workspaces</span> <span class="pre">list</span></code> command) in
+(<code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code>, shared skills, common templates) are <strong>not</strong> synced automatically.
+Each workspace is independent; changes in one don’t propagate. Operators that
+need this either copy the shared files explicitly to each workspace after
+editing, or maintain a host-side sync layer. Tracking shared-file tooling
+(shared mount, <code class="docutils literal notranslate"><span class="pre">workspaces</span> <span class="pre">list</span></code> command) in
 <a class="reference external" href="https://github.com/NVIDIA/NemoClaw/issues/1260" rel="noreferer noopener" target="_blank">#1260</a>.</p>
 </section>
 </section>
@@ -725,9 +687,7 @@ editing, or maintain a host-side sync layer. Tracking multi-workspace tooling
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#verifying-a-backup">Verifying a Backup</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#backing-up-multi-agent-deployments">Backing Up Multi-Agent Deployments</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#manual-per-agent-backup">Manual per-agent backup</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id1">Restore</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#multi-agent-deployments">Multi-Agent Deployments</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-files-across-agents">Shared files across agents</a></li>
 </ul>
 </li>

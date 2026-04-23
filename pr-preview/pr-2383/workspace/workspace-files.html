@@ -560,12 +560,18 @@ workspace directory alongside the default <code class="docutils literal notransl
 (<code class="docutils literal notranslate"><span class="pre">SOUL.md</span></code>, <code class="docutils literal notranslate"><span class="pre">USER.md</span></code>, <code class="docutils literal notranslate"><span class="pre">IDENTITY.md</span></code>, <code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code>, <code class="docutils literal notranslate"><span class="pre">MEMORY.md</span></code>, <code class="docutils literal notranslate"><span class="pre">memory/</span></code>).
 Files are per-agent — changes in <code class="docutils literal notranslate"><span class="pre">workspace-main/AGENTS.md</span></code> are not visible to
 <code class="docutils literal notranslate"><span class="pre">workspace-support/</span></code>.</p>
+<p>Persistence and snapshots are handled automatically for per-agent workspaces:
+the sandbox entrypoint provisions each <code class="docutils literal notranslate"><span class="pre">workspace-&lt;name&gt;/</span></code> as a symlink into the
+writable <code class="docutils literal notranslate"><span class="pre">.openclaw-data/</span></code> tree so state survives sandbox restart, and
+<code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">&lt;name&gt;</span> <span class="pre">snapshot</span> <span class="pre">create</span></code> discovers every <code class="docutils literal notranslate"><span class="pre">workspace-&lt;name&gt;/</span></code> directory
+and includes it in the snapshot bundle alongside the default <code class="docutils literal notranslate"><span class="pre">workspace/</span></code>.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>The NemoClaw tooling — <code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">&lt;name&gt;</span> <span class="pre">snapshot</span></code> and <code class="docutils literal notranslate"><span class="pre">scripts/backup-workspace.sh</span></code>
-— currently operates on the default <code class="docutils literal notranslate"><span class="pre">workspace/</span></code> directory only. Multi-agent
-deployments need a manual backup pattern; see
-<a class="reference internal" href="backup-restore.html#backing-up-multi-agent-deployments"><span class="std std-ref">Backing Up Multi-Agent Deployments</span></a>.</p>
+<p>Files that operators typically want consistent across every agent workspace
+(<code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code>, shared skills, common templates) are not synced automatically.
+Each workspace is independent; changes in one don’t propagate. Tracking
+shared-file tooling (shared mount, <code class="docutils literal notranslate"><span class="pre">workspaces</span> <span class="pre">list</span></code> command) in
+<a class="reference external" href="https://github.com/NVIDIA/NemoClaw/issues/1260" rel="noreferer noopener" target="_blank">#1260</a>.</p>
 </div>
 </section>
 <section id="persistence-behavior">
