@@ -111,7 +111,6 @@ const GLOBAL_COMMANDS = new Set([
 
 const REMOTE_UNINSTALL_URL = buildVersionedUninstallUrl(getVersion());
 let OPENSHELL_BIN = null;
-const MIN_LOGS_OPENSHELL_VERSION = "0.0.7";
 const NEMOCLAW_GATEWAY_NAME = "nemoclaw";
 const DASHBOARD_FORWARD_PORT = String(DASHBOARD_PORT);
 
@@ -1602,46 +1601,25 @@ async function sandboxStatus(sandboxName) {
 }
 
 function sandboxLogs(sandboxName, follow) {
-  const installedVersion = getInstalledOpenshellVersionOrNull();
-  if (installedVersion && !versionGte(installedVersion, MIN_LOGS_OPENSHELL_VERSION)) {
-    printOldLogsCompatibilityGuidance(installedVersion);
-    process.exit(1);
-  }
+  const args = buildSandboxLogsArgs(sandboxName, follow);
 
-  const args = ["logs", sandboxName];
-  if (follow) args.push("--tail");
-  const result = spawnSync(getOpenshellBinary(), args, {
-    cwd: ROOT,
-    env: process.env,
-    encoding: "utf-8",
-    stdio: follow ? ["ignore", "inherit", "pipe"] : ["ignore", "pipe", "pipe"],
+  const result = runOpenshell(args, {
+    stdio: "inherit",
+    ignoreError: true,
   });
-  const stdout = String(result.stdout || "");
-  const stderr = String(result.stderr || "");
-  const combined = `${stdout}${stderr}`;
-  if (!follow && stdout) {
-    process.stdout.write(stdout);
+  if (result.status !== 0) {
+    console.error(`  Command failed (exit ${result.status}): openshell ${args.join(" ")}`);
   }
-  if (result.status === 0) {
-    return;
-  }
-  if (stderr) {
-    process.stderr.write(stderr);
-  }
-  if (
-    /unrecognized subcommand 'logs'|unexpected argument '--tail'|unexpected argument '--follow'/i.test(
-      combined,
-    ) ||
-    (installedVersion && !versionGte(installedVersion, MIN_LOGS_OPENSHELL_VERSION))
-  ) {
-    printOldLogsCompatibilityGuidance(installedVersion);
-    process.exit(1);
-  }
-  if (result.status === null || result.signal) {
-    exitWithSpawnResult(result);
-  }
-  console.error(`  Command failed (exit ${result.status}): openshell ${args.join(" ")}`);
   exitWithSpawnResult(result);
+}
+
+function buildSandboxLogsArgs(sandboxName, follow) {
+  const args = ["sandbox", "exec", "-n", sandboxName, "--", "tail", "-n", "200"];
+  if (follow) {
+    args.push("-f");
+  }
+  args.push("/tmp/gateway.log");
+  return args;
 }
 
 async function sandboxPolicyAdd(sandboxName, args = []) {

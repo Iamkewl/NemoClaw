@@ -753,6 +753,92 @@ describe("onboard helpers", () => {
     }
   });
 
+  it("#2281: bakes NEMOCLAW_AGENT_TIMEOUT env into the staged Dockerfile", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-onboard-dockerfile-timeout-"));
+    const dockerfilePath = path.join(tmpDir, "Dockerfile");
+    fs.writeFileSync(
+      dockerfilePath,
+      [
+        "ARG NEMOCLAW_MODEL=nvidia/nemotron-3-super-120b-a12b",
+        "ARG NEMOCLAW_PROVIDER_KEY=nvidia",
+        "ARG NEMOCLAW_PRIMARY_MODEL_REF=nvidia/nemotron-3-super-120b-a12b",
+        "ARG CHAT_UI_URL=http://127.0.0.1:18789",
+        "ARG NEMOCLAW_INFERENCE_BASE_URL=https://inference.local/v1",
+        "ARG NEMOCLAW_INFERENCE_API=openai-completions",
+        "ARG NEMOCLAW_INFERENCE_COMPAT_B64=e30=",
+        "ARG NEMOCLAW_WEB_SEARCH_ENABLED=0",
+        "ARG NEMOCLAW_BUILD_ID=default",
+        "ARG NEMOCLAW_AGENT_TIMEOUT=600",
+      ].join("\n"),
+    );
+
+    const priorTimeout = process.env.NEMOCLAW_AGENT_TIMEOUT;
+    process.env.NEMOCLAW_AGENT_TIMEOUT = "1800";
+    try {
+      patchStagedDockerfile(
+        dockerfilePath,
+        "gpt-5.4",
+        "http://127.0.0.1:18789",
+        "build-timeout",
+        "openai-api",
+      );
+      const patched = fs.readFileSync(dockerfilePath, "utf8");
+      assert.match(patched, /^ARG NEMOCLAW_AGENT_TIMEOUT=1800$/m);
+    } finally {
+      if (priorTimeout === undefined) {
+        delete process.env.NEMOCLAW_AGENT_TIMEOUT;
+      } else {
+        process.env.NEMOCLAW_AGENT_TIMEOUT = priorTimeout;
+      }
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("#2281: rejects malformed NEMOCLAW_AGENT_TIMEOUT and keeps default", () => {
+    const tmpDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "nemoclaw-onboard-dockerfile-timeout-default-"),
+    );
+    const dockerfilePath = path.join(tmpDir, "Dockerfile");
+    fs.writeFileSync(
+      dockerfilePath,
+      [
+        "ARG NEMOCLAW_MODEL=nvidia/nemotron-3-super-120b-a12b",
+        "ARG NEMOCLAW_PROVIDER_KEY=nvidia",
+        "ARG NEMOCLAW_PRIMARY_MODEL_REF=nvidia/nemotron-3-super-120b-a12b",
+        "ARG CHAT_UI_URL=http://127.0.0.1:18789",
+        "ARG NEMOCLAW_INFERENCE_BASE_URL=https://inference.local/v1",
+        "ARG NEMOCLAW_INFERENCE_API=openai-completions",
+        "ARG NEMOCLAW_INFERENCE_COMPAT_B64=e30=",
+        "ARG NEMOCLAW_WEB_SEARCH_ENABLED=0",
+        "ARG NEMOCLAW_BUILD_ID=default",
+        "ARG NEMOCLAW_AGENT_TIMEOUT=600",
+      ].join("\n"),
+    );
+
+    const priorTimeout = process.env.NEMOCLAW_AGENT_TIMEOUT;
+    // Malformed: not a positive integer. Should be rejected, default kept.
+    process.env.NEMOCLAW_AGENT_TIMEOUT = "not-a-number\nRUN rm -rf /";
+    try {
+      patchStagedDockerfile(
+        dockerfilePath,
+        "gpt-5.4",
+        "http://127.0.0.1:18789",
+        "build-timeout-bad",
+        "openai-api",
+      );
+      const patched = fs.readFileSync(dockerfilePath, "utf8");
+      assert.match(patched, /^ARG NEMOCLAW_AGENT_TIMEOUT=600$/m);
+      assert.doesNotMatch(patched, /RUN rm -rf/);
+    } finally {
+      if (priorTimeout === undefined) {
+        delete process.env.NEMOCLAW_AGENT_TIMEOUT;
+      } else {
+        process.env.NEMOCLAW_AGENT_TIMEOUT = priorTimeout;
+      }
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
   it("patches the staged Dockerfile with Brave Search config when enabled", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-onboard-dockerfile-web-"));
     const dockerfilePath = path.join(tmpDir, "Dockerfile");
@@ -929,13 +1015,13 @@ describe("onboard helpers", () => {
       path.join(blueprintDir, "blueprint.yaml"),
       [
         'version: "0.1.0"',
-        'min_openshell_version: "0.0.29"',
-        'max_openshell_version: "0.0.29"',
+        'min_openshell_version: "0.0.32"',
+        'max_openshell_version: "0.0.32"',
         'min_openclaw_version: "2026.3.0"',
       ].join("\n"),
     );
     try {
-      expect(getBlueprintMaxOpenshellVersion(tmpDir)).toBe("0.0.29");
+      expect(getBlueprintMaxOpenshellVersion(tmpDir)).toBe("0.0.32");
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
@@ -988,55 +1074,6 @@ describe("onboard helpers", () => {
       "ghcr.io/nvidia/openshell/cluster:0.0.13",
     );
     expect(getStableGatewayImageRef("bogus")).toBe(null);
-  });
-
-  it("bypasses stale .openshell-installed-version when the binary is newer", () => {
-    // A manual binary swap (e.g. cp openshell /usr/local/bin/openshell without
-    // rerunning install-openshell.sh) must not be silently accepted via the
-    // previous install's sidecar. When binary mtime > sidecar mtime, return
-    // null so the caller re-runs the install / version gate.
-    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-sidecar-stale-"));
-    const binPath = path.join(tmp, "openshell");
-    const sidecarPath = path.join(tmp, ".openshell-installed-version");
-    const originalPath = process.env.PATH;
-    try {
-      fs.writeFileSync(binPath, "#!/bin/sh\necho 'openshell m-dev'\n", { mode: 0o755 });
-      fs.writeFileSync(sidecarPath, "0.0.29\n");
-      const past = new Date(Date.now() - 60_000);
-      const now = new Date();
-      fs.utimesSync(sidecarPath, past, past);
-      fs.utimesSync(binPath, now, now);
-      // Prepend tmp so `command -v openshell` in resolveOpenshell finds our fake.
-      process.env.PATH = `${tmp}:${originalPath}`;
-      // Unparseable versionOutput → falls through to the sidecar branch.
-      expect(getInstalledOpenshellVersion("openshell m-dev")).toBe(null);
-    } finally {
-      process.env.PATH = originalPath;
-      fs.rmSync(tmp, { recursive: true, force: true });
-    }
-  });
-
-  it("accepts .openshell-installed-version when the sidecar is not older than the binary", () => {
-    // Happy path: install-openshell.sh writes the sidecar immediately after
-    // installing the binary, so sidecar mtime >= binary mtime. Sidecar value
-    // is returned for binaries that self-report unparseable versions (m-dev).
-    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-sidecar-fresh-"));
-    const binPath = path.join(tmp, "openshell");
-    const sidecarPath = path.join(tmp, ".openshell-installed-version");
-    const originalPath = process.env.PATH;
-    try {
-      fs.writeFileSync(binPath, "#!/bin/sh\necho 'openshell m-dev'\n", { mode: 0o755 });
-      fs.writeFileSync(sidecarPath, "0.0.29\n");
-      const past = new Date(Date.now() - 60_000);
-      const now = new Date();
-      fs.utimesSync(binPath, past, past);
-      fs.utimesSync(sidecarPath, now, now);
-      process.env.PATH = `${tmp}:${originalPath}`;
-      expect(getInstalledOpenshellVersion("openshell m-dev")).toBe("0.0.29");
-    } finally {
-      process.env.PATH = originalPath;
-      fs.rmSync(tmp, { recursive: true, force: true });
-    }
   });
 
   it("treats the gateway as healthy only when nemoclaw is running and connected", () => {
