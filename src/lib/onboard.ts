@@ -6095,13 +6095,31 @@ function findOpenclawJsonPath(dir) {
 }
 
 /**
- * Pull gateway.auth.token from the sandbox image via openshell sandbox download
- * so onboard can print copy-paste Control UI URLs with #token= (same idea as nemoclaw-start.sh).
+ * Pull gateway auth token from the sandbox. The token lives at
+ * /run/nemoclaw/gateway-token (not in openclaw.json). Host-side
+ * openshell sandbox download runs as root and can read it.
+ *
+ * Falls back to openclaw.json for images that predate this change.
  */
 function fetchGatewayAuthTokenFromSandbox(sandboxName) {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-token-"));
   try {
     const destDir = `${tmpDir}${path.sep}`;
+
+    // Primary: externalized token file (gateway:gateway 0400, root can read)
+    const tokenFileResult = runOpenshell(
+      ["sandbox", "download", sandboxName, "/run/nemoclaw/gateway-token", destDir],
+      { ignoreError: true, stdio: ["ignore", "ignore", "ignore"] },
+    );
+    if (tokenFileResult.status === 0) {
+      const tokenPath = path.join(tmpDir, "gateway-token");
+      if (fs.existsSync(tokenPath)) {
+        const token = fs.readFileSync(tokenPath, "utf-8").trim();
+        if (token.length > 0) return token;
+      }
+    }
+
+    // Fallback: read from openclaw.json (pre-externalization images)
     const result = runOpenshell(
       ["sandbox", "download", sandboxName, "/sandbox/.openclaw/openclaw.json", destDir],
       { ignoreError: true, stdio: ["ignore", "ignore", "ignore"] },
@@ -6284,7 +6302,7 @@ function printDashboard(sandboxName, model, provider, nimContainer = null, agent
       console.log(`  ${entry.label}: ${entry.url}`);
     }
     console.log(
-      `  Token:       nemoclaw ${sandboxName} connect  →  jq -r '.gateway.auth.token' /sandbox/.openclaw/openclaw.json`,
+      `  Token:       see /tmp/gateway.log inside the sandbox, or re-run onboard.`,
     );
     console.log(
       `               append  #token=<token>  to the URL, or see /tmp/gateway.log inside the sandbox.`,

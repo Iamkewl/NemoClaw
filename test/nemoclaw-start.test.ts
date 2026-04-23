@@ -99,13 +99,6 @@ describe("nemoclaw-start _SANDBOX_HOME variable (#1609)", () => {
     }
   });
 
-  it("uses _SANDBOX_HOME for rc file paths in export_gateway_token", () => {
-    const exportFn = src.match(/export_gateway_token\(\) \{([\s\S]*?)^\}/m);
-    expect(exportFn).toBeTruthy();
-    expect(exportFn[1]).toContain("${_SANDBOX_HOME}/.bashrc");
-    expect(exportFn[1]).toContain("${_SANDBOX_HOME}/.profile");
-  });
-
   it("uses _SANDBOX_HOME for rc file paths in install_configure_guard", () => {
     const guardFn = src.match(
       /install_configure_guard\(\) \{([\s\S]*?)^validate_openclaw_symlinks/m,
@@ -116,50 +109,51 @@ describe("nemoclaw-start _SANDBOX_HOME variable (#1609)", () => {
   });
 });
 
-describe("nemoclaw-start gateway token export (#1114)", () => {
+describe("nemoclaw-start externalized gateway token", () => {
   const src = fs.readFileSync(START_SCRIPT, "utf-8");
 
-  it("defines _read_gateway_token helper used by both export and dashboard", () => {
-    expect(src).toMatch(/_read_gateway_token\(\) \{/);
-    // export_gateway_token calls the helper
-    expect(src).toMatch(/token="\$\(_read_gateway_token\)"/);
-    // print_dashboard_urls also calls the helper
+  it("defines generate_gateway_token that writes to GATEWAY_TOKEN_FILE", () => {
+    const fn = src.match(/generate_gateway_token\(\) \{([\s\S]*?)^\}/m);
+    expect(fn).toBeTruthy();
+    expect(fn[1]).toContain("GATEWAY_TOKEN_FILE");
+    expect(fn[1]).toContain("secrets.token_hex(32)");
+    expect(fn[1]).toContain("chown gateway:gateway");
+    expect(fn[1]).toContain("chmod 400");
+  });
+
+  it("defines GATEWAY_TOKEN_FILE at /run/nemoclaw/gateway-token", () => {
+    expect(src).toContain('GATEWAY_TOKEN_FILE="${GATEWAY_TOKEN_DIR}/gateway-token"');
+    expect(src).toContain('GATEWAY_TOKEN_DIR="/run/nemoclaw"');
+  });
+
+  it("defines _read_gateway_token that reads from the token file", () => {
+    const fn = src.match(/_read_gateway_token\(\) \{([\s\S]*?)^\}/m);
+    expect(fn).toBeTruthy();
+    expect(fn[1]).toContain("GATEWAY_TOKEN_FILE");
+  });
+
+  it("passes OPENCLAW_GATEWAY_TOKEN env var only on gateway launch line", () => {
+    expect(src).toMatch(
+      /OPENCLAW_GATEWAY_TOKEN="\$\(_read_gateway_token\)"[\s\\]*\n\s*nohup gosu gateway/,
+    );
+  });
+
+  it("does not export token to sandbox user shell env", () => {
+    // export_gateway_token must not exist — token must never reach .bashrc
+    expect(src).not.toMatch(/^export_gateway_token\(\)/m);
+  });
+
+  it("print_dashboard_urls uses _read_gateway_token", () => {
     const dashboardFn = src.match(/print_dashboard_urls\(\) \{([\s\S]*?)^\}/m);
     expect(dashboardFn).toBeTruthy();
     expect(dashboardFn[1]).toContain("_read_gateway_token");
   });
 
-  it("uses with-open context manager in the Python snippet", () => {
-    const helperFn = src.match(/_read_gateway_token\(\) \{([\s\S]*?)^\}/m);
-    expect(helperFn).toBeTruthy();
-    expect(helperFn[1]).toContain("with open(");
-  });
-
-  it("unsets stale OPENCLAW_GATEWAY_TOKEN when token is empty", () => {
-    const exportFn = src.match(/export_gateway_token\(\) \{([\s\S]*?)^\}/m);
-    expect(exportFn).toBeTruthy();
-    const body = exportFn[1];
-    // Must unset before returning on empty token
-    const unsetPos = body.indexOf("unset OPENCLAW_GATEWAY_TOKEN");
-    const returnPos = body.indexOf("return");
-    expect(unsetPos).toBeGreaterThan(-1);
-    expect(returnPos).toBeGreaterThan(-1);
-    expect(unsetPos).toBeLessThan(returnPos);
-  });
-
-  it("shell-escapes the token before embedding in rc snippet", () => {
-    const exportFn = src.match(/export_gateway_token\(\) \{([\s\S]*?)^\}/m);
-    expect(exportFn).toBeTruthy();
-    const body = exportFn[1];
-    // Must use single quotes around the escaped token value
-    expect(body).toContain("escaped_token");
-    expect(body).toMatch(/export OPENCLAW_GATEWAY_TOKEN='\$\{escaped_token\}'/);
-  });
-
-  it("calls export_gateway_token in both root and non-root paths", () => {
-    const calls = src.match(/export_gateway_token/g) || [];
-    // definition + 2 call sites
-    expect(calls.length).toBeGreaterThanOrEqual(3);
+  it("calls generate_gateway_token in root path", () => {
+    const rootBlock = src.match(
+      /# ── Root path[\s\S]*?generate_gateway_token/,
+    );
+    expect(rootBlock).toBeTruthy();
   });
 });
 
@@ -304,12 +298,12 @@ describe("runtime model override (#759)", () => {
     const nonRootBlock = src.match(/if \[ "\$\(id -u\)" -ne 0 \]; then([\s\S]*?)# ── Root path/);
     expect(nonRootBlock).toBeTruthy();
     expect(nonRootBlock[1]).toMatch(
-      /verify_config_integrity[\s\S]*?apply_model_override[\s\S]*?export_gateway_token/,
+      /verify_config_integrity[\s\S]*?apply_model_override/,
     );
 
-    // Root path: verify_config_integrity → apply_model_override → apply_cors_override
+    // Root path: verify_config_integrity → apply_model_override → apply_cors_override → generate_gateway_token
     const rootBlock = src.match(
-      /# ── Root path[\s\S]*?verify_config_integrity[\s\S]*?apply_model_override[\s\S]*?apply_cors_override[\s\S]*?export_gateway_token/,
+      /# ── Root path[\s\S]*?verify_config_integrity[\s\S]*?apply_model_override[\s\S]*?apply_cors_override[\s\S]*?generate_gateway_token/,
     );
     expect(rootBlock).toBeTruthy();
   });
@@ -426,11 +420,11 @@ describe("runtime CORS origin override (#719)", () => {
     const nonRootBlock = src.match(/if \[ "\$\(id -u\)" -ne 0 \]; then([\s\S]*?)# ── Root path/);
     expect(nonRootBlock).toBeTruthy();
     expect(nonRootBlock[1]).toMatch(
-      /apply_model_override[\s\S]*?apply_cors_override[\s\S]*?apply_slack_token_override[\s\S]*?export_gateway_token/,
+      /apply_model_override[\s\S]*?apply_cors_override[\s\S]*?apply_slack_token_override/,
     );
 
     const rootBlock = src.match(
-      /# ── Root path[\s\S]*?apply_model_override\n\s*apply_cors_override\n\s*apply_slack_token_override\n\s*export_gateway_token/,
+      /# ── Root path[\s\S]*?apply_model_override\n\s*apply_cors_override\n\s*apply_slack_token_override\n\s*generate_gateway_token/,
     );
     expect(rootBlock).toBeTruthy();
   });

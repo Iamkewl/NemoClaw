@@ -221,11 +221,17 @@ ENV NEMOCLAW_MODEL=${NEMOCLAW_MODEL} \
 WORKDIR /sandbox
 USER sandbox
 
-# Write the COMPLETE openclaw.json including gateway config and auth token.
+# Write openclaw.json with gateway config but WITHOUT the real auth token.
+# The gateway auth token is generated at container startup by the entrypoint
+# and passed via OPENCLAW_GATEWAY_TOKEN env var only to the gateway process
+# (running as 'gateway' user). The token is also persisted to
+# /run/nemoclaw/gateway-token (gateway:gateway 0400) for host-side reads.
+# The sandbox user (agent) cannot read the env var (/proc/pid/environ is
+# uid-gated) or the file (wrong uid, no-new-privileges blocks escalation).
+# See: scripts/nemoclaw-start.sh generate_gateway_token()
+#
 # This file is immutable at runtime (Landlock read-only on /sandbox/.openclaw).
-# No runtime writes to openclaw.json are needed or possible.
 # Build args (NEMOCLAW_MODEL, CHAT_UI_URL) customize per deployment.
-# Auth token is generated per build so each image has a unique token.
 #
 # Temporary workaround for NemoClaw#1738: the OpenClaw Discord extension's
 # gateway uses `ws` (via @buape/carbon), which ignores HTTPS_PROXY/HTTP_PROXY
@@ -238,7 +244,7 @@ USER sandbox
 # Remove once OpenClaw lands an env-var-honouring fix for the Discord
 # gateway equivalent to openclaw/openclaw#62878 (Slack Socket Mode).
 RUN python3 -c "\
-import base64, json, os, secrets; \
+import base64, json, os; \
 from urllib.parse import urlparse; \
 proxy_url = f\"http://{os.environ['NEMOCLAW_PROXY_HOST']}:{os.environ['NEMOCLAW_PROXY_PORT']}\"; \
 model = os.environ['NEMOCLAW_MODEL']; \
@@ -285,7 +291,7 @@ config = { \
             'allowedOrigins': origins, \
         }, \
         'trustedProxies': ['127.0.0.1', '::1'], \
-        'auth': {'token': secrets.token_hex(32)} \
+        'auth': {'token': ''} \
     } \
 }; \
 config.update({ \
