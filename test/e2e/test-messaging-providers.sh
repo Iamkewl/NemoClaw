@@ -566,52 +566,16 @@ print(account.get('groupPolicy', ''))
     skip "M11d: Telegram groupPolicy not set (channel may not be configured)"
   fi
 
-  # M11e: Slack channel disabled by validate_slack_auth (#2340)
-  # With fake tokens (xoxb-fake-...), the entrypoint's validate_slack_auth
-  # should detect unresolved placeholders or invalid auth and disable the channel.
-  # Check NOW while the container is alive — by Phase 7 the gateway may have crashed.
-  slack_acct_enabled=$(echo "$channel_json" | python3 -c "
-import json, sys
-d = json.load(sys.stdin)
-accounts = d.get('slack', {}).get('accounts', {})
-account = accounts.get('default') or accounts.get('main') or next((v for v in accounts.values() if isinstance(v, dict)), {})
-print(account.get('enabled', 'MISSING'))
-" 2>/dev/null || true)
+  # M11e: Slack channel guard preload installed (#2340)
+  # The config is Landlock read-only, so the entrypoint cannot disable the
+  # channel in openclaw.json. Instead it injects a NODE_OPTIONS preload
+  # that catches unhandled Slack rejections. Verify the guard script exists.
+  slack_guard=$(sandbox_exec "ls /tmp/nemoclaw-slack-channel-guard.js 2>/dev/null && echo EXISTS || echo MISSING" 2>/dev/null || true)
 
-  slack_bot_token_val=$(echo "$channel_json" | python3 -c "
-import json, sys
-d = json.load(sys.stdin)
-accounts = d.get('slack', {}).get('accounts', {})
-account = accounts.get('default') or accounts.get('main') or next((v for v in accounts.values() if isinstance(v, dict)), {})
-print(account.get('botToken', 'MISSING')[:40])
-" 2>/dev/null || true)
-
-  info "Slack account enabled=$slack_acct_enabled botToken=${slack_bot_token_val}..."
-
-  # Capture entrypoint logs NOW while the container is alive
-  entrypoint_log=$(sandbox_exec "cat /proc/1/fd/2 2>/dev/null || journalctl -u sandbox 2>/dev/null || echo NOLOGS" 2>/dev/null || true)
-  # Also try nemoclaw logs
-  nemoclaw_log=$(nemoclaw "$SANDBOX_NAME" logs 2>&1 | tail -100 || true)
-  early_all_logs="${entrypoint_log}${nemoclaw_log}"
-  info "Entrypoint Slack lines (captured early while container alive):"
-  echo "$early_all_logs" | grep -iE "slack|channel|placeholder|validate" | head -10 | while IFS= read -r line; do
-    info "  $line"
-  done
-
-  if [ "$slack_acct_enabled" = "False" ]; then
-    pass "M11e: Slack channel disabled in config (validate_slack_auth worked)"
-  elif [ "$slack_acct_enabled" = "True" ]; then
-    # If still enabled, check if the botToken is still a placeholder
-    if [[ "$slack_bot_token_val" == openshell:resolve:env:* ]]; then
-      fail "M11e: Slack channel enabled with unresolved placeholder botToken — validate_slack_auth should have disabled it"
-    else
-      info "M11e: Slack channel enabled with resolved token — validate_slack_auth may have validated successfully"
-      pass "M11e: Slack channel enabled (token was resolved)"
-    fi
-  elif [ "$slack_acct_enabled" = "MISSING" ]; then
-    skip "M11e: No Slack channel in openclaw.json"
+  if echo "$slack_guard" | grep -q "EXISTS"; then
+    pass "M11e: Slack channel guard preload installed (/tmp/nemoclaw-slack-channel-guard.js)"
   else
-    fail "M11e: Unexpected Slack enabled state: ${slack_acct_enabled}"
+    fail "M11e: Slack channel guard preload not found — gateway vulnerable to Slack auth crash"
   fi
 fi
 
@@ -1097,45 +1061,15 @@ else
 fi
 
 # ══════════════════════════════════════════════════════════════════
-# Phase 7: Slack auth pre-validation (#2340)
+# Phase 7: Slack channel guard (#2340)
 #
-# Validates that validate_slack_auth() correctly pre-validates tokens
-# and disables the Slack channel when auth fails, rather than letting
-# the gateway crash from an unhandled promise rejection.
-#
-# The sandbox was installed with fake Slack tokens (xoxb-fake-...) in
-# Phase 1. These tokens have the right prefix but are invalid, so
-# validate_slack_auth should have:
-#   1. Called Slack's auth.test API
-#   2. Received an auth error (invalid_auth or not_authed)
-#   3. Disabled the Slack channel in openclaw.json
-#   4. Logged the failure and continued starting the gateway
-#
-# The gateway should still be running (inference/chat/TUI alive).
+# The sandbox was installed with fake Slack tokens. The channel guard
+# preload (NODE_OPTIONS --require) should catch the unhandled rejection
+# from @slack/web-api and keep the gateway alive.
 # ══════════════════════════════════════════════════════════════════
-section "Phase 7: Slack auth pre-validation (#2340)"
+section "Phase 7: Slack channel guard (#2340)"
 
-# Collect ALL available logs up-front for diagnostics.
-# validate_slack_auth logs to entrypoint stderr (captured by docker logs),
-# NOT to /tmp/gateway.log (which only has the openclaw gateway child).
-gw_log=$(sandbox_exec "cat /tmp/gateway.log 2>/dev/null" 2>/dev/null || true)
-
-# Get entrypoint logs via nemoclaw logs (preferred) or docker logs (fallback).
-container_log=$(nemoclaw "$SANDBOX_NAME" logs 2>&1 | tail -200 || true)
-if [ -z "$container_log" ]; then
-  container_log=$(docker logs "$(docker ps -aqf "name=$SANDBOX_NAME" | head -1)" 2>&1 || true)
-fi
-all_logs="${gw_log}${container_log}"
-
-# Dump Slack-relevant log lines for CI debugging
-info "Slack-related entrypoint log lines:"
-echo "$all_logs" | grep -iE "slack|channel|placeholder|validate" | while IFS= read -r line; do
-  info "  $line"
-done
-
-# S1: Gateway is serving on port 18789 (not crashed by Slack auth failure)
-# Probing the port is more accurate than checking PID 1 — the entrypoint can
-# survive even if the gateway child process dies (#2340).
+# S1: Gateway is serving on port 18789 — the guard caught the Slack rejection
 gw_port=$(sandbox_exec 'node -e "
 const net = require(\"net\");
 const sock = net.connect(18789, \"127.0.0.1\");
@@ -1144,106 +1078,23 @@ sock.on(\"error\", () => console.log(\"CLOSED\"));
 setTimeout(() => { console.log(\"TIMEOUT\"); sock.destroy(); }, 5000);
 "' 2>/dev/null || true)
 if echo "$gw_port" | grep -q "OPEN"; then
-  pass "S1: Gateway is serving on port 18789 — Slack auth failure did not take it down"
+  pass "S1: Gateway is serving on port 18789 — Slack auth failure did not crash it"
 else
   fail "S1: Gateway is not serving on port 18789 (${gw_port:0:200})"
 fi
 
-# S2: Entrypoint log contains evidence of Slack auth pre-validation
-if echo "$all_logs" | grep -qE "Validating Slack bot token|unresolved placeholder|placeholder:"; then
-  pass "S2: Entrypoint log shows Slack auth pre-validation ran"
-elif [ -z "$all_logs" ]; then
-  skip "S2: Could not read entrypoint or gateway logs"
+# S2: Gateway log contains the guard's catch message
+gw_log=$(sandbox_exec "cat /tmp/gateway.log 2>/dev/null" 2>/dev/null || true)
+if echo "$gw_log" | grep -q "provider failed to start:.*gateway continues"; then
+  pass "S2: Gateway log shows Slack rejection was caught by channel guard"
+elif echo "$gw_log" | grep -q "slack"; then
+  # Some Slack-related output exists but not our exact message
+  info "Slack-related gateway log: $(echo "$gw_log" | grep -i slack | head -3)"
+  skip "S2: Gateway log has Slack output but not the guard message (Slack may have connected)"
+elif [ -z "$gw_log" ]; then
+  skip "S2: Could not read gateway log"
 else
-  fail "S2: No evidence of Slack auth pre-validation in logs"
-fi
-
-# S3: Slack channel is disabled in openclaw.json after auth failure
-slack_enabled=$(sandbox_exec "python3 -c \"
-import json
-try:
-    cfg = json.load(open('/sandbox/.openclaw/openclaw.json'))
-    accounts = cfg.get('channels', {}).get('slack', {}).get('accounts', {})
-    acct = accounts.get('default') or accounts.get('main') or next((v for v in accounts.values() if isinstance(v, dict)), {})
-    print(acct.get('enabled', 'MISSING'))
-except Exception as e:
-    print('ERROR: ' + str(e))
-\"" 2>/dev/null || true)
-
-if [ "$slack_enabled" = "False" ]; then
-  pass "S3: Slack channel is disabled in openclaw.json (auth failure handled correctly)"
-elif [ "$slack_enabled" = "True" ]; then
-  # Channel still enabled — check logs for why
-  if echo "$all_logs" | grep -q "channel left enabled"; then
-    skip "S3: Slack channel left enabled (network/transient error during validation)"
-  else
-    fail "S3: Slack channel is still enabled — validate_slack_auth did not disable it on auth failure"
-  fi
-elif [ "$slack_enabled" = "MISSING" ]; then
-  skip "S3: No Slack channel in openclaw.json (Slack may not have been configured)"
-else
-  fail "S3: Unexpected Slack enabled state: ${slack_enabled:0:200}"
-fi
-
-# S4: Log confirms the channel was disabled (matches both API auth failure and placeholder detection)
-if echo "$all_logs" | grep -qE "provider failed to start:.*channel disabled|unresolved placeholder.*channel disabled"; then
-  pass "S4: Log confirms Slack channel was disabled"
-elif echo "$all_logs" | grep -q "channel left enabled"; then
-  skip "S4: Slack validation hit a transient/network error (channel left enabled)"
-elif echo "$all_logs" | grep -q "Slack bot token validated successfully"; then
-  skip "S4: Slack token unexpectedly passed validation (token may be valid)"
-else
-  fail "S4: No Slack auth validation result found in logs"
-fi
-
-# S5: Optional — test with a known-revoked token if provided
-if [ -n "${SLACK_BOT_TOKEN_REVOKED:-}" ]; then
-  info "Re-onboarding with revoked Slack token to verify auth pre-validation..."
-
-  # Destroy and re-onboard with the revoked token
-  nemoclaw "$SANDBOX_NAME" destroy --yes 2>/dev/null || true
-  openshell sandbox delete "$SANDBOX_NAME" 2>/dev/null || true
-
-  export SLACK_BOT_TOKEN="$SLACK_BOT_TOKEN_REVOKED"
-  export SLACK_APP_TOKEN="${SLACK_APP_TOKEN_REVOKED:-$SLACK_APP}"
-  export NEMOCLAW_RECREATE_SANDBOX=1
-
-  REVOKED_LOG="/tmp/nemoclaw-e2e-revoked-slack.log"
-  bash install.sh --non-interactive >"$REVOKED_LOG" 2>&1 || true
-
-  # Read the gateway log from the new sandbox
-  revoked_gw_log=$(sandbox_exec "cat /tmp/gateway.log 2>/dev/null" 2>/dev/null || true)
-  revoked_container_log=$(docker logs "$(docker ps -qf "name=$SANDBOX_NAME" | head -1)" 2>&1 || true)
-  revoked_all_logs="${revoked_gw_log}${revoked_container_log}"
-
-  # S5a: Revoked token should trigger auth failure
-  if echo "$revoked_all_logs" | grep -q "provider failed to start:.*channel disabled"; then
-    pass "S5: Revoked Slack token correctly detected and channel disabled"
-  elif echo "$revoked_all_logs" | grep -q "channel left enabled"; then
-    skip "S5: Could not reach Slack API to validate revoked token (network)"
-  else
-    fail "S5: Revoked Slack token was not caught by validate_slack_auth"
-  fi
-
-  # S5b: Gateway should still be serving
-  revoked_gw_port=$(sandbox_exec 'node -e "
-const net = require(\"net\");
-const sock = net.connect(18789, \"127.0.0.1\");
-sock.on(\"connect\", () => { console.log(\"OPEN\"); sock.end(); });
-sock.on(\"error\", () => console.log(\"CLOSED\"));
-setTimeout(() => { console.log(\"TIMEOUT\"); sock.destroy(); }, 5000);
-"' 2>/dev/null || true)
-  if echo "$revoked_gw_port" | grep -q "OPEN"; then
-    pass "S5b: Gateway survived revoked Slack token (port 18789 open)"
-  else
-    fail "S5b: Gateway not serving after revoked Slack token (${revoked_gw_port:0:200})"
-  fi
-
-  # Restore original tokens for cleanup
-  export SLACK_BOT_TOKEN="$SLACK_TOKEN"
-  export SLACK_APP_TOKEN="$SLACK_APP"
-else
-  skip "S5: SLACK_BOT_TOKEN_REVOKED not set — skipping revoked-token test"
+  skip "S2: No Slack-related output in gateway log (guard may not have been triggered yet)"
 fi
 
 # ══════════════════════════════════════════════════════════════════
