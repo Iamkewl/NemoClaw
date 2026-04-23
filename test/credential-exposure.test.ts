@@ -91,6 +91,40 @@ describe("credential exposure in process arguments", () => {
     expect(src).toMatch(/streamSandboxCreate\(createCommand, sandboxEnv(?:, \{)?/);
   });
 
+  it("subprocess-env TLS allowlist includes git, curl, and python CA vars (#2270)", () => {
+    const cliSrc = fs.readFileSync(
+      path.join(import.meta.dirname, "..", "src", "lib", "subprocess-env.ts"),
+      "utf-8",
+    );
+    const pluginSrc = fs.readFileSync(
+      path.join(import.meta.dirname, "..", "nemoclaw", "src", "lib", "subprocess-env.ts"),
+      "utf-8",
+    );
+    for (const src of [cliSrc, pluginSrc]) {
+      expect(src).toContain("GIT_SSL_CAINFO");
+      expect(src).toContain("GIT_SSL_CAPATH");
+      expect(src).toContain("CURL_CA_BUNDLE");
+      expect(src).toContain("REQUESTS_CA_BUNDLE");
+    }
+  });
+
+  it("subprocess-env TLS allowlists in CLI and plugin are in sync (#2270)", () => {
+    const cliSrc = fs.readFileSync(
+      path.join(import.meta.dirname, "..", "src", "lib", "subprocess-env.ts"),
+      "utf-8",
+    );
+    const pluginSrc = fs.readFileSync(
+      path.join(import.meta.dirname, "..", "nemoclaw", "src", "lib", "subprocess-env.ts"),
+      "utf-8",
+    );
+    // Extract the TLS array from both files and compare
+    const extractTLS = (src) => {
+      const match = src.match(/const TLS = \[([\s\S]*?)\];/);
+      return match ? match[1].replace(/\s/g, "") : "";
+    };
+    expect(extractTLS(cliSrc)).toBe(extractTLS(pluginSrc));
+  });
+
   it("services.ts must not spread full process.env into subprocess", () => {
     const src = fs.readFileSync(SERVICES_TS, "utf-8");
 
