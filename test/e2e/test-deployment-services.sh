@@ -87,6 +87,10 @@ skip() {
   echo -e "${YELLOW}  SKIP${NC} $1 — $2" | tee -a "$LOG_FILE"
 }
 
+# ── Config ───────────────────────────────────────────────────────────────────
+SANDBOX_NAME="${NEMOCLAW_SANDBOX_NAME:-e2e-deploy-svc}"
+LOG_FILE="test-deployment-services-$(date +%Y%m%d-%H%M%S).log"
+
 # ── Resolve repo root ────────────────────────────────────────────────────────
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
