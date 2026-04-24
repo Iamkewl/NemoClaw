@@ -79,6 +79,7 @@ get_jetpack_version() {
           || error "Sudo is required to load br_netfilter and write /etc/modules-load.d and /etc/sysctl.d drop-ins."
       fi
       apply_br_netfilter_setup
+      info "br_netfilter applied: bridge-nf-call-{iptables,ip6tables}=1; persisted to /etc/sysctl.d/99-nemoclaw.conf + /etc/modules-load.d/nemoclaw.conf" >&2
     fi
     return 0
   fi
