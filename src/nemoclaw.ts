@@ -2990,6 +2990,12 @@ const [cmd, ...args] = process.argv.slice(2);
     return;
   }
 
+  // Internal developer flag — dump canonical command list for check-docs.sh parity checks
+  if (cmd === "--dump-commands") {
+    canonicalUsageList().forEach((c) => console.log(c));
+    return;
+  }
+
   // Global commands
   if (GLOBAL_COMMANDS.has(cmd)) {
     switch (cmd) {
