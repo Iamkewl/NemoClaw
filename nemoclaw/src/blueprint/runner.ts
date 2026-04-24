@@ -26,6 +26,18 @@ import { DASHBOARD_PORT } from "../lib/ports.js";
 
 type Action = "plan" | "apply" | "status" | "rollback";
 
+type BlueprintDataScalar = string | number | boolean | null;
+type BlueprintDataValue = BlueprintDataScalar | PolicyAdditions | BlueprintDataValue[];
+type RollbackPlanSource = { sandbox_name?: string };
+
+function isAction(value: string | undefined): value is Action {
+  return value === "plan" || value === "apply" || value === "status" || value === "rollback";
+}
+
+function isBlueprint(value: unknown): value is Blueprint {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 // ── Logging helpers ─────────────────────────────────────────────
 
 function log(msg: string): void {
@@ -34,6 +46,10 @@ function log(msg: string): void {
 
 function progress(pct: number, label: string): void {
   process.stdout.write(`PROGRESS:${String(pct)}:${label}\n`);
+}
+
+function readRollbackSandboxName(value: RollbackPlanSource | null): string {
+  return value && typeof value.sandbox_name === "string" ? value.sandbox_name : "openclaw";
 }
 
 // ── Utilities ───────────────────────────────────────────────────
@@ -50,15 +66,18 @@ export function emitRunId(): string {
   return rid;
 }
 
+type InferenceProfileMap = { [profileName: string]: InferenceProfile };
+type PolicyAdditions = { [name: string]: BlueprintDataValue };
+
 interface Blueprint {
   version?: string;
   components?: {
     inference?: {
-      profiles?: Record<string, InferenceProfile>;
+      profiles?: InferenceProfileMap;
     };
     sandbox?: SandboxConfig;
     policy?: {
-      additions?: Record<string, unknown>;
+      additions?: PolicyAdditions;
     };
   };
 }
@@ -88,7 +107,11 @@ export function loadBlueprint(): Blueprint {
   } catch {
     throw new Error(`blueprint.yaml not found at ${bpFile}`);
   }
-  return YAML.parse(content) as Blueprint;
+  const parsed: unknown = YAML.parse(content);
+  if (!isBlueprint(parsed)) {
+    throw new Error(`blueprint.yaml at ${bpFile} must contain a YAML mapping`);
+  }
+  return parsed;
 }
 
 async function runCmd(
@@ -121,7 +144,7 @@ async function resolveRunConfig(
   blueprint: Blueprint,
   endpointUrl?: string,
 ): Promise<{
-  inferenceProfiles: Record<string, InferenceProfile>;
+  inferenceProfiles: InferenceProfileMap;
   inferenceCfg: InferenceProfile;
   sandboxCfg: SandboxConfig;
 }> {
@@ -169,7 +192,7 @@ export interface RunPlan {
     model: string | undefined;
     credential_env: string | undefined;
   };
-  policy_additions: Record<string, unknown>;
+  policy_additions: PolicyAdditions;
   dry_run: boolean;
 }
 
@@ -409,8 +432,12 @@ export async function actionRollback(rid: string): Promise<void> {
   const planFile = join(stateDir, "plan.json");
   try {
     const planData = readFileSync(planFile, "utf-8");
-    const plan = JSON.parse(planData) as { sandbox_name?: string };
-    const sandboxName = plan.sandbox_name ?? "openclaw";
+    const parsedPlan: unknown = JSON.parse(planData);
+    const rollbackPlan: RollbackPlanSource | null =
+      typeof parsedPlan === "object" && parsedPlan !== null && !Array.isArray(parsedPlan)
+        ? parsedPlan
+        : null;
+    const sandboxName = readRollbackSandboxName(rollbackPlan);
 
     progress(30, `Stopping sandbox ${sandboxName}`);
     await runCmd(["openshell", "sandbox", "stop", sandboxName], { reject: false });
@@ -430,7 +457,7 @@ export async function actionRollback(rid: string): Promise<void> {
 // ── CLI ─────────────────────────────────────────────────────────
 
 export async function main(argv: string[] = process.argv.slice(2)): Promise<void> {
-  const action = argv[0] as Action | undefined;
+  const action = isAction(argv[0]) ? argv[0] : undefined;
   let profile = "default";
   let planPath: string | undefined;
   let runId: string | undefined;

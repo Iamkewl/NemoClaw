@@ -6,15 +6,42 @@ import { describe, it, expect } from "vitest";
 import { buildRecoveryScript } from "../../dist/lib/agent-runtime";
 import type { AgentDefinition } from "./agent-defs";
 
-// Test fixture — only fields read by buildRecoveryScript are needed.
-// Cast via unknown to avoid requiring the full AgentDefinition shape.
-const minimalAgent = {
-  name: "test-agent",
-  displayName: "Test Agent",
-  binary_path: "/usr/local/bin/test-agent",
-  gateway_command: "test-agent gateway run",
-  healthProbe: { url: "http://127.0.0.1:19000/" },
-} as unknown as AgentDefinition;
+function makeAgent(overrides: Partial<AgentDefinition> = {}): AgentDefinition {
+  return {
+    name: "test-agent",
+    displayName: "Test Agent",
+    binary_path: "/usr/local/bin/test-agent",
+    gateway_command: "test-agent gateway run",
+    healthProbe: { url: "http://127.0.0.1:19000/", port: 19000, timeout_seconds: 5 },
+    forwardPort: 19000,
+    dashboard: { kind: "ui", label: "UI", path: "/" },
+    configPaths: {
+      immutableDir: "/tmp/agent/immutable",
+      writableDir: "/tmp/agent/writable",
+      configFile: "/tmp/agent/config.yaml",
+      envFile: null,
+      format: "yaml",
+    },
+    stateDirs: [],
+    versionCommand: "test-agent --version",
+    expectedVersion: null,
+    hasDevicePairing: false,
+    phoneHomeHosts: [],
+    messagingPlatforms: [],
+    dockerfileBasePath: null,
+    dockerfilePath: null,
+    startScriptPath: null,
+    policyAdditionsPath: null,
+    policyPermissivePath: null,
+    pluginDir: null,
+    legacyPaths: null,
+    agentDir: "/tmp/agent",
+    manifestPath: "/tmp/agent/manifest.yaml",
+    ...overrides,
+  };
+}
+
+const minimalAgent = makeAgent();
 
 describe("buildRecoveryScript", () => {
   it("returns null for null agent (OpenClaw inline script handles it)", () => {
@@ -37,7 +64,7 @@ describe("buildRecoveryScript", () => {
   });
 
   it("falls back to openclaw gateway run when gateway_command is absent", () => {
-    const agent = { ...minimalAgent, gateway_command: undefined } as unknown as AgentDefinition;
+    const agent = makeAgent({ gateway_command: undefined });
     const script = buildRecoveryScript(agent, 19000);
     expect(script).toContain("openclaw gateway run --port 19000");
   });

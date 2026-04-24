@@ -1,4 +1,3 @@
-// @ts-nocheck
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -38,9 +37,12 @@ describe("http-proxy-fix heredoc sync (#2109)", () => {
       /<<'HTTP_PROXY_FIX_EOF'\n([\s\S]*?)\nHTTP_PROXY_FIX_EOF/,
     );
     expect(match).not.toBeNull();
+    if (!match) {
+      throw new Error("Expected HTTP_PROXY_FIX_EOF heredoc in scripts/nemoclaw-start.sh");
+    }
     // The heredoc capture excludes the final newline preceding the delimiter.
     // POSIX convention: the canonical file ends with a trailing newline.
-    const embedded = match[1] + "\n";
+    const embedded = `${match[1]}\n`;
     if (embedded !== canonical) {
       const embeddedLines = embedded.split("\n");
       const canonicalLines = canonical.split("\n");

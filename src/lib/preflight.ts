@@ -195,9 +195,9 @@ function readDockerDefaultCgroupnsMode(
   for (const filePath of paths) {
     try {
       const raw = readFileImpl(filePath, "utf-8");
-      const parsed = JSON.parse(raw) as {
-        ["default-cgroupns-mode"]?: unknown;
-      };
+      const parsed: {
+        ["default-cgroupns-mode"]?: string;
+      } = JSON.parse(raw);
       const mode = parsed["default-cgroupns-mode"];
       if (mode === "host" || mode === "private") return mode;
     } catch {
@@ -652,7 +652,7 @@ function getExistingSwapResult(mem: MemoryInfo): SwapResult | null {
   try {
     runCapture(["sudo", "swapon", "/swapfile"], { ignoreError: false });
     return { ok: true, totalMB: mem.totalMB + 4096, swapCreated: true };
-  } catch (err: unknown) {
+  } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return {
       ok: false,
@@ -719,7 +719,7 @@ function createSwapfile(mem: MemoryInfo): SwapResult {
     writeManagedSwapMarker();
 
     return { ok: true, totalMB: mem.totalMB + 4096, swapCreated: true };
-  } catch (err: unknown) {
+  } catch (err) {
     cleanupPartialSwap();
     const message = err instanceof Error ? err.message : String(err);
     return {
@@ -740,9 +740,16 @@ function createSwapfile(mem: MemoryInfo): SwapResult {
  * image push.
  */
 export function ensureSwap(minTotalMB?: number, opts: EnsureSwapOpts = {}): SwapResult {
-  const o = {
-    platform: process.platform as NodeJS.Platform,
-    memoryInfo: null as MemoryInfo | null,
+  const o: {
+    platform: NodeJS.Platform;
+    memoryInfo: MemoryInfo | null;
+    swapfileExists: boolean;
+    dryRun: boolean;
+    interactive: boolean;
+    getMemoryInfoImpl: (opts: GetMemoryInfoOpts) => MemoryInfo | null;
+  } = {
+    platform: process.platform,
+    memoryInfo: null,
     swapfileExists: fs.existsSync("/swapfile"),
     dryRun: false,
     interactive: process.stdout.isTTY && !process.env.NEMOCLAW_NON_INTERACTIVE,

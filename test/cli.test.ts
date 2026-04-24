@@ -1,4 +1,3 @@
-// @ts-nocheck
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -10,11 +9,41 @@ import path from "node:path";
 
 const CLI = path.join(import.meta.dirname, "..", "bin", "nemoclaw.js");
 
-function run(args) {
+type CliRunResult = {
+  code: number;
+  out: string;
+};
+
+type CliErrorShape = {
+  status?: number;
+  stdout?: string | Buffer;
+  stderr?: string | Buffer;
+};
+
+function readBufferOrStringProperty(value: object, key: "stdout" | "stderr"): string | Buffer | undefined {
+  const property = Reflect.get(value, key);
+  return typeof property === "string" || Buffer.isBuffer(property) ? property : undefined;
+}
+
+function readCliErrorOutput(error: CliErrorShape | string | null | undefined): CliRunResult {
+  if (!error || typeof error === "string") {
+    return { code: 1, out: String(error || "") };
+  }
+  return {
+    code: typeof error.status === "number" ? error.status : 1,
+    out: `${typeof error.stdout === "string" ? error.stdout : ""}${typeof error.stderr === "string" ? error.stderr : ""}`,
+  };
+}
+
+function run(args: string): CliRunResult {
   return runWithEnv(args);
 }
 
-function runWithEnv(args, env = {}, timeout = Number(process.env.NEMOCLAW_EXEC_TIMEOUT || 10000)) {
+function runWithEnv(
+  args: string,
+  env: NodeJS.ProcessEnv = {},
+  timeout: number = Number(process.env.NEMOCLAW_EXEC_TIMEOUT || 10000),
+): CliRunResult {
   try {
     const out = execSync(`node "${CLI}" ${args}`, {
       encoding: "utf-8",
@@ -29,11 +58,21 @@ function runWithEnv(args, env = {}, timeout = Number(process.env.NEMOCLAW_EXEC_T
     });
     return { code: 0, out };
   } catch (err) {
-    return { code: err.status, out: (err.stdout || "") + (err.stderr || "") };
+    if (typeof err === "object" && err !== null) {
+      return readCliErrorOutput({
+        status:
+          typeof Reflect.get(err, "status") === "number"
+            ? Number(Reflect.get(err, "status"))
+            : undefined,
+        stdout: readBufferOrStringProperty(err, "stdout"),
+        stderr: readBufferOrStringProperty(err, "stderr"),
+      });
+    }
+    return readCliErrorOutput(String(err));
   }
 }
 
-function readRecordedArgs(markerFile) {
+function readRecordedArgs(markerFile: string): string[] {
   return fs.readFileSync(markerFile, "utf8").trim().split(/\s+/);
 }
 

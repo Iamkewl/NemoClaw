@@ -1,4 +1,3 @@
-// @ts-nocheck
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -115,11 +114,31 @@ function buildTar(
 /**
  * Import the actual validation/extraction functions from the source.
  */
-async function loadSandboxState() {
-  // The CLI compiles to dist/lib/ — import from there
-  const mod = await import(
-    path.join(import.meta.dirname, "..", "dist", "lib", "sandbox-state.js")
+type SandboxStateModule = Pick<
+  typeof import("../dist/lib/sandbox-state.js"),
+  "validateTarEntries" | "safeTarExtract" | "rejectHardLinks"
+>;
+
+function isSandboxStateModule(
+  value: object | null,
+): value is typeof import("../dist/lib/sandbox-state.js") {
+  return (
+    value !== null &&
+    typeof Reflect.get(value, "validateTarEntries") === "function" &&
+    typeof Reflect.get(value, "safeTarExtract") === "function" &&
+    typeof Reflect.get(value, "rejectHardLinks") === "function"
   );
+}
+
+async function loadSandboxState(): Promise<SandboxStateModule> {
+  // The CLI compiles to dist/lib/ — import from there
+  const loaded = await import(
+    path.join(import.meta.dirname, "..", "dist", "lib", "sandbox-state.js"),
+  );
+  const mod = typeof loaded === "object" && loaded !== null ? loaded : null;
+  if (!isSandboxStateModule(mod)) {
+    throw new Error("Expected sandbox-state module exports to be available");
+  }
   return {
     validateTarEntries: mod.validateTarEntries,
     safeTarExtract: mod.safeTarExtract,

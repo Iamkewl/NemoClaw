@@ -1,4 +1,3 @@
-// @ts-nocheck
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -21,12 +20,41 @@ const TMP_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-snap-naming-"))
 process.env.HOME = TMP_HOME;
 
 const REPO_ROOT = path.join(import.meta.dirname, "..");
-const sandboxState = await import(path.join(REPO_ROOT, "dist", "lib", "sandbox-state.js"));
+
+type BackupScalar = string | number | boolean | null | undefined;
+type BackupValue = BackupScalar | BackupManifestOverrides | BackupValue[];
+
+type SandboxStateModule = typeof import("../dist/lib/sandbox-state.js");
+
+function isSandboxStateModule(value: object | null): value is SandboxStateModule {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof Reflect.get(value, "listBackups") === "function" &&
+    typeof Reflect.get(value, "findBackup") === "function" &&
+    typeof Reflect.get(value, "validateSnapshotName") === "function" &&
+    typeof Reflect.get(value, "parseRestoreArgs") === "function"
+  );
+}
+
+const loadedSandboxState = await import(
+  path.join(REPO_ROOT, "dist", "lib", "sandbox-state.js"),
+);
+if (!isSandboxStateModule(loadedSandboxState)) {
+  throw new Error("Expected sandbox-state module exports to be available");
+}
+const sandboxState = loadedSandboxState;
 const { parseRestoreArgs } = sandboxState;
 
 const BACKUPS_ROOT = path.join(TMP_HOME, ".nemoclaw", "rebuild-backups");
 
-function writeBackup(sandboxName, dirName, overrides = {}) {
+type BackupManifestOverrides = { [key: string]: BackupValue };
+
+function writeBackup(
+  sandboxName: string,
+  dirName: string,
+  overrides: BackupManifestOverrides = {},
+): BackupManifestOverrides {
   const dir = path.join(BACKUPS_ROOT, sandboxName, dirName);
   fs.mkdirSync(dir, { recursive: true });
   const manifest = {
@@ -238,6 +266,9 @@ describe("parseRestoreArgs", () => {
   it("rejects --to at end-of-args with no value", () => {
     const result = parseRestoreArgs("src", ["restore", "--to"]);
     expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected parseRestoreArgs() to reject a trailing --to flag");
+    }
     expect(result.error).toMatch(/--to requires a target sandbox name/);
   });
 
@@ -246,6 +277,9 @@ describe("parseRestoreArgs", () => {
     // name and confuse validateName with an error about a weird name.
     const result = parseRestoreArgs("src", ["restore", "--to", "--other"]);
     expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected parseRestoreArgs() to reject --to without a target name");
+    }
     expect(result.error).toMatch(/--to requires a target sandbox name/);
   });
 

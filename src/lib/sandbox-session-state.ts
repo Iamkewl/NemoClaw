@@ -64,7 +64,7 @@ export interface ForwardEntry {
  * The first line may be a header row — we skip lines where "SANDBOX" appears
  * literally in the first column.
  */
-export function parseForwardList(output: string): ForwardEntry[] {
+export function parseForwardList(output: string | null | undefined): ForwardEntry[] {
   if (!output || typeof output !== "string") return [];
 
   const entries: ForwardEntry[] = [];
@@ -97,7 +97,10 @@ export function parseForwardList(output: string): ForwardEntry[] {
  * Input format: one line per process — `<PID> <full command line>`
  * (compatible with both `pgrep -a` on Linux and `ps -axo pid,command`)
  */
-export function parseSshProcesses(pgrepOutput: string, sandboxName: string): SandboxSession[] {
+export function parseSshProcesses(
+  pgrepOutput: string | null | undefined,
+  sandboxName: string,
+): SandboxSession[] {
   if (!pgrepOutput || typeof pgrepOutput !== "string") return [];
   if (!sandboxName) return [];
 

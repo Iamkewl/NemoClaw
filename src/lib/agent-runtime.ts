@@ -58,6 +58,7 @@ export function buildRecoveryScript(agent: AgentDefinition | null, port: number)
 
   const probeUrl = getHealthProbeUrl(agent);
   const binaryPath = agent.binary_path || "/usr/local/bin/openclaw";
+  const binaryName = binaryPath.split("/").pop() ?? "openclaw";
   const gatewayCmd = agent.gateway_command || "openclaw gateway run";
   const isHermes = agent.name === "hermes";
   const hermesHome = isHermes ? "export HERMES_HOME=/sandbox/.hermes-data; " : "";
@@ -68,7 +69,7 @@ export function buildRecoveryScript(agent: AgentDefinition | null, port: number)
     `if curl -sf --max-time 3 ${shellQuote(probeUrl)} > /dev/null 2>&1; then echo ALREADY_RUNNING; exit 0; fi;`,
     "rm -f /tmp/gateway.log;",
     "touch /tmp/gateway.log; chmod 600 /tmp/gateway.log;",
-    `AGENT_BIN=${shellQuote(binaryPath as string)}; if [ ! -x "$AGENT_BIN" ]; then AGENT_BIN="$(command -v ${shellQuote((binaryPath as string).split("/").pop()!)})"; fi;`,
+    `AGENT_BIN=${shellQuote(binaryPath)}; if [ ! -x "$AGENT_BIN" ]; then AGENT_BIN="$(command -v ${shellQuote(binaryName)})"; fi;`,
     'if [ -z "$AGENT_BIN" ]; then echo AGENT_MISSING; exit 1; fi;',
     `nohup ${gatewayCmd} --port ${port} > /tmp/gateway.log 2>&1 &`,
     "GPID=$!; sleep 2;",
@@ -87,7 +88,5 @@ export function getAgentDisplayName(agent: AgentDefinition | null): string {
  * Get the gateway command for the current agent.
  */
 export function getGatewayCommand(agent: AgentDefinition | null): string {
-  return agent
-    ? (agent.gateway_command as string) || "openclaw gateway run"
-    : "openclaw gateway run";
+  return agent?.gateway_command || "openclaw gateway run";
 }

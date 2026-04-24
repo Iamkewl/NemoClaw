@@ -1,10 +1,35 @@
-// @ts-nocheck
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
 import { describe, it, expect } from "vitest";
 import { applyPreset, buildPolicySetCommand, buildPolicyGetCommand } from "../dist/lib/policies";
-import { hasStaleGateway, isSandboxReady, parseSandboxStatus } from "../dist/lib/onboard";
+
+type OnboardReadinessInternals = {
+  hasStaleGateway: (output: string | null | undefined) => boolean;
+  isSandboxReady: (output: string | null | undefined, sandboxName: string) => boolean;
+  parseSandboxStatus: (output: string | null | undefined, sandboxName: string) => string | null;
+};
+
+function isOnboardReadinessInternals(
+  value: object | null,
+): value is OnboardReadinessInternals {
+  return (
+    value !== null &&
+    typeof Reflect.get(value, "hasStaleGateway") === "function" &&
+    typeof Reflect.get(value, "isSandboxReady") === "function" &&
+    typeof Reflect.get(value, "parseSandboxStatus") === "function"
+  );
+}
+
+const loadedOnboardReadinessInternals = require("../dist/lib/onboard");
+const onboardReadinessInternals =
+  typeof loadedOnboardReadinessInternals === "object" && loadedOnboardReadinessInternals !== null
+    ? loadedOnboardReadinessInternals
+    : null;
+if (!isOnboardReadinessInternals(onboardReadinessInternals)) {
+  throw new Error("Expected onboard readiness internals to be available");
+}
+const { hasStaleGateway, isSandboxReady, parseSandboxStatus } = onboardReadinessInternals;
 
 describe("sandbox readiness parsing", () => {
   it("detects Ready sandbox", () => {

@@ -912,6 +912,11 @@ describe("commands/migration-state", () => {
       const loaded = loadSnapshotManifest("/snapshots/snap1");
       expect(loaded).toEqual(manifest);
     });
+
+    it("rejects a snapshot manifest whose JSON root is not an object", () => {
+      addFile("/snapshots/snap1/snapshot.json", JSON.stringify(["not", "an", "object"]));
+      expect(() => loadSnapshotManifest("/snapshots/snap1")).toThrow(/Invalid snapshot manifest/);
+    });
   });
 
   describe("restoreSnapshotToHost", () => {

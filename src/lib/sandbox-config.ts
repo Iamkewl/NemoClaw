@@ -25,6 +25,10 @@ type ConfigObject = import("./credential-filter").ConfigObject;
 type ConfigValue = import("./credential-filter").ConfigValue;
 const { runOpenshellCommand, captureOpenshellCommand } = require("./openshell");
 
+function parseJson<T>(text: string): T {
+  return JSON.parse(text);
+}
+
 const K3S_CONTAINER = "openshell-cluster-nemoclaw";
 
 // ---------------------------------------------------------------------------
@@ -135,16 +139,16 @@ function setDotpath(obj: ConfigObject, dotpath: string, value: ConfigValue): voi
  * Return true when every segment in a dotpath is an own property on the
  * current config object, which keeps config set constrained to recognized keys.
  */
-function isRecognizedConfigPath(obj: unknown, dotpath: string): boolean {
+function isRecognizedConfigPath(obj: ConfigValue, dotpath: string): boolean {
   if (!dotpath || typeof dotpath !== "string") return false;
   const keys = dotpath.split(".");
   if (keys.some((key) => !key)) return false;
 
-  let current: unknown = obj;
+  let current: ConfigValue = obj;
   for (const key of keys) {
-    if (current == null || typeof current !== "object" || Array.isArray(current)) return false;
-    if (!Object.prototype.hasOwnProperty.call(current as Record<string, unknown>, key)) return false;
-    current = (current as Record<string, unknown>)[key];
+    if (!isConfigObject(current)) return false;
+    if (!Object.prototype.hasOwnProperty.call(current, key)) return false;
+    current = current[key];
   }
   return true;
 }
@@ -177,7 +181,7 @@ function serializeConfig(config: ConfigObject, format: string): string {
  */
 function parseCliConfigValue(rawValue: string): ConfigValue {
   try {
-    const parsed: unknown = JSON.parse(rawValue);
+    const parsed = parseJson<ConfigValue>(rawValue);
     return isConfigValue(parsed) ? parsed : rawValue;
   } catch {
     return rawValue;
@@ -210,7 +214,7 @@ function readSandboxConfig(sandboxName: string, target: AgentConfigTarget): Conf
 
   try {
     return parseConfig(raw, target.format);
-  } catch (err: unknown) {
+  } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`  Failed to parse ${target.agentName} config: ${message}`);
     process.exit(1);
@@ -335,7 +339,7 @@ function configSet(sandboxName: string, opts: ConfigSetOpts = {}): void {
   ) {
     try {
       validateUrlValue(parsedValue);
-    } catch (err: unknown) {
+    } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`  URL validation failed: ${message}`);
       process.exit(1);

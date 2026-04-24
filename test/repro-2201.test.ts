@@ -190,12 +190,16 @@ function runRebuild(fixture: ReturnType<typeof createFixture>) {
   );
 }
 
-function readSession(fixture: ReturnType<typeof createFixture>): Record<string, unknown> {
+type SessionFixture = { agent?: string | null };
+
+function readSession(
+  fixture: ReturnType<typeof createFixture>,
+): SessionFixture {
   const p = path.join(fixture.nemoclawDir, "onboard-session.json");
   return JSON.parse(fs.readFileSync(p, "utf-8"));
 }
 
-function readSessionAgent(fixture: ReturnType<typeof createFixture>): unknown {
+function readSessionAgent(fixture: ReturnType<typeof createFixture>): string | null | undefined {
   return readSession(fixture).agent;
 }
 

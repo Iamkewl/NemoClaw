@@ -93,8 +93,10 @@ describe("runStreamingEventProbe", () => {
     return (_command: string, args: readonly string[]) => {
       const oIdx = args.indexOf("-o");
       if (oIdx !== -1) {
-        const outputPath = args[oIdx + 1] as string;
-        fs.writeFileSync(outputPath, sseBody);
+        const outputPath = args[oIdx + 1];
+        if (typeof outputPath === "string") {
+          fs.writeFileSync(outputPath, sseBody);
+        }
       }
       return {
         pid: 1,
@@ -217,8 +219,11 @@ describe("runStreamingEventProbe", () => {
         spawnSyncImpl: (_command, args) => {
           const oIdx = args.indexOf("-o");
           if (oIdx !== -1) {
-            outputPath = args[oIdx + 1] as string;
-            fs.writeFileSync(outputPath, "event: response.output_text.delta\ndata: {}\n");
+            const nextArg = args[oIdx + 1];
+            if (typeof nextArg === "string") {
+              outputPath = nextArg;
+              fs.writeFileSync(outputPath, "event: response.output_text.delta\ndata: {}\n");
+            }
           }
           return {
             pid: 1,

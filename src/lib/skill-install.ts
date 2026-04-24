@@ -16,9 +16,17 @@ import YAML from "yaml";
 
 // ── Frontmatter parsing ──────────────────────────────────────────
 
+type FrontmatterScalar = string | number | boolean | null | undefined;
+type FrontmatterValue = FrontmatterScalar | FrontmatterRecord | FrontmatterValue[];
+type FrontmatterRecord = { [key: string]: FrontmatterValue };
+
+function isRecord(value: FrontmatterValue): value is FrontmatterRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 export interface SkillFrontmatter {
   name: string;
-  [key: string]: unknown;
+  [key: string]: FrontmatterValue;
 }
 
 /**
@@ -44,20 +52,19 @@ export function parseFrontmatter(content: string): SkillFrontmatter {
 
   const fmRaw = lines.slice(1, closingIdx).join("\n");
 
-  let parsed: unknown;
+  let parsed: FrontmatterValue;
   try {
     parsed = YAML.parse(fmRaw);
-  } catch (err: unknown) {
+  } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(`SKILL.md frontmatter is not valid YAML: ${msg}`);
   }
 
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+  if (!isRecord(parsed)) {
     throw new Error("SKILL.md frontmatter must be a YAML mapping (key: value pairs)");
   }
 
-  const fm = parsed as Record<string, unknown>;
-  const nameValue = typeof fm.name === "string" ? fm.name.trim() : "";
+  const nameValue = typeof parsed.name === "string" ? parsed.name.trim() : "";
   if (!nameValue) {
     throw new Error("SKILL.md frontmatter is missing required 'name' field");
   }

@@ -15,15 +15,19 @@ import { getProviderSelectionConfig } from "./inference-config";
 import * as onboardSession from "./onboard-session";
 import { sleepSeconds } from "./wait";
 
+type LooseScalar = string | number | boolean | null | undefined;
+type LooseValue = LooseScalar | LooseObject | LooseValue[];
+type LooseObject = { [key: string]: LooseValue };
+
 export interface OnboardContext {
   step: (current: number, total: number, message: string) => void;
   runCaptureOpenshell: (args: string[], opts?: { ignoreError?: boolean }) => string | null;
   openshellShellCommand: (args: string[], options?: { openshellBinary?: string }) => string;
   openshellBinary: string;
-  buildSandboxConfigSyncScript: (config: Record<string, unknown>) => string;
+  buildSandboxConfigSyncScript: (config: LooseObject) => string;
   writeSandboxConfigSyncFile: (script: string) => string;
   cleanupTempDir: (file: string, prefix: string) => void;
-  startRecordedStep: (stepName: string, updates: Record<string, unknown>) => void;
+  startRecordedStep: (stepName: string, updates: LooseObject) => void;
   skippedStepMessage: (stepName: string, sandboxName: string) => void;
 }
 
@@ -54,6 +58,10 @@ export function createAgentSandbox(agent: AgentDefinition): {
   const agentDockerfile = agent.dockerfilePath;
   const baseDockerfile = agent.dockerfileBasePath;
 
+  if (!agentDockerfile) {
+    throw new Error(`${agent.displayName} is missing a sandbox Dockerfile`);
+  }
+
   if (baseDockerfile) {
     const baseImageTag = `ghcr.io/nvidia/nemoclaw/${agent.name}-sandbox-base:latest`;
     const inspectResult = run(
@@ -81,7 +89,7 @@ export function createAgentSandbox(agent: AgentDefinition): {
     },
   });
   const stagedDockerfile = path.join(buildCtx, "Dockerfile");
-  fs.copyFileSync(agentDockerfile!, stagedDockerfile);
+  fs.copyFileSync(agentDockerfile, stagedDockerfile);
   console.log(`  Using ${agent.displayName} Dockerfile: ${agentDockerfile}`);
 
   return { buildCtx, stagedDockerfile };
@@ -116,7 +124,7 @@ export async function handleAgentSetup(
   provider: string,
   agent: AgentDefinition,
   resume: boolean,
-  _session: unknown,
+  _session: object | null,
   ctx: OnboardContext,
 ): Promise<void> {
   const {

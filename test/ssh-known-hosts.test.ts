@@ -1,9 +1,27 @@
-// @ts-nocheck
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
 import { describe, it, expect } from "vitest";
-import { pruneKnownHostsEntries } from "../dist/lib/onboard";
+
+type OnboardKnownHostsInternals = {
+  pruneKnownHostsEntries: (contents: string) => string;
+};
+
+function isOnboardKnownHostsInternals(
+  value: object | null,
+): value is OnboardKnownHostsInternals {
+  return value !== null && typeof Reflect.get(value, "pruneKnownHostsEntries") === "function";
+}
+
+const loadedOnboardKnownHostsInternals = require("../dist/lib/onboard");
+const onboardKnownHostsInternals =
+  typeof loadedOnboardKnownHostsInternals === "object" && loadedOnboardKnownHostsInternals !== null
+    ? loadedOnboardKnownHostsInternals
+    : null;
+if (!isOnboardKnownHostsInternals(onboardKnownHostsInternals)) {
+  throw new Error("Expected onboard internals to expose pruneKnownHostsEntries");
+}
+const { pruneKnownHostsEntries } = onboardKnownHostsInternals;
 
 describe("pruneKnownHostsEntries", () => {
   it("removes lines with openshell- hostnames", () => {

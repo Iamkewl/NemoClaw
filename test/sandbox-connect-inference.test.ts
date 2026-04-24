@@ -1,4 +1,3 @@
-// @ts-nocheck
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -15,8 +14,17 @@ import { describe, expect, it } from "vitest";
  * file, sets up a sandbox registry, and spawns the real CLI entrypoint.
  */
 
+type SandboxEntryFixture = {
+  name: string;
+  model?: string | null;
+  provider?: string | null;
+  nimContainer?: string | null;
+  gpuEnabled?: boolean;
+  policies?: string[];
+};
+
 function setupFixture(
-  sandboxEntry: Record<string, unknown>,
+  sandboxEntry: SandboxEntryFixture,
   liveInferenceProvider: string | null,
   liveInferenceModel: string | null,
 ) {

@@ -1,4 +1,3 @@
-// @ts-nocheck
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -56,6 +55,9 @@ describe("gateway liveness probe (#2020)", () => {
     // Both probe sites must check containerState === "missing" before cleanup
     const downgrades = content.match(/containerState === "missing"/g);
     expect(downgrades).toBeTruthy();
+    if (!downgrades) {
+      throw new Error('Expected containerState === "missing" checks in src/lib/onboard.ts');
+    }
     expect(downgrades.length).toBeGreaterThanOrEqual(2);
   });
 
@@ -79,6 +81,9 @@ describe("gateway liveness probe (#2020)", () => {
       /(?:function isGatewayHealthy|const isGatewayHealthy\b)[\s\S]*?\n\}/,
     );
     expect(fnMatch).toBeTruthy();
+    if (!fnMatch) {
+      throw new Error("Expected isGatewayHealthy() in src/lib/gateway-state.ts");
+    }
     const fnBody = fnMatch[0];
     expect(fnBody).not.toContain("docker");
     expect(fnBody).not.toContain("spawn");

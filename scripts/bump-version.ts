@@ -22,18 +22,15 @@ type Options = {
 type PackageJson = {
   version: string;
   scripts?: Record<string, string>;
-  [key: string]: unknown;
 };
 
 type BlueprintManifest = {
   version?: string;
-  [key: string]: unknown;
 };
 
 type DocsProjectJson = {
   name?: string;
   version?: string;
-  [key: string]: unknown;
 };
 
 type DocsVersionEntry = {
@@ -41,6 +38,34 @@ type DocsVersionEntry = {
   version: string;
   url: string;
 };
+
+function parseJson<T>(text: string): T {
+  return JSON.parse(text);
+}
+
+function parseYaml<T>(text: string): T {
+  return YAML.parse(text);
+}
+
+function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
+  return typeof error === "object" && error !== null && "code" in error;
+}
+
+function readStringProperty(value: object | null, key: string): string | undefined {
+  if (!value || Array.isArray(value)) {
+    return undefined;
+  }
+  const property = Reflect.get(value, key);
+  return typeof property === "string" ? property : undefined;
+}
+
+function readNumberProperty(value: object | null, key: string): number | undefined {
+  if (!value || Array.isArray(value)) {
+    return undefined;
+  }
+  const property = Reflect.get(value, key);
+  return typeof property === "number" ? property : undefined;
+}
 
 const REPO_ROOT = process.cwd();
 const ROOT_PACKAGE_JSON = path.join(REPO_ROOT, "package.json");
@@ -301,7 +326,7 @@ function updatePackageJson(filePath: string, version: string): void {
 }
 
 function updateBlueprintVersion(version: string): void {
-  const manifest = YAML.parse(readText(BLUEPRINT_YAML)) as BlueprintManifest;
+  const manifest = parseYaml<BlueprintManifest>(readText(BLUEPRINT_YAML));
   manifest.version = version;
   writeFileSync(BLUEPRINT_YAML, YAML.stringify(manifest), "utf8");
 }
@@ -354,30 +379,24 @@ function updateDocsVersionsJson(version: string): void {
 
 function readDocsVersionsJson(): DocsVersionEntry[] {
   try {
-    const parsed = JSON.parse(readText(DOCS_VERSIONS_JSON)) as unknown;
+    const parsed = parseJson<Array<Partial<DocsVersionEntry>>>(readText(DOCS_VERSIONS_JSON));
     if (!Array.isArray(parsed)) {
       throw new Error("docs/versions1.json must contain an array");
     }
     return parsed.map((entry) => {
-      if (!entry || typeof entry !== "object") {
-        throw new Error("Invalid docs/versions1.json entry");
-      }
-      const candidate = entry as Partial<DocsVersionEntry>;
-      if (typeof candidate.version !== "string") {
+      const version = typeof entry.version === "string" ? entry.version : undefined;
+      if (!version) {
         throw new Error("Each docs/versions1.json entry must include a string version");
       }
+      const url = typeof entry.url === "string" ? entry.url : undefined;
       return {
-        preferred: candidate.preferred === true ? true : undefined,
-        version: candidate.version,
-        url:
-          typeof candidate.url === "string" && candidate.url.length > 0
-            ? candidate.url
-            : buildDocsVersionUrl(candidate.version),
+        preferred: entry.preferred === true ? true : undefined,
+        version,
+        url: url && url.length > 0 ? url : buildDocsVersionUrl(version),
       };
     });
   } catch (error) {
-    const err = error as NodeJS.ErrnoException;
-    if (err.code === "ENOENT") {
+    if (isErrnoException(error) && error.code === "ENOENT") {
       return [];
     }
     throw error;
@@ -435,7 +454,7 @@ function verifyVersionState(version: string, docsPublicUrl: string, docsDisplayV
   assertEqual(readJson<PackageJson>(ROOT_PACKAGE_JSON).version, version, "root package.json version mismatch");
   assertEqual(readJson<PackageJson>(PLUGIN_PACKAGE_JSON).version, version, "plugin package.json version mismatch");
 
-  const blueprint = YAML.parse(readText(BLUEPRINT_YAML)) as BlueprintManifest;
+  const blueprint = parseYaml<BlueprintManifest>(readText(BLUEPRINT_YAML));
   assertEqual(blueprint.version, version, "blueprint version mismatch");
 
   requireContains(INSTALL_SH, `DEFAULT_NEMOCLAW_VERSION="${version}"`);
@@ -598,7 +617,7 @@ function gitRefExists(ref: string): boolean {
 }
 
 function readJson<T>(filePath: string): T {
-  return JSON.parse(readText(filePath)) as T;
+  return parseJson<T>(readText(filePath));
 }
 
 function readText(filePath: string): string {
@@ -677,7 +696,7 @@ function verifyDocsLinks(filePath: string, expectedDocsPublicUrl: string): void 
   }
 }
 
-function assertEqual(actual: unknown, expected: unknown, message: string): void {
+function assertEqual<T>(actual: T, expected: T, message: string): void {
   if (actual !== expected) {
     throw new Error(`${message}. Expected '${expected}', got '${String(actual)}'`);
   }
@@ -692,16 +711,13 @@ function run(command: string, args: string[], options?: { allowFailure?: boolean
     });
     return Object.assign(output, { exitCode: 0 });
   } catch (error) {
-    const err = error as NodeJS.ErrnoException & {
-      stdout?: string;
-      stderr?: string;
-      status?: number;
-    };
+    const errorObject = typeof error === "object" && error !== null ? error : null;
+    const stdout = readStringProperty(errorObject, "stdout")?.trim();
+    const stderr = readStringProperty(errorObject, "stderr")?.trim();
+    const status = readNumberProperty(errorObject, "status") ?? 1;
     if (options?.allowFailure) {
-      return Object.assign(err.stdout ?? "", { exitCode: err.status ?? 1 });
+      return Object.assign(stdout ?? "", { exitCode: status });
     }
-    const stderr = err.stderr?.trim();
-    const stdout = err.stdout?.trim();
     throw new Error(
       [`Command failed: ${command} ${args.join(" ")}`, stdout, stderr].filter(Boolean).join("\n"),
     );

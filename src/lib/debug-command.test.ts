@@ -9,6 +9,10 @@ import {
   runDebugCommand,
 } from "../../dist/lib/debug-command";
 
+function exitWithCode(code: number): never {
+  throw new Error(`exit:${code}`);
+}
+
 describe("debug command", () => {
   it("prints help text", () => {
     const lines: string[] = [];
@@ -23,9 +27,7 @@ describe("debug command", () => {
       getDefaultSandbox: () => "alpha",
       log: () => {},
       error: () => {},
-      exit: ((code: number) => {
-        throw new Error(`exit:${code}`);
-      }) as never,
+      exit: exitWithCode,
     });
     expect(opts).toEqual({ quick: true, output: "/tmp/out.tgz", sandboxName: "alpha" });
   });
@@ -37,9 +39,7 @@ describe("debug command", () => {
       runDebug,
       log: () => {},
       error: () => {},
-      exit: ((code: number) => {
-        throw new Error(`exit:${code}`);
-      }) as never,
+      exit: exitWithCode,
     });
     expect(runDebug).toHaveBeenCalledWith({ sandboxName: "beta" });
   });
@@ -51,9 +51,7 @@ describe("debug command", () => {
       runDebug,
       log: () => {},
       error: () => {},
-      exit: ((code: number) => {
-        throw new Error(`exit:${code}`);
-      }) as never,
+      exit: exitWithCode,
     });
     expect(runDebug).toHaveBeenCalledWith({ sandboxName: "mybox" });
   });
@@ -65,9 +63,7 @@ describe("debug command", () => {
       runDebug,
       log: () => {},
       error: () => {},
-      exit: ((code: number) => {
-        throw new Error(`exit:${code}`);
-      }) as never,
+      exit: exitWithCode,
     });
     expect(runDebug).toHaveBeenCalledWith({ quick: true, sandboxName: undefined });
   });
@@ -78,9 +74,7 @@ describe("debug command", () => {
         getDefaultSandbox: () => undefined,
         log: () => {},
         error: () => {},
-        exit: ((code: number) => {
-          throw new Error(`exit:${code}`);
-        }) as never,
+        exit: exitWithCode,
       }),
     ).toThrow("exit:1");
   });

@@ -28,6 +28,10 @@ export interface NemoClawState {
   shieldsPolicySnapshotPath: string | null;
 }
 
+function isStatePatch(value: object | null): value is Partial<NemoClawState> {
+  return value !== null && !Array.isArray(value);
+}
+
 let stateDirCreated = false;
 
 function ensureStateDir(): void {
@@ -71,8 +75,9 @@ export function loadState(): NemoClawState {
   }
   // Merge over blankState so that state files created before shields fields
   // were added still return valid NemoClawState with sensible defaults.
-  const persisted = JSON.parse(readFileSync(path, "utf-8")) as Partial<NemoClawState>;
-  return { ...blankState(), ...persisted };
+  const persisted: unknown = JSON.parse(readFileSync(path, "utf-8"));
+  const persistedObject = typeof persisted === "object" && persisted !== null ? persisted : null;
+  return { ...blankState(), ...(isStatePatch(persistedObject) ? persistedObject : {}) };
 }
 
 export function saveState(state: NemoClawState): void {

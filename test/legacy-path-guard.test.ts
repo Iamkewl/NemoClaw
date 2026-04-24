@@ -27,6 +27,7 @@ function initTempRepo(prefix: string): string {
   run("git", ["init", "-b", "main"], repoDir);
   run("git", ["config", "user.name", "Test User"], repoDir);
   run("git", ["config", "user.email", "test@example.com"], repoDir);
+  run("git", ["config", "commit.gpgsign", "false"], repoDir);
   return repoDir;
 }
 

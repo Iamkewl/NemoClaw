@@ -19,7 +19,8 @@ export function maxMtime(root: string, accept: (name: string) => boolean): numbe
   let newest = 0;
   const stack: string[] = [root];
   while (stack.length) {
-    const dir = stack.pop() as string;
+    const dir = stack.pop();
+    if (!dir) continue;
     let entries;
     try {
       entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -64,7 +65,7 @@ export function checkStaleDist(
 /** Print a stale-dist warning to `stream` if dist/ is out of date. Returns true when a warning was emitted, false otherwise. Never throws — fails open on any error (filesystem or stream write). */
 export function warnIfStale(
   repoRoot: string,
-  stream: { write(chunk: string): unknown } = process.stderr,
+  stream: { write(chunk: string): void | boolean } = process.stderr,
 ): boolean {
   try {
     const result = checkStaleDist(repoRoot);

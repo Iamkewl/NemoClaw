@@ -39,20 +39,73 @@ type EnsureUsageNoticeConsentOptions = {
   writeLine?: WriteLineFn;
 };
 
+type NoticeConfigSource = {
+  version?: string;
+  title?: string;
+  referenceUrl?: string;
+  body?: string[];
+  links?: NoticeLink[];
+  interactivePrompt?: string;
+};
+
+function parseJson<T>(text: string): T {
+  return JSON.parse(text);
+}
+
+function readStringProperty(value: object | null, key: string): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const property = Reflect.get(value, key);
+  return typeof property === "string" ? property : undefined;
+}
+
+function readStringArrayProperty(value: object | null, key: string): string[] | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const property = Reflect.get(value, key);
+  return Array.isArray(property)
+    ? property.filter((entry): entry is string => typeof entry === "string")
+    : undefined;
+}
+
+function readLinksProperty(value: object | null, key: string): NoticeLink[] | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const property = Reflect.get(value, key);
+  if (!Array.isArray(property)) {
+    return undefined;
+  }
+  return property.map((entry) => ({
+    label: readStringProperty(typeof entry === "object" && entry !== null ? entry : null, "label"),
+    url: readStringProperty(typeof entry === "object" && entry !== null ? entry : null, "url"),
+  }));
+}
+
 export function getUsageNoticeStateFile(): string {
   return path.join(process.env.HOME || os.homedir(), ".nemoclaw", "usage-notice.json");
 }
 
 export function loadUsageNoticeConfig(): NoticeConfig {
-  return noticeConfig as NoticeConfig;
+  const rawConfig: NoticeConfigSource = noticeConfig;
+  return {
+    version: rawConfig.version || "",
+    title: rawConfig.title || "",
+    referenceUrl: rawConfig.referenceUrl,
+    body: rawConfig.body,
+    links: rawConfig.links,
+    interactivePrompt: rawConfig.interactivePrompt || "",
+  };
 }
 
 export function hasAcceptedUsageNotice(version: string): boolean {
   try {
-    const saved = JSON.parse(fs.readFileSync(getUsageNoticeStateFile(), "utf8")) as {
-      acceptedVersion?: string;
-    };
-    return saved?.acceptedVersion === version;
+    const saved = parseJson<{ acceptedVersion?: string }>(
+      fs.readFileSync(getUsageNoticeStateFile(), "utf8"),
+    );
+    return saved.acceptedVersion === version;
   } catch {
     return false;
   }

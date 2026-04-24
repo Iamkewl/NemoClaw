@@ -1,4 +1,3 @@
-// @ts-nocheck
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -36,6 +35,22 @@ function getOctalPerms(filePath: string): string {
  * Run a bash snippet that sources sandbox-init.sh and executes the given body.
  * Returns { stdout, stderr } as trimmed strings.
  */
+type ExecFailureShape = { stdout?: string | Buffer; stderr?: string | Buffer };
+
+function readExecFileSyncOutput(error: ExecFailureShape | null, key: "stdout" | "stderr"): string {
+  if (error === null) {
+    return "";
+  }
+  const value = Reflect.get(error, key);
+  if (typeof value === "string") {
+    return value.trim();
+  }
+  if (Buffer.isBuffer(value)) {
+    return value.toString().trim();
+  }
+  return "";
+}
+
 function runWithLib(
   body: string,
   opts: { env?: Record<string, string>; expectFail?: boolean } = {},
@@ -55,11 +70,13 @@ function runWithLib(
       stdio: ["pipe", "pipe", "pipe"],
     });
     return { stdout: result.trim(), stderr: "" };
-  } catch (e: any) {
+  } catch (e) {
     if (opts.expectFail) {
+      const errorObject: ExecFailureShape | null =
+        typeof e === "object" && e !== null ? e : null;
       return {
-        stdout: (e.stdout || "").toString().trim(),
-        stderr: (e.stderr || "").toString().trim(),
+        stdout: readExecFileSyncOutput(errorObject, "stdout"),
+        stderr: readExecFileSyncOutput(errorObject, "stderr"),
       };
     }
     throw e;

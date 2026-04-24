@@ -26,6 +26,14 @@ const RUNNER_TS = readFileSync(
   "utf-8",
 );
 
+function requireMatch(match: RegExpMatchArray | null): RegExpMatchArray {
+  expect(match).toBeTruthy();
+  if (!match) {
+    throw new Error("Expected regex match to be present");
+  }
+  return match;
+}
+
 const DEBUG_TS = readFileSync(
   join(import.meta.dirname, "..", "src", "lib", "debug.ts"),
   "utf-8",
@@ -105,13 +113,10 @@ describe("secret redaction consistency (#1736)", () => {
     for (const { name, token } of LITERAL_PREFIX_TOKENS) {
       it(`redacts ${name}`, () => {
         // Extract the redact function's sed patterns and verify they match
-        const redactFn = DEBUG_SH.match(
-          /redact\(\) \{[\s\S]*?^\}/m,
-        );
-        expect(redactFn).toBeTruthy();
+        const redactFn = requireMatch(DEBUG_SH.match(/redact\(\) \{[\s\S]*?^\}/m));
         // The token prefix should appear in a sed expression
         const prefix = token.split(/[A-Za-z0-9]{10}/)[0];
-        expect(redactFn![0]).toContain(prefix);
+        expect(redactFn[0]).toContain(prefix);
       });
     }
   });

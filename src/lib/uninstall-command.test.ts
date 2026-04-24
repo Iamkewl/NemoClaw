@@ -11,6 +11,10 @@ import {
   runUninstallCommand,
 } from "../../dist/lib/uninstall-command";
 
+function exitWithCode(code: number): never {
+  throw new Error(`exit:${code}`);
+}
+
 describe("uninstall command", () => {
   it("builds a version-pinned uninstall URL", () => {
     expect(buildVersionedUninstallUrl("0.1.0")).toBe(
@@ -28,12 +32,7 @@ describe("uninstall command", () => {
 
   it("maps spawn signals to shell-style exit codes", () => {
     expect(() =>
-      exitWithSpawnResult(
-        { status: null, signal: "SIGTERM" },
-        ((code: number) => {
-          throw new Error(`exit:${code}`);
-        }) as never,
-      ),
+      exitWithSpawnResult({ status: null, signal: "SIGTERM" }, exitWithCode),
     ).toThrow("exit:143");
   });
 
@@ -50,9 +49,7 @@ describe("uninstall command", () => {
         existsSyncImpl: (candidate) => candidate === path.join("/repo", "uninstall.sh"),
         log: () => {},
         error: () => {},
-        exit: ((code: number) => {
-          throw new Error(`exit:${code}`);
-        }) as never,
+        exit: exitWithCode,
       }),
     ).toThrow("exit:0");
     expect(spawnSyncImpl).toHaveBeenCalledWith("bash", [path.join("/repo", "uninstall.sh"), "--yes"], {
@@ -78,9 +75,7 @@ describe("uninstall command", () => {
         error: (message) => {
           errors.push(message ?? "");
         },
-        exit: ((code: number) => {
-          throw new Error(`exit:${code}`);
-        }) as never,
+        exit: exitWithCode,
       }),
     ).toThrow("exit:1");
     expect(spawnSyncImpl).not.toHaveBeenCalled();

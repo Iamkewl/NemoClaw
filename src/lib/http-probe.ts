@@ -16,6 +16,12 @@ import { compactText } from "./url-utils";
 
 export type CurlProbeResult = ProbeResult;
 
+type ErrnoLike = Error | { code?: string | number; errno?: string | number } | null;
+
+function isErrnoException(error: ErrnoLike): error is NodeJS.ErrnoException {
+  return error !== null && typeof error === "object" && ("code" in error || "errno" in error);
+}
+
 export interface CurlProbeOptions {
   cwd?: string;
   env?: NodeJS.ProcessEnv;
@@ -55,15 +61,25 @@ export function summarizeCurlFailure(curlStatus = 0, stderr = "", body = ""): st
     : `curl failed (exit ${curlStatus})`;
 }
 
+type ProbeErrorDetail =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: string | number | boolean | null }
+  | Array<string | number | boolean | null>;
+
+type ProbeErrorBody = {
+  error?: { message?: ProbeErrorDetail; details?: ProbeErrorDetail };
+  message?: ProbeErrorDetail;
+  detail?: ProbeErrorDetail;
+  details?: ProbeErrorDetail;
+};
+
 export function summarizeProbeError(body = "", status = 0): string {
   if (!body) return `HTTP ${status} with no response body`;
   try {
-    const parsed = JSON.parse(body) as {
-      error?: { message?: unknown; details?: unknown };
-      message?: unknown;
-      detail?: unknown;
-      details?: unknown;
-    };
+    const parsed: ProbeErrorBody = JSON.parse(body);
     const message =
       parsed?.error?.message ||
       parsed?.error?.details ||
@@ -112,11 +128,12 @@ export function runCurlProbe(argv: string[], opts: CurlProbeOptions = {}): CurlP
     );
     const body = fs.existsSync(bodyFile) ? fs.readFileSync(bodyFile, "utf8") : "";
     if (result.error) {
-      const spawnError = result.error as NodeJS.ErrnoException;
-      const rawErrorCode = spawnError.errno ?? spawnError.code;
+      const rawErrorCode = isErrnoException(result.error)
+        ? result.error.errno ?? result.error.code
+        : undefined;
       const errorCode = typeof rawErrorCode === "number" ? rawErrorCode : 1;
       const errorMessage = compactText(
-        `${spawnError.message || String(spawnError)} ${String(result.stderr || "")}`,
+        `${result.error.message || String(result.error)} ${String(result.stderr || "")}`,
       );
       return {
         ok: false,
@@ -200,7 +217,7 @@ export function runStreamingEventProbe(
       // curl exit 28 = timeout, which is expected — we cap with --max-time
       // and may still have collected enough events before the timeout.
       const detail = result.error
-        ? String((result.error as Error).message || result.error)
+        ? String(result.error.message || result.error)
         : String(result.stderr || "");
       return {
         ok: false,

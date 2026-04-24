@@ -39,6 +39,10 @@ const REBUILD_BACKUPS_DIR = path.join(
 
 const MANIFEST_VERSION = 1;
 
+function parseJson<T>(text: string): T {
+  return JSON.parse(text);
+}
+
 // ── Types ──────────────────────────────────────────────────────────
 
 export interface RebuildManifest {
@@ -730,7 +734,7 @@ function readManifest(backupPath: string): RebuildManifest | null {
   const manifestPath = path.join(backupPath, "rebuild-manifest.json");
   if (!existsSync(manifestPath)) return null;
   try {
-    return JSON.parse(readFileSync(manifestPath, "utf-8")) as RebuildManifest;
+    return parseJson<RebuildManifest>(readFileSync(manifestPath, "utf-8"));
   } catch {
     return null;
   }

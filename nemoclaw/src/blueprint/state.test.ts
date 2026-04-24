@@ -100,6 +100,13 @@ describe("blueprint/state", () => {
       expect(loaded.shieldsDownPolicy).toBeNull();
       expect(loaded.shieldsPolicySnapshotPath).toBeNull();
     });
+
+    it("falls back to blank defaults when the persisted JSON root is not an object", () => {
+      store.set(STATE_PATH, JSON.stringify(["not", "an", "object"]));
+      const loaded = loadState();
+      expect(loaded.lastRunId).toBeNull();
+      expect(loaded.shieldsDown).toBe(false);
+    });
   });
 
   describe("saveState", () => {

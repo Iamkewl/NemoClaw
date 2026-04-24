@@ -79,7 +79,8 @@ function loadShieldsState(sandboxName: string): ShieldsState {
   const filePath = stateFilePath(sandboxName);
   if (!fs.existsSync(filePath)) return {};
   try {
-    return JSON.parse(fs.readFileSync(filePath, "utf-8")) as ShieldsState;
+    const parsed = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+    return isShieldsState(parsed) ? parsed : {};
   } catch {
     return {};
   }
@@ -104,6 +105,22 @@ interface TimerMarker {
   restoreAt: string;
 }
 
+function isShieldsState(value: object | null): value is ShieldsState {
+  return value !== null && !Array.isArray(value);
+}
+
+function isTimerMarker(value: object | null): value is TimerMarker {
+  if (value === null || Array.isArray(value)) {
+    return false;
+  }
+  return (
+    typeof Reflect.get(value, "pid") === "number" &&
+    typeof Reflect.get(value, "sandboxName") === "string" &&
+    typeof Reflect.get(value, "snapshotPath") === "string" &&
+    typeof Reflect.get(value, "restoreAt") === "string"
+  );
+}
+
 function timerMarkerPath(sandboxName: string): string {
   return path.join(STATE_DIR, `shields-timer-${sandboxName}.json`);
 }
@@ -112,7 +129,8 @@ function readTimerMarker(sandboxName: string): TimerMarker | null {
   const p = timerMarkerPath(sandboxName);
   if (!fs.existsSync(p)) return null;
   try {
-    return JSON.parse(fs.readFileSync(p, "utf-8")) as TimerMarker;
+    const parsed = JSON.parse(fs.readFileSync(p, "utf-8"));
+    return isTimerMarker(parsed) ? parsed : null;
   } catch {
     return null;
   }
@@ -217,7 +235,7 @@ function lockAgentConfig(sandboxName: string, target: { configPath: string; conf
     const [mode, owner] = perms.split(" ");
     if (!/^4[0-4][0-4]$/.test(mode)) issues.push(`file mode=${mode} (expected 444)`);
     if (owner !== "root:root") issues.push(`file owner=${owner} (expected root:root)`);
-  } catch (err: unknown) {
+  } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     issues.push(`file stat failed: ${msg}`);
   }
@@ -227,7 +245,7 @@ function lockAgentConfig(sandboxName: string, target: { configPath: string; conf
     const [dirMode, dirOwner] = dirPerms.split(" ");
     if (dirMode !== "755") issues.push(`dir mode=${dirMode} (expected 755)`);
     if (dirOwner !== "root:root") issues.push(`dir owner=${dirOwner} (expected root:root)`);
-  } catch (err: unknown) {
+  } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     issues.push(`dir stat failed: ${msg}`);
   }
@@ -374,7 +392,7 @@ function shieldsDown(sandboxName: string, opts: ShieldsDownOpts = {}): void {
       }),
       { mode: 0o600 },
     );
-  } catch (err: unknown) {
+  } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`  Cannot start auto-restore timer: ${message}`);
     console.error("  Rolling back — restoring policy from snapshot...");
@@ -472,7 +490,7 @@ function shieldsUp(sandboxName: string): void {
   console.log(`  Locking ${target.agentName} config (${target.configPath})...`);
   try {
     lockAgentConfig(sandboxName, target);
-  } catch (err: unknown) {
+  } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`  ERROR: ${message}`);
     console.error("  Shields remain DOWN — manual intervention required.");
