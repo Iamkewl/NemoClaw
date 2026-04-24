@@ -143,7 +143,11 @@ run_cli_check() {
   log '[cli]        vs: docs/reference/commands.md (### `nemoclaw …` headings only)'
 
   log "[cli] phase 1/2: dump canonical command list from registry"
-  "$NODE" "$CLI_JS" --dump-commands 2>&1 | LC_ALL=C sort -u >"$_tmp/help.txt"
+  if ! "$NODE" "$CLI_JS" --dump-commands >"$_tmp/help.txt" 2>"$_tmp/help.err"; then
+    cat "$_tmp/help.err" >&2
+    return 1
+  fi
+  LC_ALL=C sort -u -o "$_tmp/help.txt" "$_tmp/help.txt"
 
   local _n_help
   _n_help="$(wc -l <"$_tmp/help.txt" | tr -d " ")"

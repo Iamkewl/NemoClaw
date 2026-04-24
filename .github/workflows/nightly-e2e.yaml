@@ -75,7 +75,7 @@ jobs:
           if-no-files-found: ignore
 
   cloud-experimental-e2e:
-    # Runs the full cloud-experimental E2E suite including check-docs parity.
+    # Runs the full cloud-experimental E2E suite with docs parity isolated below.
     # Landlock fix: OpenShell#810 (v0.0.32+). Docs parity: #2388 (typed registry).
     if: github.repository == 'NVIDIA/NemoClaw'
     runs-on: ubuntu-latest
@@ -98,6 +98,7 @@ jobs:
           NEMOCLAW_RECREATE_SANDBOX: "1"
           NEMOCLAW_POLICY_MODE: "custom"
           NEMOCLAW_POLICY_PRESETS: "npm,pypi"
+          RUN_E2E_CLOUD_EXPERIMENTAL_SKIP_CHECK_DOCS: "1"
           RUN_E2E_CLOUD_EXPERIMENTAL_SKIP_FINAL_CLEANUP: "1"
         run: bash test/e2e/test-e2e-cloud-experimental.sh
 
