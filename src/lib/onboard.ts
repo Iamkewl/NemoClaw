@@ -10,7 +10,7 @@ const crypto = require("node:crypto");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { spawn, spawnSync } = require("child_process");
+const { execFileSync, spawn, spawnSync } = require("child_process");
 const pRetry = require("p-retry");
 
 /** Parse a numeric env var, returning `fallback` when unset or non-finite. */
@@ -52,6 +52,7 @@ const {
   getLocalProviderValidationBaseUrl,
   getOllamaModelOptions,
   getOllamaWarmupCommand,
+  validateOllamaPortConfiguration,
   validateOllamaModel,
   validateLocalProvider,
 } = require("./local-inference");
@@ -88,8 +89,10 @@ const {
   assessHost,
   checkPortAvailable,
   ensureSwap,
+  getDockerBridgeGatewayIp,
   getMemoryInfo,
   planHostRemediation,
+  probeContainerDns,
 } = require("./preflight");
 const agentOnboard = require("./agent-onboard");
 const agentDefs = require("./agent-defs");
@@ -2642,6 +2645,198 @@ async function preflight() {
   }
   console.log("  ✓ Docker is running");
 
+  // DNS resolution from inside containers (#2101). A corp firewall that
+  // blocks outbound UDP:53 to public resolvers leaves the sandbox build
+  // unable to resolve registry.npmjs.org; npm then retries for ~15 min and
+  // prints the cryptic `Exit handler never called`.
+  const dns = probeContainerDns();
+  // Only reasons where the probe actually *ran* nslookup and observed a DNS
+  // failure warrant blocking — other reasons are inconclusive (probe itself
+  // couldn't run, got killed, etc.) and shouldn't fail a valid environment.
+  const dnsIsFatal = dns.reason === "servers_unreachable" || dns.reason === "resolution_failed";
+
+  if (dns.ok) {
+    console.log("  ✓ Container DNS resolution works");
+  } else if (!dnsIsFatal) {
+    // Inconclusive probe — warn but proceed. If the sandbox build really
+    // does hit a DNS issue, the user will see #2101 pointers in that layer.
+    if (dns.reason === "image_pull_failed") {
+      console.warn(
+        "  ⚠ Container DNS probe inconclusive: docker couldn't pull the busybox test image.",
+      );
+      console.warn(
+        "    This usually means the docker daemon itself can't reach Docker Hub,",
+      );
+      console.warn(
+        "    but doesn't prove container DNS is broken — the sandbox build may still succeed.",
+      );
+    } else {
+      console.warn(
+        `  ⚠ Container DNS probe inconclusive (reason: ${dns.reason ?? "unknown"}).`,
+      );
+    }
+    if (dns.details) {
+      for (const line of String(dns.details).split("\n").slice(-3)) {
+        if (line.trim()) console.warn(`    ${line.trim()}`);
+      }
+    }
+    console.warn(
+      "    Proceeding. If the sandbox build later hangs at `npm ci`, see issue #2101.",
+    );
+  } else {
+    console.error("  ✗ DNS resolution from inside a docker container failed.");
+    if (dns.details) {
+      for (const line of String(dns.details).split("\n").slice(-4)) {
+        if (line.trim()) console.error(`    ${line.trim()}`);
+      }
+    }
+    console.error("");
+    {
+      console.error(
+        "  The sandbox build runs `npm ci` inside a container and needs to resolve",
+      );
+      console.error(
+        "  registry.npmjs.org. On networks that block outbound UDP:53 to public DNS",
+      );
+      console.error(
+        "  (common in corporate environments that force DNS-over-TLS on the host),",
+      );
+      console.error(
+        "  the build appears to hang for ~15 minutes and then prints the cryptic",
+      );
+      console.error("  `npm error Exit handler never called`. See issue #2101.");
+      console.error("");
+      console.error("  Fix options:");
+      console.error("");
+
+      // Platform-aware remediation hints. The systemd-resolved fix is
+      // Linux-specific; macOS / Windows / WSL-backed-by-Docker-Desktop
+      // hosts configure DNS through Docker Desktop's GUI or a
+      // platform-specific daemon.json path, so we avoid printing shell
+      // commands that would mislead those users.
+      const isLinuxWithSystemd =
+        host.platform === "linux" && !host.isWsl && host.systemctlAvailable;
+
+      const printLinuxFix = (bridgeIp: string, note: string | null) => {
+        if (note) console.error(note);
+        console.error("       sudo mkdir -p /etc/systemd/resolved.conf.d/");
+        console.error(
+          `       printf '[Resolve]\\nDNSStubListenerExtra=${bridgeIp}\\n' | sudo tee /etc/systemd/resolved.conf.d/docker-bridge.conf`,
+        );
+        console.error("       sudo systemctl restart systemd-resolved");
+        console.error("");
+        console.error(
+          "     Then add the dns key to /etc/docker/daemon.json (safely merges with existing config if jq is installed):",
+        );
+        console.error(
+          "       sudo cp /etc/docker/daemon.json /etc/docker/daemon.json.bak-$(date +%s) 2>/dev/null",
+        );
+        console.error(
+          `       { sudo jq '. + {"dns":["${bridgeIp}"]}' /etc/docker/daemon.json 2>/dev/null || echo '{"dns":["${bridgeIp}"]}'; } | sudo tee /etc/docker/daemon.json.new >/dev/null`,
+        );
+        console.error("       sudo mv /etc/docker/daemon.json.new /etc/docker/daemon.json");
+        console.error("       sudo systemctl restart docker");
+      };
+
+      if (isLinuxWithSystemd) {
+        const detectedBridgeIp = getDockerBridgeGatewayIp();
+        const bridgeIp = detectedBridgeIp || "172.17.0.1";
+        let bridgeNote: string | null = null;
+        if (detectedBridgeIp && detectedBridgeIp !== "172.17.0.1") {
+          bridgeNote = `     (detected your docker bridge gateway at ${detectedBridgeIp})`;
+        } else if (!detectedBridgeIp) {
+          bridgeNote =
+            "     (could not auto-detect bridge IP; using docker's default — verify with:\n" +
+            "      docker network inspect bridge --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}')";
+        }
+        console.error("  1. Make systemd-resolved reachable from containers (recommended):");
+        printLinuxFix(bridgeIp, bridgeNote);
+        console.error("");
+        console.error(
+          "  2. Configure an explicit UDP:53-capable DNS in /etc/docker/daemon.json",
+        );
+        console.error("     (ask your IT team for an internal DNS server IP).");
+      } else if (host.platform === "darwin") {
+        // On macOS, branch by the detected runtime (host.runtime) so users get
+        // shell commands they can actually paste, not a "click this GUI" hint.
+        if (host.runtime === "colima") {
+          console.error("  Configure Colima's DNS (macOS):");
+          console.error("       colima stop");
+          console.error("       colima start --dns <corp-dns-ip>");
+          console.error(
+            "     (or edit ~/.colima/default/colima.yaml and `colima restart`)",
+          );
+        } else if (host.runtime === "docker-desktop" || host.runtime === "docker") {
+          console.error("  Configure Docker Desktop's DNS (macOS):");
+          console.error(
+            "       cp ~/.docker/daemon.json ~/.docker/daemon.json.bak-$(date +%s) 2>/dev/null",
+          );
+          console.error(
+            `       { jq '. + {"dns":["<corp-dns-ip>"]}' ~/.docker/daemon.json 2>/dev/null || echo '{"dns":["<corp-dns-ip>"]}'; } > ~/.docker/daemon.json.new && mv ~/.docker/daemon.json.new ~/.docker/daemon.json`,
+          );
+          console.error("       osascript -e 'quit app \"Docker\"' && sleep 3 && open -a Docker");
+          console.error(
+            "     (or do the same via the Docker Desktop UI: Settings → Docker Engine)",
+          );
+        } else {
+          // Unknown / podman / other
+          console.error("  Configure your container runtime's DNS (macOS):");
+          console.error("     - Docker Desktop:");
+          console.error(
+            "         { jq '. + {\"dns\":[\"<corp-dns-ip>\"]}' ~/.docker/daemon.json 2>/dev/null || echo '{\"dns\":[\"<corp-dns-ip>\"]}'; } > ~/.docker/daemon.json.new && mv ~/.docker/daemon.json.new ~/.docker/daemon.json",
+          );
+          console.error("         osascript -e 'quit app \"Docker\"' && sleep 3 && open -a Docker");
+          console.error("     - Colima:");
+          console.error("         colima stop && colima start --dns <corp-dns-ip>");
+          console.error("     - Rancher Desktop / Podman: edit the runtime's DNS config");
+          console.error("       and restart it.");
+        }
+        console.error(
+          "     Ask your IT team for an internal DNS server IP that accepts UDP:53.",
+        );
+      } else if (host.platform === "win32" || host.isWsl) {
+        console.error(
+          "  1. Configure Docker Desktop's DNS (Windows / WSL via Docker Desktop):",
+        );
+        console.error(
+          "       Docker Desktop for Windows → Settings → Docker Engine — edit the JSON to add:",
+        );
+        console.error('         { "dns": ["<corp-dns-ip>"] }');
+        console.error("       Then click Apply & Restart.");
+        console.error("");
+        console.error(
+          "  2. If you run docker natively inside WSL (not Docker Desktop), apply the Linux fix:",
+        );
+        // Reuse the same bridge-IP detection the Linux branch uses — a
+        // native-docker-in-WSL install can have a custom bridge subnet
+        // just like any other Linux host, so a hardcoded 172.17.0.1
+        // would break those users' copy-paste.
+        const wslBridgeIp = getDockerBridgeGatewayIp();
+        let wslBridgeNote: string | null = null;
+        if (wslBridgeIp && wslBridgeIp !== "172.17.0.1") {
+          wslBridgeNote = `     (detected your docker bridge gateway at ${wslBridgeIp})`;
+        } else if (!wslBridgeIp) {
+          wslBridgeNote =
+            "     (could not auto-detect bridge IP — the snippet below uses docker's default; verify with:\n" +
+            "      docker network inspect bridge --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}')";
+        }
+        printLinuxFix(wslBridgeIp || "172.17.0.1", wslBridgeNote);
+      } else {
+        console.error(
+          "  Configure your docker daemon to use a DNS server that accepts UDP:53.",
+        );
+        console.error(
+          '  Add { "dns": ["<corp-dns-ip>"] } to your docker daemon.json and restart the daemon.',
+        );
+        console.error("  Ask your IT team for an internal DNS server IP.");
+      }
+      console.error("");
+      console.error("  Verify the fix worked:");
+      console.error("    docker run --rm busybox nslookup registry.npmjs.org");
+    }
+    process.exit(1);
+  }
+
   if (host.runtime !== "unknown") {
     console.log(`  ✓ Container runtime: ${host.runtime}`);
   }
@@ -3292,6 +3487,55 @@ async function promptValidatedSandboxName() {
 
 // ── Step 5: Sandbox ──────────────────────────────────────────────
 
+/**
+ * Render the configuration summary shown before the destructive sandbox build.
+ * Extracted from confirmOnboardConfiguration() for direct unit testing — see #2165.
+ *
+ * Fields:
+ * - credentialEnv:    env-var name of the API key (e.g. "NVIDIA_API_KEY").
+ *                     Rendered with the fixed credentials.json location so
+ *                     users can see where the key was stored.
+ * - notes:            additional bullet lines shown under the summary
+ *                     (e.g. "~6 minutes on this host"). Each note rendered
+ *                     as "Note: <text>" so it's visually distinct.
+ */
+function formatOnboardConfigSummary({
+  provider,
+  model,
+  credentialEnv = null,
+  webSearchConfig,
+  enabledChannels,
+  sandboxName,
+  notes = [],
+}) {
+  const bar = `  ${"─".repeat(50)}`;
+  const messaging =
+    Array.isArray(enabledChannels) && enabledChannels.length > 0
+      ? enabledChannels.join(", ")
+      : "none";
+  const webSearch = webSearchConfig && webSearchConfig.fetchEnabled === true ? "enabled" : "disabled";
+  const apiKeyLine = credentialEnv
+    ? `  API key:       ${credentialEnv} (stored in ~/.nemoclaw/credentials.json)`
+    : `  API key:       (not required for ${provider ?? "this provider"})`;
+  const noteLines = (Array.isArray(notes) ? notes : [])
+    .filter((n) => typeof n === "string" && n.length > 0)
+    .map((n) => `  Note:          ${n}`);
+  return [
+    "",
+    bar,
+    "  Review configuration",
+    bar,
+    `  Provider:      ${provider ?? "(unset)"}`,
+    `  Model:         ${model ?? "(unset)"}`,
+    apiKeyLine,
+    `  Web search:    ${webSearch}`,
+    `  Messaging:     ${messaging}`,
+    `  Sandbox name:  ${sandboxName}`,
+    ...noteLines,
+    bar,
+  ].join("\n");
+}
+
 // eslint-disable-next-line complexity
 async function createSandbox(
   gpu,
@@ -3311,6 +3555,7 @@ async function createSandbox(
     sandboxNameOverride ?? (await promptValidatedSandboxName()),
     "sandbox name",
   );
+
   const effectivePort = agent ? agent.forwardPort : CONTROL_UI_PORT;
   const chatUiUrl = process.env.CHAT_UI_URL || `http://127.0.0.1:${effectivePort}`;
 
@@ -4116,6 +4361,20 @@ async function setupNim(gpu) {
     }
   }
 
+  function checkOllamaPortsOrWarn(): boolean {
+    const portValidation = validateOllamaPortConfiguration();
+    if (!portValidation.ok) {
+      console.error(`  ${portValidation.message}`);
+      if (isNonInteractive()) {
+        process.exit(1);
+      }
+      console.log("  Choose a different local inference provider or fix the port settings.");
+      console.log("");
+      return false;
+    }
+    return true;
+  }
+
   if (options.length > 1) {
     selectionLoop: while (true) {
       let selected;
@@ -4585,6 +4844,7 @@ async function setupNim(gpu) {
         }
         break;
       } else if (selected.key === "ollama") {
+        if (!checkOllamaPortsOrWarn()) continue selectionLoop;
         if (!ollamaRunning) {
           console.log("  Starting Ollama...");
           // On WSL2, binding to 0.0.0.0 creates a dual-stack socket that Docker
@@ -4657,6 +4917,7 @@ async function setupNim(gpu) {
         }
         break;
       } else if (selected.key === "install-ollama") {
+        if (!checkOllamaPortsOrWarn()) continue selectionLoop;
         if (process.platform === "darwin") {
           console.log("  Installing Ollama via Homebrew...");
           run(["brew", "install", "ollama"], { ignoreError: true });
@@ -5942,9 +6203,17 @@ async function setupPoliciesWithSelection(sandboxName, options = {}) {
       const envPresets = parsePolicyPresetEnv(process.env.NEMOCLAW_POLICY_PRESETS);
       if (envPresets.length > 0) chosen = envPresets;
     } else {
-      console.error(`  Unsupported NEMOCLAW_POLICY_MODE: ${policyMode}`);
-      console.error("  Valid values: suggested, custom, skip");
-      process.exit(1);
+      // #2429: step 8/8 runs after the sandbox is created. Exiting here left
+      // the sandbox with no presets. Warn, optionally suggest the intended
+      // variable, and fall through to the tier-derived suggestions list.
+      console.warn(`  Unsupported NEMOCLAW_POLICY_MODE: ${policyMode}`);
+      console.warn("  Valid values: suggested, custom, skip (aliases: default/auto, list, none/no).");
+      if (tiers.getTier(policyMode)) {
+        console.warn(
+          `  '${policyMode}' is a policy tier — did you mean NEMOCLAW_POLICY_TIER=${policyMode}?`,
+        );
+      }
+      console.warn(`  Falling back to suggested presets for tier '${tierName}'.`);
     }
 
     const knownPresets = new Set(allPresets.map((p) => p.name));
@@ -6067,6 +6336,21 @@ const CONTROL_UI_PORT = DASHBOARD_PORT;
 // isLoopbackHostname — see urlUtils import above
 const { resolveDashboardForwardTarget, buildControlUiUrls } = dashboard;
 
+// Parses `openshell forward list` output and returns the sandbox currently
+// owning `portToStop`, or null. Exported for unit testing — see #2169.
+// Columns: SANDBOX  BIND  PORT  PID  STATUS (whitespace-separated).
+function findDashboardForwardOwner(forwardListOutput, portToStop) {
+  if (!forwardListOutput) return null;
+  const portLine = forwardListOutput
+    .split("\n")
+    .map((l) => l.trim())
+    .find((l) => {
+      const parts = l.split(/\s+/);
+      return parts[2] === portToStop;
+    });
+  return portLine ? (portLine.split(/\s+/)[0] ?? null) : null;
+}
+
 function ensureDashboardForward(sandboxName, chatUiUrl = `http://127.0.0.1:${CONTROL_UI_PORT}`) {
   const portToStop = getDashboardForwardPort(chatUiUrl);
   const forwardTarget = getDashboardForwardTarget(chatUiUrl);
@@ -6074,23 +6358,19 @@ function ensureDashboardForward(sandboxName, chatUiUrl = `http://127.0.0.1:${CON
   // actionable message rather than silently stealing that sandbox's forward.
   // (Same sandbox is always allowed — covers reconnect and resume paths.)
   const existingForwards = runCaptureOpenshell(["forward", "list"], { ignoreError: true });
-  // Parse line-by-line to avoid false positives from substring matches.
-  // openshell forward list columns: SANDBOX  BIND  PORT  PID  STATUS
-  // Port is at column index 2; sandbox name is at column index 0.
-  const portLine = existingForwards
-    ?.split("\n")
-    .map((l) => l.trim())
-    .find((l) => {
-      const parts = l.split(/\s+/);
-      return parts[2] === portToStop;
-    });
-  const portOwner = portLine ? (portLine.split(/\s+/)[0] ?? null) : null;
+  const portOwner = findDashboardForwardOwner(existingForwards, portToStop);
   if (portOwner !== null && portOwner !== sandboxName) {
-    throw new Error(
-      `Port ${portToStop} is already forwarded for sandbox '${portOwner}'. ` +
-        `Set CHAT_UI_URL to a different local port (e.g. http://127.0.0.1:18790) ` +
-        `before onboarding a second sandbox.`,
+    // Match the preflight pattern (printed error + exit) instead of throwing,
+    // so the user sees a clean message rather than a raw Node stack trace
+    // from the top-level IIFE's unhandled rejection. See #2169.
+    console.error(
+      `  Port ${portToStop} is already forwarded for sandbox '${portOwner}'.`,
     );
+    console.error(
+      `  Set CHAT_UI_URL to a different local port (e.g. http://127.0.0.1:18790)`,
+    );
+    console.error(`  before onboarding a second sandbox.`);
+    process.exit(1);
   }
   runOpenshell(["forward", "stop", portToStop], { ignoreError: true });
   // Use stdio "ignore" to prevent spawnSync from waiting on inherited pipe fds.
@@ -6115,6 +6395,21 @@ function ensureDashboardForward(sandboxName, chatUiUrl = `http://127.0.0.1:${CON
   }
 }
 
+function findFileRecursive(dir, filename) {
+  if (!fs.existsSync(dir)) return null;
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  for (const e of entries) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) {
+      const found = findFileRecursive(p, filename);
+      if (found) return found;
+    } else if (e.name === filename) {
+      return p;
+    }
+  }
+  return null;
+}
+
 function findOpenclawJsonPath(dir) {
   if (!fs.existsSync(dir)) return null;
   const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -6131,13 +6426,51 @@ function findOpenclawJsonPath(dir) {
 }
 
 /**
- * Pull gateway.auth.token from the sandbox image via openshell sandbox download
- * so onboard can print copy-paste Control UI URLs with #token= (same idea as nemoclaw-start.sh).
+ * Pull gateway auth token from the sandbox.
+ *
+ * Tries three retrieval paths in order:
+ *  1. kubectl exec cat /run/nemoclaw/gateway-token  (root mode — gateway:gateway 0400)
+ *  2. sandbox download /tmp/.runtime/nemoclaw/gateway-token  (non-root mode — sandbox:sandbox 0400)
+ *  3. sandbox download openclaw.json → gateway.auth.token  (pre-externalization images)
+ *
+ * Path 1 uses the same kubectl-via-K3s pattern as shields.ts — it runs as
+ * root inside the pod so it can read gateway-owned files.
+ * Path 2 works because sandbox download runs as the sandbox user, which owns
+ * the non-root token file.
  */
 function fetchGatewayAuthTokenFromSandbox(sandboxName) {
+  // 1. Root mode: kubectl exec reads gateway:gateway 0400 file (same as shields.ts)
+  try {
+    const K3S_CONTAINER = "openshell-cluster-nemoclaw";
+    const result = execFileSync("docker", [
+      "exec", K3S_CONTAINER,
+      "kubectl", "exec", "-n", "openshell", sandboxName, "-c", "agent", "--",
+      "cat", "/run/nemoclaw/gateway-token",
+    ], { stdio: ["ignore", "pipe", "pipe"], timeout: 15000 });
+    const token = result.toString().trim();
+    if (token.length > 0) return token;
+  } catch {
+    // kubectl exec not available or file absent — fall through
+  }
+
+  // 2. Non-root mode: token at $XDG_RUNTIME_DIR/nemoclaw/gateway-token
+  // (sandbox-owned, downloadable via openshell sandbox download)
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-token-"));
   try {
     const destDir = `${tmpDir}${path.sep}`;
+    const nonRootResult = runOpenshell(
+      ["sandbox", "download", sandboxName, "/tmp/.runtime/nemoclaw/gateway-token", destDir],
+      { ignoreError: true, stdio: ["ignore", "ignore", "ignore"] },
+    );
+    if (nonRootResult.status === 0) {
+      const tokenPath = findFileRecursive(tmpDir, "gateway-token");
+      if (tokenPath) {
+        const token = fs.readFileSync(tokenPath, "utf-8").trim();
+        if (token.length > 0) return token;
+      }
+    }
+
+    // 3. Legacy: openclaw.json (pre-externalization images)
     const result = runOpenshell(
       ["sandbox", "download", sandboxName, "/sandbox/.openclaw/openclaw.json", destDir],
       { ignoreError: true, stdio: ["ignore", "ignore", "ignore"] },
@@ -6320,7 +6653,7 @@ function printDashboard(sandboxName, model, provider, nimContainer = null, agent
       console.log(`  ${entry.label}: ${entry.url}`);
     }
     console.log(
-      `  Token:       nemoclaw ${sandboxName} connect  →  jq -r '.gateway.auth.token' /sandbox/.openclaw/openclaw.json`,
+      `  Token:       see /tmp/gateway.log inside the sandbox, or re-run onboard.`,
     );
     console.log(
       `               append  #token=<token>  to the URL, or see /tmp/gateway.log inside the sandbox.`,
@@ -6329,7 +6662,7 @@ function printDashboard(sandboxName, model, provider, nimContainer = null, agent
   console.log(`  ${"─".repeat(50)}`);
   console.log("");
   console.log("  To change settings later:");
-  console.log(`    Model:       openshell inference set -g nemoclaw -m <model> -p <provider>`);
+  console.log(`    Model:       openshell inference set -g nemoclaw --model <model> --provider <provider>`);
   console.log(`    Policies:    nemoclaw ${sandboxName} policy-add`);
   console.log("    Credentials: nemoclaw credentials reset <KEY>  then  nemoclaw onboard");
   console.log("");
@@ -6654,6 +6987,43 @@ async function onboard(opts = {}) {
         break;
       }
 
+      // Prompt for the sandbox name and show the review gate BEFORE
+      // setupInference runs upsertProvider / `inference set` on the gateway.
+      // On retry (inferenceResult.retry === "selection") the user is re-prompted
+      // for provider/model above and sees this gate again with the new config.
+      // See #2221 (CodeRabbit).
+      if (!sandboxName) {
+        sandboxName = await promptValidatedSandboxName();
+      }
+      console.log(
+        formatOnboardConfigSummary({
+          provider,
+          model,
+          credentialEnv,
+          webSearchConfig,
+          enabledChannels:
+            selectedMessagingChannels.length > 0 ? selectedMessagingChannels : null,
+          sandboxName,
+          notes: ["Sandbox build takes ~6 minutes on this host."],
+        }),
+      );
+      console.log("  Web search and messaging channels will be prompted next.");
+      if (!isNonInteractive() && !dangerouslySkipPermissions) {
+        const answer = (await promptOrDefault("  Apply this configuration? [Y/n]: ", null, "y"))
+          .trim()
+          .toLowerCase();
+        if (answer === "n" || answer === "no") {
+          console.log("  Aborted. Re-run `nemoclaw onboard` to start over.");
+          console.log(
+            "  Credentials entered so far are stored in ~/.nemoclaw/credentials.json —",
+          );
+          console.log(
+            "  clear them with `nemoclaw credentials reset <KEY>` if you no longer want them.",
+          );
+          process.exit(0);
+        }
+      }
+
       startRecordedStep("inference", { sandboxName, provider, model });
       const inferenceResult = await setupInference(
         sandboxName,
@@ -6906,11 +7276,13 @@ module.exports = {
   getDashboardForwardPort,
   getDashboardForwardStartCommand,
   getDashboardGuidanceLines,
+  findDashboardForwardOwner,
   startGatewayForRecovery,
   runCaptureOpenshell,
   setupInference,
   setupMessagingChannels,
   setupNim,
+  formatOnboardConfigSummary,
   isInferenceRouteReady,
   isNonInteractive,
   isOpenclawReady,
