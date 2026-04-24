@@ -28,6 +28,7 @@ function redactUrlPartial(value: string): string {
   if (typeof value !== "string" || value.length === 0) return value;
   try {
     const url = new URL(value);
+    if (url.username) url.username = "****";
     if (url.password) url.password = "****";
     for (const key of [...url.searchParams.keys()]) {
       if (/(^|[-_])(?:signature|sig|token|auth|access_token)$/i.test(key)) {

@@ -128,11 +128,11 @@ fi
 redact() {
   if command -v node &>/dev/null && [ -n "$REPO_ROOT" ] && [ -f "${REPO_ROOT}/dist/lib/redact.js" ]; then
     node -e "
-      const {redactFull} = require('${REPO_ROOT}/dist/lib/redact');
+      const {redactFull} = require(process.argv[1]);
       let d = '';
       process.stdin.on('data', c => d += c);
       process.stdin.on('end', () => process.stdout.write(redactFull(d)));
-    "
+    " "${REPO_ROOT}/dist/lib/redact"
   else
     sed -E \
       -e 's/(NVIDIA_API_KEY|API_KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|_KEY)=\S+/\1=<REDACTED>/gi' \
