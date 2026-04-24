@@ -47,11 +47,12 @@ function loadHelper(modulePath: string, buildHint: string): NetworkHelper {
   try {
     return require(modulePath) as NetworkHelper;
   } catch (error) {
-    const err = error as NodeJS.ErrnoException;
-    if (err.code === "MODULE_NOT_FOUND") {
+    const code = (error as { code?: unknown })?.code;
+    if (code === "MODULE_NOT_FOUND") {
       throw new Error(
         `ssrf-parity.test.ts could not load '${modulePath}'. ` +
           `Run ${buildHint} first so the dist/ artifact exists.`,
+        { cause: error },
       );
     }
     throw error;

@@ -105,8 +105,9 @@ function load(): LoadedNetworks {
   if (!fs.existsSync(NETWORKS_FILE)) {
     throw new Error(
       `private-networks.yaml not found at ${NETWORKS_FILE}. ` +
-        `Set NEMOCLAW_BLUEPRINT_PATH to the directory containing the blueprint, ` +
-        `or run from a checkout that includes nemoclaw-blueprint/.`,
+        `The CLI resolves this path relative to the compiled project root, ` +
+        `so the checkout must include nemoclaw-blueprint/private-networks.yaml ` +
+        `(the plugin has a separate NEMOCLAW_BLUEPRINT_PATH override).`,
     );
   }
   const networks = parseDocument(fs.readFileSync(NETWORKS_FILE, "utf-8"));
