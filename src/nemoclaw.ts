@@ -90,30 +90,9 @@ const {
   sandboxActionTokens,
 } = require("./lib/command-registry");
 
-// ── Global commands ──────────────────────────────────────────────
+// ── Global commands (derived from command registry) ──────────────
 
-const GLOBAL_COMMANDS = new Set([
-  "onboard",
-  "list",
-  "deploy",
-  "setup",
-  "setup-spark",
-  "start",
-  "stop",
-  "tunnel",
-  "status",
-  "debug",
-  "uninstall",
-  "credentials",
-  "backup-all",
-  "upgrade-sandboxes",
-  "gc",
-  "help",
-  "--help",
-  "-h",
-  "--version",
-  "-v",
-]);
+const GLOBAL_COMMANDS = globalCommandTokens();
 
 const REMOTE_UNINSTALL_URL = buildVersionedUninstallUrl(getVersion());
 let OPENSHELL_BIN = null;
@@ -3080,22 +3059,8 @@ const [cmd, ...args] = process.argv.slice(2);
   // Sandbox-scoped commands: nemoclaw <name> <action>
   // If the registry doesn't know this name but the action is a sandbox-scoped
   // command, attempt recovery — the sandbox may still be live with a stale registry.
-  const sandboxActions = [
-    "connect",
-    "status",
-    "logs",
-    "policy-add",
-    "policy-remove",
-    "policy-list",
-    "destroy",
-    "skill",
-    "rebuild",
-    "snapshot",
-    "shields",
-    "config",
-    "channels",
-    "",
-  ];
+  // Derived from command registry — single source of truth
+  const sandboxActions = sandboxActionTokens();
   if (!registry.getSandbox(cmd) && sandboxActions.includes(args[0] || "")) {
     validateName(cmd, "sandbox name");
     await recoverRegistryEntries({ requestedSandboxName: cmd });
