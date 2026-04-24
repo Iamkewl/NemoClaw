@@ -693,29 +693,33 @@ describe("probeContainerDns", () => {
     expect(result.details).toContain("real_error_here");
   });
 
-  it("adds a `timeout 20` prefix on Linux to bound the probe", () => {
-    let captured = "";
+  it("passes a 20s timeout to runCapture (cross-platform via Node)", () => {
+    // The probe bounds itself via Node's spawn-level `timeout` option
+    // rather than a host-side `timeout` binary — portable across Linux /
+    // macOS / Windows / WSL.
+    let seenOpts: { ignoreError?: boolean; timeout?: number } | undefined;
     probeContainerDns({
-      platform: "linux",
-      runCaptureImpl: (command) => {
-        captured = command;
+      runCaptureImpl: (_cmd, o) => {
+        seenOpts = o;
         return BUSYBOX_SUCCESS;
       },
     });
-    expect(captured.startsWith("timeout 20 ")).toBe(true);
+    expect(seenOpts).toBeDefined();
+    expect(seenOpts?.ignoreError).toBe(true);
+    expect(seenOpts?.timeout).toBe(20_000);
   });
 
-  it("does not add a timeout prefix outside Linux (not portable)", () => {
+  it("emits a plain `docker run ...` command (no shell-specific wrappers)", () => {
     let captured = "";
     probeContainerDns({
-      platform: "darwin",
       runCaptureImpl: (command) => {
         captured = command;
         return BUSYBOX_SUCCESS;
       },
     });
-    expect(captured.startsWith("timeout ")).toBe(false);
     expect(captured.startsWith("docker run")).toBe(true);
+    expect(captured.startsWith("timeout ")).toBe(false);
+    expect(captured.startsWith("gtimeout ")).toBe(false);
   });
 });
 

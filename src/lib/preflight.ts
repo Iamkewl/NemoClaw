@@ -814,10 +814,19 @@ export interface ProbeContainerDnsOpts {
   /** Inject captured output (bypasses shell). */
   outputOverride?: string | null;
   /** Override runCapture. */
-  runCaptureImpl?: (command: string, opts?: { ignoreError?: boolean }) => string | null;
-  /** Override platform detection (mainly for tests). */
-  platform?: NodeJS.Platform;
+  runCaptureImpl?: (
+    command: string,
+    opts?: { ignoreError?: boolean; timeout?: number },
+  ) => string | null;
 }
+
+/**
+ * Hard ceiling on the DNS probe: Node kills the child after this many
+ * milliseconds. 20 s is roughly 1.3× busybox nslookup's own retry budget
+ * (3 × 5 s), which leaves headroom for image pull on a cold cache without
+ * letting a wedged docker daemon stall preflight forever.
+ */
+const PROBE_TIMEOUT_MS = 20_000;
 
 /**
  * Discover the IPv4 gateway address of docker's default bridge network.
@@ -863,15 +872,13 @@ export function getDockerBridgeGatewayIp(
  * - `no_output` / `error` — probe couldn't run at all.
  */
 export function probeContainerDns(opts: ProbeContainerDnsOpts = {}): DnsProbeResult {
-  // Cap the whole probe at 20 s on Linux via GNU coreutils `timeout` to
-  // avoid preflight hanging if docker itself is wedged. macOS doesn't ship
-  // `timeout` by default and busybox nslookup has its own ~15 s internal
-  // budget there, so we skip the prefix outside Linux.
-  const platform = opts.platform ?? process.platform;
-  const timeoutPrefix = platform === "linux" ? "timeout 20 " : "";
+  // Cap the whole probe via Node's spawn-level timeout (works on every
+  // platform Node supports — no dependency on a host-side `timeout`
+  // binary). Child process is killed, runCapture returns "" under
+  // ignoreError, and we fall through to the `no_output` branch.
   const command =
     opts.command ??
-    `${timeoutPrefix}docker run --rm --pull=missing busybox:latest ` +
+    "docker run --rm --pull=missing busybox:latest " +
       "nslookup registry.npmjs.org 2>&1";
 
   let output: string | null | undefined = opts.outputOverride;
@@ -879,9 +886,15 @@ export function probeContainerDns(opts: ProbeContainerDnsOpts = {}): DnsProbeRes
     try {
       const runCaptureImpl =
         opts.runCaptureImpl ??
-        ((cmd: string, o?: { ignoreError?: boolean }) =>
-          runCapture(cmd, { ignoreError: o?.ignoreError ?? false }));
-      output = runCaptureImpl(command, { ignoreError: true });
+        ((cmd: string, o?: { ignoreError?: boolean; timeout?: number }) =>
+          runCapture(cmd, {
+            ignoreError: o?.ignoreError ?? false,
+            timeout: o?.timeout,
+          }));
+      output = runCaptureImpl(command, {
+        ignoreError: true,
+        timeout: PROBE_TIMEOUT_MS,
+      });
     } catch (e) {
       return {
         ok: false,
