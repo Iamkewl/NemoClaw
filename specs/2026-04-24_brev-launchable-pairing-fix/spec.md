@@ -123,7 +123,7 @@ clean Python edits to a real file instead of more `\` continuation surgery.
 
 ---
 
-## Phase 1: Extract Inline Python to `scripts/generate-openclaw-config.py`
+## Phase 1: Extract Inline Python to `scripts/generate-openclaw-config.py` [COMPLETED: ca46f470]
 
 **Goal:** Replace the 68-line inline `python3 -c` block and the 7-line token-clearing
 block in the Dockerfile with a single COPY'd Python script. Zero behavior change —
