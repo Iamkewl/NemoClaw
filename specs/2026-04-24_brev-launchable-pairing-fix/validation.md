@@ -18,7 +18,7 @@ auto-disable device auth for non-loopback URLs (fixes #2341).
 
 ## Phase 1: Extract Inline Python to `scripts/generate-openclaw-config.py`
 
-### Scenario 1.1: Config script generates identical output to inline Python [STATUS: pending]
+### Scenario 1.1: Config script generates identical output to inline Python [VALIDATED: 1dbfc563]
 **Type**: Happy Path
 
 **Given**: The `scripts/generate-openclaw-config.py` script exists and is executable
@@ -32,7 +32,7 @@ auto-disable device auth for non-loopback URLs (fixes #2341).
 
 **Tools Required**: python3, bash, jq
 
-### Scenario 1.2: Dockerfile uses COPY + RUN instead of inline python3 -c [STATUS: pending]
+### Scenario 1.2: Dockerfile uses COPY + RUN instead of inline python3 -c [VALIDATED: 1dbfc563]
 **Type**: Happy Path
 
 **Given**: The Dockerfile has been modified to reference the extracted script
@@ -46,7 +46,7 @@ auto-disable device auth for non-loopback URLs (fixes #2341).
 
 **Tools Required**: bash, grep
 
-### Scenario 1.3: C-2 security regression tests pass with updated patterns [STATUS: pending]
+### Scenario 1.3: C-2 security regression tests pass with updated patterns [VALIDATED: 1dbfc563]
 **Type**: Happy Path
 
 **Given**: `test/security-c2-dockerfile-injection.test.ts` has been updated for the extraction
@@ -59,7 +59,7 @@ auto-disable device auth for non-loopback URLs (fixes #2341).
 
 **Tools Required**: vitest
 
-### Scenario 1.4: New functional tests validate all config derivation paths [STATUS: pending]
+### Scenario 1.4: New functional tests validate all config derivation paths [VALIDATED: 1dbfc563]
 **Type**: Happy Path
 
 **Given**: `test/generate-openclaw-config.test.ts` exists with ≥10 tests
@@ -73,7 +73,7 @@ auto-disable device auth for non-loopback URLs (fixes #2341).
 
 **Tools Required**: vitest
 
-### Scenario 1.5: --clear-token flag clears only the token [STATUS: pending]
+### Scenario 1.5: --clear-token flag clears only the token [VALIDATED: 1dbfc563]
 **Type**: Happy Path
 
 **Given**: A `openclaw.json` exists with a non-empty `gateway.auth.token`
@@ -87,7 +87,7 @@ auto-disable device auth for non-loopback URLs (fixes #2341).
 
 **Tools Required**: python3, bash, jq
 
-### Scenario 1.6: patchStagedDockerfile() requires no changes [STATUS: pending]
+### Scenario 1.6: patchStagedDockerfile() requires no changes [VALIDATED: 1dbfc563]
 **Type**: Sad Path (regression guard)
 
 **Given**: `patchStagedDockerfile()` in `src/lib/onboard-command.ts` works via ARG patching
@@ -105,7 +105,7 @@ auto-disable device auth for non-loopback URLs (fixes #2341).
 
 ## Phase 2: Auto-Disable Device Auth for Non-Loopback URLs
 
-### Scenario 2.1: Brev Launchable URL auto-disables device auth [STATUS: pending]
+### Scenario 2.1: Brev Launchable URL auto-disables device auth [VALIDATED: 1dbfc563]
 **Type**: Happy Path — **The core fix for #2341**
 
 **Given**: `scripts/generate-openclaw-config.py` has the non-loopback auto-disable logic
@@ -119,7 +119,7 @@ auto-disable device auth for non-loopback URLs (fixes #2341).
 
 **Tools Required**: python3, bash
 
-### Scenario 2.2: Loopback URLs preserve device auth (no regression) [STATUS: pending]
+### Scenario 2.2: Loopback URLs preserve device auth (no regression) [VALIDATED: 1dbfc563]
 **Type**: Sad Path (regression guard)
 
 **Given**: `scripts/generate-openclaw-config.py` has the non-loopback auto-disable logic
@@ -133,7 +133,7 @@ auto-disable device auth for non-loopback URLs (fixes #2341).
 
 **Tools Required**: python3, bash
 
-### Scenario 2.3: Docker build with Brev URL produces correct openclaw.json [STATUS: pending]
+### Scenario 2.3: Docker build with Brev URL produces correct openclaw.json [STATUS: skipped — Docker daemon not running]
 **Type**: Happy Path — **End-to-end integration: Dockerfile + Python script + ARG→ENV**
 
 **Given**: The Dockerfile COPYs `generate-openclaw-config.py` and runs it during build;
@@ -240,7 +240,7 @@ user would NOT see "pairing required"
 same path a real Brev Launchable build follows. Unit tests cover the Python logic in
 isolation; this proves the Dockerfile wiring is correct.
 
-### Scenario 2.4: dashboard-contract buildChain returns shouldDisableDeviceAuth [STATUS: pending]
+### Scenario 2.4: dashboard-contract buildChain returns shouldDisableDeviceAuth [VALIDATED: 1dbfc563]
 **Type**: Happy Path
 
 **Given**: `DashboardDeliveryChain` interface has `shouldDisableDeviceAuth` field
@@ -257,8 +257,8 @@ isolation; this proves the Dockerfile wiring is correct.
 
 ## Summary
 
-| Phase | Happy | Sad | Total | Passed | Failed | Pending |
+| Phase | Happy | Sad | Total | Passed | Failed | Skipped |
 |-------|-------|-----|-------|--------|--------|---------|
-| Phase 1 | 4 | 2 | 6 | 0 | 0 | 6 |
-| Phase 2 | 3 | 1 | 4 | 0 | 0 | 4 |
-| **Total** | **7** | **3** | **10** | **0** | **0** | **10** |
+| Phase 1 | 4 | 2 | 6 | 6 | 0 | 0 |
+| Phase 2 | 3 | 1 | 4 | 3 | 0 | 1 |
+| **Total** | **7** | **3** | **10** | **9** | **0** | **1** |
