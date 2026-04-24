@@ -733,8 +733,8 @@ If this automatic step fails or you are using a custom setup flow, create swap m
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>curl<span class="w"> </span>-fsSL<span class="w"> </span>https://www.nvidia.com/nemoclaw.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>bash<span class="w"> </span>-s<span class="w"> </span>--<span class="w"> </span>--fresh
 </pre></div>
 </div>
-<p>Or equivalently, via env var:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span><span class="nv">NEMOCLAW_FRESH</span><span class="o">=</span><span class="m">1</span><span class="w"> </span>curl<span class="w"> </span>-fsSL<span class="w"> </span>https://www.nvidia.com/nemoclaw.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>bash
+<p>Or equivalently, via env var (note: the variable must be set on the <code class="docutils literal notranslate"><span class="pre">bash</span></code> side of the pipe, not on <code class="docutils literal notranslate"><span class="pre">curl</span></code> — only the right-hand process inherits it):</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>curl<span class="w"> </span>-fsSL<span class="w"> </span>https://www.nvidia.com/nemoclaw.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="nv">NEMOCLAW_FRESH</span><span class="o">=</span><span class="m">1</span><span class="w"> </span>bash
 </pre></div>
 </div>
 <p>Retry the same session without re-prompting (only useful if the original failure was transient — a network blip, a stopped Docker daemon, and so on — not a wrong provider choice):</p>
