@@ -3823,7 +3823,6 @@ async function createSandbox(
   // to gateway.controlUi.allowedOrigins at startup. Without this, the
   // Dockerfile-baked allowedOrigins only contains http://127.0.0.1:PORT
   // and the gateway rejects WebSocket/API connections from the external URL.
-  // See: https://github.com/NVIDIA/NemoClaw/issues/2342
   const corsOrigin = process.env.NEMOCLAW_CORS_ORIGIN;
   if (corsOrigin) {
     envArgs.push(formatEnvAssignment("NEMOCLAW_CORS_ORIGIN", corsOrigin));
@@ -3952,22 +3951,23 @@ async function createSandbox(
   // causing this readiness check to false-negative for 30s. /health returns
   // 200 unconditionally when the gateway is up. Falls back to accepting any
   // HTTP response (including 401) from / as proof the server is listening.
-  // See: https://github.com/NVIDIA/NemoClaw/issues/2342
   console.log("  Waiting for NemoClaw dashboard to become ready...");
   const openshellBin = getOpenshellBinary();
   for (let i = 0; i < 15; i++) {
-    // Primary: /health endpoint (no auth required, returns 200 when gateway is up)
-    const healthMatch = runCaptureOpenshell(
-      ["sandbox", "exec", sandboxName, "curl", "-sf", `http://localhost:${effectivePort}/health`],
+    // Primary: /health endpoint (no auth required, returns 200 when gateway is up).
+    // Use -o /dev/null -w '%{http_code}' to check by status code, not output
+    // content — runCaptureOpenshell merges stdout/stderr so a failed curl can
+    // return non-empty error text that would incorrectly pass a truthy check.
+    const healthCode = runCaptureOpenshell(
+      ["sandbox", "exec", sandboxName, "curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", `http://localhost:${effectivePort}/health`],
       { ignoreError: true },
     );
-    if (healthMatch) {
+    if (healthCode && String(healthCode).trim() === "200") {
       console.log("  ✓ Dashboard is live");
       break;
     }
     // Fallback: accept any HTTP response from / (including 401) as proof
-    // the server is listening — curl -s -o /dev/null -w '%{http_code}' returns
-    // the status code; any 1xx-5xx means the gateway process is up.
+    // the server is listening — any 1xx-5xx means the gateway process is up.
     const httpCode = runCaptureOpenshell(
       ["sandbox", "exec", sandboxName, "curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", `http://localhost:${effectivePort}/`],
       { ignoreError: true },
