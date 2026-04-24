@@ -29,6 +29,7 @@ FROM ${BASE_IMAGE}
 # addition, leaving it absent or auto-marked. apt-mark + conditional install
 # guarantees ps/top/kill are present regardless of base image staleness.
 # Ref: #2343
+# hadolint ignore=DL3001
 RUN apt-mark manual procps 2>/dev/null || true \
     && (apt-get remove --purge -y gcc gcc-12 g++ g++-12 cpp cpp-12 make \
         netcat-openbsd netcat-traditional ncat 2>/dev/null || true) \
