@@ -16,25 +16,52 @@ error() {
   exit 1
 }
 
-# Returns 0 when `br_netfilter` is loaded AND both bridge-nf-call-iptables
-# and bridge-nf-call-ip6tables sysctls are already set to 1. Used so we
-# can skip host-state changes on Jetson images that ship with this
-# configured out of the box.
+# Returns 0 only when both the live kernel state AND our persistent
+# drop-ins are in place:
+#   - runtime: bridge-nf-call-{iptables,ip6tables} sysctls read back as 1
+#   - persistence: /etc/modules-load.d/nemoclaw.conf contains `br_netfilter`
+#     and /etc/sysctl.d/99-nemoclaw.conf contains both sysctl=1 lines
+# Skipping on runtime-only state is wrong: if someone transiently ran
+# `modprobe br_netfilter` + `sysctl -w ...=1` without persisting, the
+# fix would evaporate after the next reboot. Requiring persistence too
+# makes the skip branch safe and lets `apply_br_netfilter_setup_r39`
+# (which is idempotent) re-write the drop-ins whenever they're missing
+# or stale (e.g. an older v4-only version of this script left behind).
 bridge_netfilter_ready() {
   [[ -f /proc/sys/net/bridge/bridge-nf-call-iptables ]] \
     && [[ -f /proc/sys/net/bridge/bridge-nf-call-ip6tables ]] \
     && [[ "$(cat /proc/sys/net/bridge/bridge-nf-call-iptables 2>/dev/null)" == "1" ]] \
-    && [[ "$(cat /proc/sys/net/bridge/bridge-nf-call-ip6tables 2>/dev/null)" == "1" ]]
+    && [[ "$(cat /proc/sys/net/bridge/bridge-nf-call-ip6tables 2>/dev/null)" == "1" ]] \
+    && [[ -f /etc/modules-load.d/nemoclaw.conf ]] \
+    && grep -qx 'br_netfilter' /etc/modules-load.d/nemoclaw.conf 2>/dev/null \
+    && [[ -f /etc/sysctl.d/99-nemoclaw.conf ]] \
+    && grep -qx 'net.bridge.bridge-nf-call-iptables=1' /etc/sysctl.d/99-nemoclaw.conf 2>/dev/null \
+    && grep -qx 'net.bridge.bridge-nf-call-ip6tables=1' /etc/sysctl.d/99-nemoclaw.conf 2>/dev/null
 }
 
-# Load br_netfilter and flip the bridge-nf-call-{ip,ip6}tables sysctls,
-# then persist all three across reboots. Required for k3s (running inside
-# the OpenShell gateway container) to NAT pod → ClusterIP traffic;
-# without this the kube-proxy iptables rules are written but never
-# matched for bridged pod traffic, so sandbox pods cannot reach CoreDNS.
-# ip6tables is flipped alongside iptables to keep IPv4 and IPv6 cluster
-# services consistent and match the manual workaround validated on #2418.
+# Load br_netfilter and flip bridge-nf-call-iptables, then persist both
+# across reboots. Used by the R36/R38 paths — byte-identical to the
+# original inline block that lived in configure_jetson_host before the
+# #2418 refactor. Do NOT add IPv6 here: the R36/R38 paths predate the
+# #2418 work and changing their behavior would be out of scope.
 apply_br_netfilter_setup() {
+  "${SUDO[@]}" modprobe br_netfilter
+  "${SUDO[@]}" sysctl -w net.bridge.bridge-nf-call-iptables=1 >/dev/null
+
+  # Persist across reboots
+  echo "br_netfilter" | "${SUDO[@]}" tee /etc/modules-load.d/nemoclaw.conf >/dev/null
+  echo "net.bridge.bridge-nf-call-iptables=1" | "${SUDO[@]}" tee /etc/sysctl.d/99-nemoclaw.conf >/dev/null
+}
+
+# R39-specific variant: flips both bridge-nf-call-iptables and
+# bridge-nf-call-ip6tables and persists both. Kept separate from
+# apply_br_netfilter_setup so the R36/R38 behavior stays byte-identical
+# to pre-#2418; the dual-stack sysctl write is the configuration the
+# reporter validated end-to-end on their Jetson Orin R39 (#2418).
+# Idempotent: safe to call whenever bridge_netfilter_ready returns false,
+# including the "runtime is live but drop-ins missing" case (e.g. someone
+# ran modprobe + sysctl manually without persisting).
+apply_br_netfilter_setup_r39() {
   "${SUDO[@]}" modprobe br_netfilter
   "${SUDO[@]}" sysctl -w net.bridge.bridge-nf-call-iptables=1 >/dev/null
   "${SUDO[@]}" sysctl -w net.bridge.bridge-nf-call-ip6tables=1 >/dev/null
@@ -78,7 +105,7 @@ get_jetpack_version() {
         "${SUDO[@]}" true >/dev/null \
           || error "Sudo is required to load br_netfilter and write /etc/modules-load.d and /etc/sysctl.d drop-ins."
       fi
-      apply_br_netfilter_setup
+      apply_br_netfilter_setup_r39
       # Read the values back from /proc (not just "we set it to 1") so the
       # log is actual evidence that the apply path landed — useful when a
       # user is validating the fix on their own Jetson and needs to confirm
