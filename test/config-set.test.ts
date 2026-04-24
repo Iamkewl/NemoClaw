@@ -89,43 +89,38 @@ describe("config set helpers", () => {
   });
 
   describe("isRecognizedConfigPath", () => {
-    it("accepts an existing top-level key", () => {
-      expect(isRecognizedConfigPath({ version: 1 }, "version")).toBe(true);
+    it("accepts a recognized top-level key", () => {
+      expect(isRecognizedConfigPath("version")).toBe(true);
     });
 
-    it("accepts an existing nested key path", () => {
-      expect(
-        isRecognizedConfigPath(
-          { agents: { defaults: { model: { primary: "gpt-5.4" } } } },
-          "agents.defaults.model.primary",
-        ),
-      ).toBe(true);
+    it("accepts a deeply nested path under a recognized root", () => {
+      expect(isRecognizedConfigPath("agents.defaults.model.primary")).toBe(true);
     });
 
-    it("accepts existing keys whose value is null", () => {
-      expect(isRecognizedConfigPath({ provider: { endpoint: null } }, "provider.endpoint")).toBe(true);
+    // Regression: #2400 — first-time writes under an unset namespace used
+    // to fail the old "walk the loaded config" check even when the key
+    // path was schema-valid. The roots allow-list must accept them.
+    it("accepts first-time writes under an unset recognized namespace", () => {
+      expect(isRecognizedConfigPath("provider.compatible-endpoint.timeoutSeconds")).toBe(true);
+      expect(isRecognizedConfigPath("mcpServers.my-server.command")).toBe(true);
     });
 
-    it("rejects an unknown top-level key", () => {
-      expect(isRecognizedConfigPath({ version: 1 }, "inference.endpoint")).toBe(false);
-    });
-
-    it("rejects an unknown nested key", () => {
-      expect(
-        isRecognizedConfigPath(
-          { agents: { defaults: { model: { primary: "gpt-5.4" } } } },
-          "agents.defaults.model.secondary",
-        ),
-      ).toBe(false);
+    it("rejects an unrecognized top-level key", () => {
+      expect(isRecognizedConfigPath("inference.endpoint")).toBe(false);
+      expect(isRecognizedConfigPath("gateway.token")).toBe(false);
     });
 
     it("rejects malformed dotpaths", () => {
-      expect(isRecognizedConfigPath({ version: 1 }, "agents..defaults")).toBe(false);
+      expect(isRecognizedConfigPath("agents..defaults")).toBe(false);
+      expect(isRecognizedConfigPath("")).toBe(false);
+      expect(isRecognizedConfigPath(".")).toBe(false);
     });
 
-    it("rejects prototype-inherited keys", () => {
-      expect(isRecognizedConfigPath({}, "toString")).toBe(false);
-      expect(isRecognizedConfigPath({ safe: {} }, "safe.constructor")).toBe(false);
+    it("rejects prototype-pollution segments anywhere in the path", () => {
+      expect(isRecognizedConfigPath("toString")).toBe(false);
+      expect(isRecognizedConfigPath("agents.constructor")).toBe(false);
+      expect(isRecognizedConfigPath("provider.__proto__.polluted")).toBe(false);
+      expect(isRecognizedConfigPath("tools.hasOwnProperty")).toBe(false);
     });
   });
 

@@ -132,21 +132,50 @@ function setDotpath(obj: ConfigObject, dotpath: string, value: ConfigValue): voi
 }
 
 /**
- * Return true when every segment in a dotpath is an own property on the
- * current config object, which keeps config set constrained to recognized keys.
+ * Top-level namespaces that `config set` is allowed to write. The check is
+ * deliberately a roots allow-list rather than a walk of the loaded config so
+ * first-time sets under an unset namespace succeed (see #2400). `gateway`
+ * is blocked separately because it holds auth tokens — use
+ * `nemoclaw config rotate-token` for that. Other build-time keys
+ * (integrity hashes, channels baked into the image) are intentionally not
+ * listed here because modifying them at runtime would desync with the
+ * startup hash check.
  */
-function isRecognizedConfigPath(obj: unknown, dotpath: string): boolean {
+const RECOGNIZED_TOP_LEVEL_KEYS: ReadonlySet<string> = new Set([
+  "provider",
+  "model",
+  "agent",
+  "agents",
+  "tools",
+  "mcpServers",
+  "runtime",
+  "version",
+]);
+
+/**
+ * Key segments that must never appear in a dotpath — blocking these prevents
+ * prototype-pollution and accidental traversal into inherited members.
+ */
+const UNSAFE_KEY_SEGMENTS: ReadonlySet<string> = new Set([
+  "__proto__",
+  "constructor",
+  "prototype",
+  "toString",
+  "hasOwnProperty",
+]);
+
+/**
+ * Return true when a dotpath is syntactically valid and its first segment
+ * is in RECOGNIZED_TOP_LEVEL_KEYS. Does not consult the loaded config, so a
+ * first-time write under a recognized namespace (e.g.
+ * `provider.compatible-endpoint.timeoutSeconds` on a fresh install) is
+ * accepted even before the intermediate objects exist.
+ */
+function isRecognizedConfigPath(dotpath: string): boolean {
   if (!dotpath || typeof dotpath !== "string") return false;
   const keys = dotpath.split(".");
-  if (keys.some((key) => !key)) return false;
-
-  let current: unknown = obj;
-  for (const key of keys) {
-    if (current == null || typeof current !== "object" || Array.isArray(current)) return false;
-    if (!Object.prototype.hasOwnProperty.call(current as Record<string, unknown>, key)) return false;
-    current = (current as Record<string, unknown>)[key];
-  }
-  return true;
+  if (keys.some((key) => !key || UNSAFE_KEY_SEGMENTS.has(key))) return false;
+  return RECOGNIZED_TOP_LEVEL_KEYS.has(keys[0]);
 }
 
 /**
@@ -349,8 +378,13 @@ function configSet(sandboxName: string, opts: ConfigSetOpts = {}): void {
     process.exit(1);
   }
 
-  if (!isRecognizedConfigPath(config, opts.key)) {
-    console.error(`  Key validation failed: "${opts.key}" is not a recognized ${target.agentName} config path.`);
+  if (!isRecognizedConfigPath(opts.key)) {
+    console.error(
+      `  Key validation failed: "${opts.key}" is not a recognized ${target.agentName} config path.`,
+    );
+    console.error(
+      `  Allowed top-level namespaces: ${[...RECOGNIZED_TOP_LEVEL_KEYS].sort().join(", ")}.`,
+    );
     process.exit(1);
   }
 
