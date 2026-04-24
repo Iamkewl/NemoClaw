@@ -59,10 +59,9 @@ function stageOptimizedSandboxBuildContext(rootDir, tmpDir = os.tmpdir()) {
   });
 
   fs.mkdirSync(stagedScriptsDir, { recursive: true });
-  fs.copyFileSync(
-    path.join(rootDir, "scripts", "nemoclaw-start.sh"),
-    path.join(stagedScriptsDir, "nemoclaw-start.sh"),
-  );
+  for (const scriptName of ["nemoclaw-start.sh", "openclaw-wrapper.sh"]) {
+    fs.copyFileSync(path.join(rootDir, "scripts", scriptName), path.join(stagedScriptsDir, scriptName));
+  }
 
   return { buildCtx, stagedDockerfile };
 }

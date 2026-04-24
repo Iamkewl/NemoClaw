@@ -113,9 +113,10 @@ RUN set -eu; \
 RUN mkdir -p /sandbox/.nemoclaw/blueprints/0.1.0 \
     && cp -r /opt/nemoclaw-blueprint/* /sandbox/.nemoclaw/blueprints/0.1.0/
 
-# Copy startup script
+# Copy startup scripts
 COPY scripts/nemoclaw-start.sh /usr/local/bin/nemoclaw-start
-RUN chmod 755 /usr/local/bin/nemoclaw-start
+COPY scripts/openclaw-wrapper.sh /usr/local/lib/nemoclaw/openclaw-wrapper.sh
+RUN chmod 755 /usr/local/bin/nemoclaw-start /usr/local/lib/nemoclaw/openclaw-wrapper.sh
 
 # Build args for config that varies per deployment.
 # nemoclaw onboard passes these at image build time.
@@ -250,6 +251,19 @@ os.chmod(path, 0o600)"
 RUN openclaw doctor --fix > /dev/null 2>&1 || true \
     && openclaw plugins install /opt/nemoclaw > /dev/null 2>&1 || true
 
+# Install a stable OpenClaw wrapper inside the image. This avoids relying on
+# shell rc sourcing for `nemoclaw ... connect` sessions, while surfacing a
+# clear UX error for commands that cannot work inside the immutable sandbox.
+USER root
+RUN OPENCLAW_BIN="$(command -v openclaw)" \
+    && if [ "$OPENCLAW_BIN" != "/usr/local/bin/openclaw" ]; then \
+        echo "Error: expected openclaw at /usr/local/bin/openclaw, got $OPENCLAW_BIN"; \
+        exit 1; \
+    fi \
+    && mv "$OPENCLAW_BIN" /usr/local/bin/openclaw-real \
+    && install -m 755 /usr/local/lib/nemoclaw/openclaw-wrapper.sh /usr/local/bin/openclaw \
+    && chmod 755 /usr/local/bin/openclaw-real
+
 # Lock openclaw.json via DAC: chown to root so the sandbox user cannot modify
 # it at runtime.  This works regardless of Landlock enforcement status.
 # The Landlock policy (/sandbox/.openclaw in read_only) provides defense-in-depth
@@ -261,7 +275,6 @@ RUN openclaw doctor --fix > /dev/null 2>&1 || true \
 # (e.g., pointing /sandbox/.openclaw/hooks to an attacker-controlled path).
 # The writable state lives in .openclaw-data, reached via the symlinks.
 # hadolint ignore=DL3002
-USER root
 
 # Ensure .openclaw-data subdirs and symlinks exist for logs, credentials, and
 # sandbox. These are defined in Dockerfile.base but the GHCR base image may
