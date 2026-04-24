@@ -14,15 +14,17 @@ const { loadAgent } = require("./agent-defs");
 
 const PRESETS_DIR = path.join(ROOT, "nemoclaw-blueprint", "policies", "presets");
 
+import type { JsonValue, JsonObject } from "./json-types";
+
 type PresetInfo = {
   file: string;
   name: string;
   description: string;
 };
 
-type PolicyScalar = string | number | boolean | null | undefined;
-type PolicyValue = PolicyScalar | PolicyObject | PolicyValue[];
-type PolicyObject = { [key: string]: PolicyValue };
+// Re-use shared JSON types under policy-domain names.
+type PolicyValue = JsonValue;
+type PolicyObject = JsonObject;
 
 type PolicyDocument = PolicyObject & {
   version?: number;
