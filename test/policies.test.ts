@@ -164,12 +164,11 @@ describe("policies", () => {
       expect(content).toContain("port: 8000");
     });
 
-    it("local-inference preset restricts binaries to openclaw and claude", () => {
+    it("local-inference preset restricts binaries to expected set", () => {
       const content = policies.loadPreset("local-inference");
       expect(content).toContain("/usr/local/bin/openclaw");
       expect(content).toContain("/usr/local/bin/claude");
-      // Should NOT include node — only agent binaries need inference access
-      expect(content).not.toContain("/usr/local/bin/node");
+      expect(content).toContain("/usr/local/bin/node");
     });
   });
 

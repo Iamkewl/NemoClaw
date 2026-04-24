@@ -22,6 +22,7 @@ export interface SandboxEntry {
   providerCredentialHashes?: Record<string, string>;
   messagingChannels?: string[];
   disabledChannels?: string[];
+  dashboardPort?: number | null;
 }
 
 export interface SandboxRegistry {
