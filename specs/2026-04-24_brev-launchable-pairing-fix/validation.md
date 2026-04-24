@@ -28,7 +28,7 @@ auto-disable device auth for non-loopback URLs (fixes #2341).
 **Validation Steps**:
 1. **Setup**: Bash: Verify `scripts/generate-openclaw-config.py` exists
 2. **Execute**: Bash: Run `python3 scripts/generate-openclaw-config.py` with BASE_ENV in a temp HOME
-3. **Verify**: Bash: Parse generated `openclaw.json`, assert keys: `gateway.auth.dangerouslyDisableDeviceAuth`, `gateway.auth.allowInsecureAuth`, `gateway.allowedOrigins`, `gateway.auth.token`
+3. **Verify**: Bash: Parse generated `openclaw.json`, assert keys: `gateway.controlUi.dangerouslyDisableDeviceAuth`, `gateway.controlUi.allowInsecureAuth`, `gateway.controlUi.allowedOrigins`, `gateway.auth.token`
 
 **Tools Required**: python3, bash, jq
 
@@ -83,7 +83,7 @@ auto-disable device auth for non-loopback URLs (fixes #2341).
 **Validation Steps**:
 1. **Setup**: Bash: Create temp dir, run script to generate config, then manually set token to "test-token-123"
 2. **Execute**: Bash: Run `python3 scripts/generate-openclaw-config.py --clear-token` with HOME set to temp dir
-3. **Verify**: Bash: Parse JSON — token is `""`, model config and gateway.allowedOrigins unchanged
+3. **Verify**: Bash: Parse JSON — token is `""`, model config and gateway.controlUi.allowedOrigins unchanged
 
 **Tools Required**: python3, bash, jq
 
@@ -110,12 +110,12 @@ auto-disable device auth for non-loopback URLs (fixes #2341).
 
 **Given**: `scripts/generate-openclaw-config.py` has the non-loopback auto-disable logic
 **When**: Script runs with `CHAT_UI_URL=https://nemoclaw0-xxx.brevlab.com:18789`
-**Then**: Generated config has `gateway.auth.dangerouslyDisableDeviceAuth: true`
+**Then**: Generated config has `gateway.controlUi.dangerouslyDisableDeviceAuth: true`
 
 **Validation Steps**:
 1. **Setup**: Bash: Create temp HOME dir
 2. **Execute**: Bash: `CHAT_UI_URL=https://nemoclaw0-xxx.brevlab.com:18789 HOME=$TMPDIR python3 scripts/generate-openclaw-config.py` (with other required env vars)
-3. **Verify**: Bash: `python3 -c "import json; c=json.load(open('$TMPDIR/.openclaw/openclaw.json')); assert c['gateway']['auth']['dangerouslyDisableDeviceAuth'] == True"`
+3. **Verify**: Bash: `python3 -c "import json; c=json.load(open('$TMPDIR/.openclaw/openclaw.json')); assert c['gateway']['controlUi']['dangerouslyDisableDeviceAuth'] == True"`
 
 **Tools Required**: python3, bash
 
@@ -124,7 +124,7 @@ auto-disable device auth for non-loopback URLs (fixes #2341).
 
 **Given**: `scripts/generate-openclaw-config.py` has the non-loopback auto-disable logic
 **When**: Script runs with loopback URLs (`127.0.0.1`, `localhost`, `[::1]`)
-**Then**: Generated config has `gateway.auth.dangerouslyDisableDeviceAuth: false` for all
+**Then**: Generated config has `gateway.controlUi.dangerouslyDisableDeviceAuth: false` for all
 
 **Validation Steps**:
 1. **Execute**: Bash: Run script with `CHAT_UI_URL=http://127.0.0.1:18789`, verify `dangerouslyDisableDeviceAuth: false`
@@ -141,7 +141,7 @@ the `ARG→ENV` promotion feeds `CHAT_UI_URL` to the script via `os.environ`
 **When**: `docker build` is run with `--build-arg CHAT_UI_URL=https://nemoclaw0-xxx.brevlab.com:18789`
 (plus other required build-args for a minimal config)
 **Then**: The `/sandbox/.openclaw/openclaw.json` baked into the image has
-`gateway.auth.dangerouslyDisableDeviceAuth: true` — confirming that a Brev Launchable
+`gateway.controlUi.dangerouslyDisableDeviceAuth: true` — confirming that a Brev Launchable
 user would NOT see "pairing required"
 
 **Validation Steps**:
@@ -209,9 +209,9 @@ user would NOT see "pairing required"
      cat /home/sandbox/.openclaw/openclaw.json | python3 -c "
    import json, sys
    c = json.load(sys.stdin)
-   assert c['gateway']['auth']['dangerouslyDisableDeviceAuth'] == True, \
-     f'Expected dangerouslyDisableDeviceAuth=True, got {c[\"gateway\"][\"auth\"][\"dangerouslyDisableDeviceAuth\"]}'
-   assert c['gateway']['auth']['allowInsecureAuth'] == False, \
+   assert c['gateway']['controlUi']['dangerouslyDisableDeviceAuth'] == True, \
+     f'Expected dangerouslyDisableDeviceAuth=True, got {c[\"gateway\"][\"controlUi\"][\"dangerouslyDisableDeviceAuth\"]}'
+   assert c['gateway']['controlUi']['allowInsecureAuth'] == False, \
      'HTTPS URL should have allowInsecureAuth=False'
    assert 'https://nemoclaw0-xxx.brevlab.com:18789' in str(c['gateway'].get('allowedOrigins', [])), \
      'Brev origin should be in allowedOrigins'
@@ -227,7 +227,7 @@ user would NOT see "pairing required"
      cat /home/sandbox/.openclaw/openclaw.json | python3 -c "
    import json, sys
    c = json.load(sys.stdin)
-   assert c['gateway']['auth']['dangerouslyDisableDeviceAuth'] == False, \
+   assert c['gateway']['controlUi']['dangerouslyDisableDeviceAuth'] == False, \
      'Loopback URL should have dangerouslyDisableDeviceAuth=False'
    print('PASS: Loopback config verified')
    "

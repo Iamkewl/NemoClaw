@@ -55,32 +55,32 @@ const BASE_ENV = {
 
 2. `test_should_set_disable_device_auth_false_for_loopback_url`
    - **Input**: `CHAT_UI_URL=http://127.0.0.1:18789`
-   - **Expected**: `gateway.auth.dangerouslyDisableDeviceAuth: false`
+   - **Expected**: `gateway.controlUi.dangerouslyDisableDeviceAuth: false`
    - **Covers**: Phase 1 behavior preservation
 
 3. `test_should_set_disable_device_auth_true_when_env_var_is_1`
    - **Input**: `NEMOCLAW_DISABLE_DEVICE_AUTH=1`
-   - **Expected**: `gateway.auth.dangerouslyDisableDeviceAuth: true`
+   - **Expected**: `gateway.controlUi.dangerouslyDisableDeviceAuth: true`
    - **Covers**: Explicit env var override
 
 4. `test_should_set_allow_insecure_true_for_http_scheme`
    - **Input**: `CHAT_UI_URL=http://127.0.0.1:18789`
-   - **Expected**: `gateway.auth.allowInsecureAuth: true`
+   - **Expected**: `gateway.controlUi.allowInsecureAuth: true`
    - **Covers**: HTTP scheme → insecure allowed
 
 5. `test_should_set_allow_insecure_false_for_https_scheme`
    - **Input**: `CHAT_UI_URL=https://nemoclaw0-xxx.brevlab.com:18789`
-   - **Expected**: `gateway.auth.allowInsecureAuth: false`
+   - **Expected**: `gateway.controlUi.allowInsecureAuth: false`
    - **Covers**: HTTPS scheme → insecure disallowed
 
 6. `test_should_include_non_loopback_origin_in_allowed_origins`
    - **Input**: `CHAT_UI_URL=https://nemoclaw0-xxx.brevlab.com:18789`
-   - **Expected**: `gateway.allowedOrigins` includes both loopback and external origin
+   - **Expected**: `gateway.controlUi.allowedOrigins` includes both loopback and external origin
    - **Covers**: CORS origins for non-loopback URL
 
 7. `test_should_include_only_loopback_origin_for_loopback_url`
    - **Input**: `CHAT_UI_URL=http://127.0.0.1:18789`
-   - **Expected**: `gateway.allowedOrigins` has only `["http://127.0.0.1:18789"]`
+   - **Expected**: `gateway.controlUi.allowedOrigins` has only `["http://127.0.0.1:18789"]`
    - **Covers**: CORS origins for loopback URL
 
 8. `test_should_parse_messaging_channels_from_base64`
