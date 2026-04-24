@@ -18,51 +18,31 @@ error() {
 
 # Returns 0 only when both the live kernel state AND our persistent
 # drop-ins are in place:
-#   - runtime: bridge-nf-call-iptables sysctl reads back as 1 (and the
-#     same for bridge-nf-call-ip6tables IFF this kernel exposes it)
+#   - runtime: bridge-nf-call-iptables sysctl reads back as 1
 #   - persistence: /etc/modules-load.d/nemoclaw.conf contains `br_netfilter`
-#     and /etc/sysctl.d/99-nemoclaw.conf contains the sysctl=1 line(s)
-#     matching what the kernel actually supports
-# The IPv6 checks are gated on /proc/sys/net/bridge/bridge-nf-call-ip6tables
-# existing because kernels built without CONFIG_IPV6 do not expose that
-# sysctl; asserting it unconditionally would make this function (and the
-# apply step) fail on such hosts.
+#     and /etc/sysctl.d/99-nemoclaw.conf contains the sysctl=1 line
 # Skipping on runtime-only state is wrong: if someone transiently ran
 # `modprobe br_netfilter` + `sysctl -w ...=1` without persisting, the
 # fix would evaporate after the next reboot. Requiring persistence too
-# makes the skip branch safe and lets `apply_br_netfilter_setup_r39`
-# (which is idempotent) re-write the drop-ins whenever they're missing
-# or stale (e.g. an older v4-only version of this script left behind).
+# makes the skip branch safe and lets `apply_br_netfilter_setup` (which
+# is idempotent) re-write the drop-ins whenever they're missing.
 bridge_netfilter_ready() {
-  # Runtime — v4 is mandatory (br_netfilter loaded + sysctl on)
-  [[ -f /proc/sys/net/bridge/bridge-nf-call-iptables ]] || return 1
-  [[ "$(cat /proc/sys/net/bridge/bridge-nf-call-iptables 2>/dev/null)" == "1" ]] || return 1
-
-  # Persistence — modules-load drop-in
-  [[ -f /etc/modules-load.d/nemoclaw.conf ]] || return 1
-  grep -qx 'br_netfilter' /etc/modules-load.d/nemoclaw.conf 2>/dev/null || return 1
-
-  # Persistence — sysctl drop-in, v4 line mandatory
-  [[ -f /etc/sysctl.d/99-nemoclaw.conf ]] || return 1
-  grep -qx 'net.bridge.bridge-nf-call-iptables=1' /etc/sysctl.d/99-nemoclaw.conf 2>/dev/null || return 1
-
-  # If this kernel exposes bridge-nf-call-ip6tables, require both runtime
-  # and persistence for it too. On kernels without IPv6 bridge netfilter
-  # the /proc node does not exist — we treat v4-only as fully-ready
-  # there, matching what apply_br_netfilter_setup_r39 actually wrote.
-  if [[ -f /proc/sys/net/bridge/bridge-nf-call-ip6tables ]]; then
-    [[ "$(cat /proc/sys/net/bridge/bridge-nf-call-ip6tables 2>/dev/null)" == "1" ]] || return 1
-    grep -qx 'net.bridge.bridge-nf-call-ip6tables=1' /etc/sysctl.d/99-nemoclaw.conf 2>/dev/null || return 1
-  fi
-
-  return 0
+  [[ -f /proc/sys/net/bridge/bridge-nf-call-iptables ]] \
+    && [[ "$(cat /proc/sys/net/bridge/bridge-nf-call-iptables 2>/dev/null)" == "1" ]] \
+    && [[ -f /etc/modules-load.d/nemoclaw.conf ]] \
+    && grep -qx 'br_netfilter' /etc/modules-load.d/nemoclaw.conf 2>/dev/null \
+    && [[ -f /etc/sysctl.d/99-nemoclaw.conf ]] \
+    && grep -qx 'net.bridge.bridge-nf-call-iptables=1' /etc/sysctl.d/99-nemoclaw.conf 2>/dev/null
 }
 
 # Load br_netfilter and flip bridge-nf-call-iptables, then persist both
-# across reboots. Used by the R36/R38 paths — byte-identical to the
-# original inline block that lived in configure_jetson_host before the
-# #2418 refactor. Do NOT add IPv6 here: the R36/R38 paths predate the
-# #2418 work and changing their behavior would be out of scope.
+# across reboots. Required for k3s (running inside the OpenShell gateway
+# container) to NAT pod → ClusterIP traffic; without this the kube-proxy
+# iptables rules are written but never matched for bridged pod traffic,
+# so sandbox pods cannot reach CoreDNS. Idempotent — safe to re-run
+# whenever bridge_netfilter_ready returns false, including the "runtime
+# is live but drop-ins missing" case (e.g. someone ran modprobe + sysctl
+# manually without persisting).
 apply_br_netfilter_setup() {
   "${SUDO[@]}" modprobe br_netfilter
   "${SUDO[@]}" sysctl -w net.bridge.bridge-nf-call-iptables=1 >/dev/null
@@ -70,44 +50,6 @@ apply_br_netfilter_setup() {
   # Persist across reboots
   echo "br_netfilter" | "${SUDO[@]}" tee /etc/modules-load.d/nemoclaw.conf >/dev/null
   echo "net.bridge.bridge-nf-call-iptables=1" | "${SUDO[@]}" tee /etc/sysctl.d/99-nemoclaw.conf >/dev/null
-}
-
-# R39-specific variant: flips bridge-nf-call-iptables and, when the
-# kernel exposes it, bridge-nf-call-ip6tables, then persists whatever
-# was actually applied. Kept separate from apply_br_netfilter_setup so
-# the R36/R38 behavior stays byte-identical to pre-#2418; the dual-stack
-# sysctl write is the configuration the reporter validated end-to-end
-# on their Jetson Orin R39 (#2418).
-# The IPv6 sysctl write is gated on /proc/sys/net/bridge/bridge-nf-call-ip6tables
-# existing because kernels built without CONFIG_IPV6 do not expose that
-# sysctl; `sysctl -w` on a missing key would fail under `set -e`. On
-# such hosts the persistence drop-in only carries the IPv4 line, and
-# bridge_netfilter_ready() mirrors this (only requires the IPv6 line
-# when the /proc node is present).
-# Idempotent: safe to call whenever bridge_netfilter_ready returns false,
-# including the "runtime is live but drop-ins missing" case (e.g. someone
-# ran modprobe + sysctl manually without persisting).
-apply_br_netfilter_setup_r39() {
-  "${SUDO[@]}" modprobe br_netfilter
-  "${SUDO[@]}" sysctl -w net.bridge.bridge-nf-call-iptables=1 >/dev/null
-
-  local has_ipv6=0
-  if [[ -f /proc/sys/net/bridge/bridge-nf-call-ip6tables ]]; then
-    "${SUDO[@]}" sysctl -w net.bridge.bridge-nf-call-ip6tables=1 >/dev/null
-    has_ipv6=1
-  fi
-
-  # Persist across reboots
-  echo "br_netfilter" | "${SUDO[@]}" tee /etc/modules-load.d/nemoclaw.conf >/dev/null
-  if ((has_ipv6)); then
-    {
-      echo "net.bridge.bridge-nf-call-iptables=1"
-      echo "net.bridge.bridge-nf-call-ip6tables=1"
-    } | "${SUDO[@]}" tee /etc/sysctl.d/99-nemoclaw.conf >/dev/null
-  else
-    echo "net.bridge.bridge-nf-call-iptables=1" \
-      | "${SUDO[@]}" tee /etc/sysctl.d/99-nemoclaw.conf >/dev/null
-  fi
 }
 
 get_jetpack_version() {
@@ -128,9 +70,9 @@ get_jetpack_version() {
   if ((release >= 39)); then
     # JP7 R39 does not need iptables / daemon.json changes, but k3s inside
     # the OpenShell gateway container still needs br_netfilter +
-    # bridge-nf-call-{ip,ip6}tables=1 for ClusterIP service routing. Some
-    # R39 kernel images ship with it already in place, so check first and
-    # only apply when missing — avoids planting NemoClaw-owned drop-ins in
+    # bridge-nf-call-iptables=1 for ClusterIP service routing. Some R39
+    # kernel images ship with it already in place, so check first and only
+    # apply when missing — avoids planting NemoClaw-owned drop-ins in
     # /etc/modules-load.d and /etc/sysctl.d on systems that don't need
     # them. See #2418.
     if bridge_netfilter_ready; then
@@ -141,21 +83,14 @@ get_jetpack_version() {
         "${SUDO[@]}" true >/dev/null \
           || error "Sudo is required to load br_netfilter and write /etc/modules-load.d and /etc/sysctl.d drop-ins."
       fi
-      apply_br_netfilter_setup_r39
-      # Read the values back from /proc (not just "we set it to 1") so the
+      apply_br_netfilter_setup
+      # Read the value back from /proc (not just "we set it to 1") so the
       # log is actual evidence that the apply path landed — useful when a
       # user is validating the fix on their own Jetson and needs to confirm
-      # from log output alone that the runtime state is correct. The IPv6
-      # leg is only included when the kernel exposes the sysctl, matching
-      # what apply_br_netfilter_setup_r39 actually wrote.
-      local v4 v6_summary
+      # from log output alone that the runtime state is correct.
+      local v4
       v4="$(cat /proc/sys/net/bridge/bridge-nf-call-iptables 2>/dev/null || echo '?')"
-      if [[ -f /proc/sys/net/bridge/bridge-nf-call-ip6tables ]]; then
-        v6_summary=", bridge-nf-call-ip6tables=$(cat /proc/sys/net/bridge/bridge-nf-call-ip6tables 2>/dev/null || echo '?')"
-      else
-        v6_summary=" (ip6tables not exposed by this kernel; IPv4-only persistence)"
-      fi
-      info "br_netfilter runtime: bridge-nf-call-iptables=$v4$v6_summary — sandbox → ClusterIP routing (CoreDNS, services) is unblocked; no docker or k3s restart needed" >&2
+      info "br_netfilter runtime: bridge-nf-call-iptables=$v4 — sandbox → ClusterIP routing (CoreDNS, services) is unblocked; no docker or k3s restart needed" >&2
       info "Reboot persistence: /etc/modules-load.d/nemoclaw.conf, /etc/sysctl.d/99-nemoclaw.conf" >&2
     fi
     return 0
