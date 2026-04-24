@@ -36,7 +36,7 @@ info "Detected $OS_LABEL ($ARCH_LABEL)"
 # Minimum version required for Landlock filesystem policy enforcement
 # (NVIDIA/OpenShell#810 fixes the drop_privileges/Landlock ordering bug
 # that caused /sandbox to remain writable on 0.0.26).
-MIN_VERSION="0.0.36"
+MIN_VERSION="0.0.32"
 # Maximum version validated for this NemoClaw release. Newer OpenShell builds
 # may change sandbox semantics; upgrade NemoClaw before upgrading past this.
 MAX_VERSION="0.0.36"
