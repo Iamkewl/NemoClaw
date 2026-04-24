@@ -300,15 +300,15 @@ openshell forward list
 
 Each sandbox needs its own dashboard port, since `openshell forward` refuses to bind a port that another sandbox is already using. Override the port with `CHAT_UI_URL` at onboard time — the dashboard port is derived automatically.
 
-```bash
-nemoclaw onboard                                                        # first sandbox uses 18789
-CHAT_UI_URL=http://127.0.0.1:19000 nemoclaw onboard                    # second sandbox uses 19000
+```console
+$ nemoclaw onboard                                            # first sandbox uses 18789
+$ CHAT_UI_URL=http://127.0.0.1:19000 nemoclaw onboard         # second sandbox uses 19000
 ```
 
 You can also use `NEMOCLAW_DASHBOARD_PORT` directly if you prefer:
 
-```bash
-NEMOCLAW_DASHBOARD_PORT=19000 nemoclaw onboard
+```console
+$ NEMOCLAW_DASHBOARD_PORT=19000 nemoclaw onboard
 ```
 
 For full details on port conflicts and overrides, refer to [Port already in use](../reference/troubleshooting.md#port-already-in-use).

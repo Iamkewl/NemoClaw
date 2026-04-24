@@ -78,6 +78,16 @@ export function buildChain(hints?: PlatformHints): DashboardDeliveryChain {
   return { accessUrl, corsOrigins, forwardTarget, healthEndpoint: "/health", port, bindAddress };
 }
 
+/**
+ * Return the port that the sandbox dashboard should listen on and the host
+ * forward should target, given an optional `CHAT_UI_URL`. Mirrors the logic
+ * used by buildChain() so the port the gateway listens on inside the sandbox
+ * matches the port the host will forward. See #2267, #1925.
+ */
+export function getDashboardForwardPort(chatUiUrl?: string): number {
+  return buildChain({ chatUiUrl: chatUiUrl ?? "" }).port;
+}
+
 /** Build the list of control UI URLs. Callers pass chatUiUrl explicitly. */
 export function buildControlUiUrls(
   token: string | null = null,

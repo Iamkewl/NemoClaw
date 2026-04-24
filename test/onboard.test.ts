@@ -2750,8 +2750,8 @@ const { createSandbox } = require(${onboardPath});
 
     // Set CHAT_UI_URL with a custom port but do NOT set NEMOCLAW_DASHBOARD_PORT.
     // This is the exact scenario from #2267: the port must be derived from
-    // CHAT_UI_URL and injected unconditionally.
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    // CHAT_UI_URL and injected unconditionally. The underscore-prefixed names
+    // mark the destructured keys as intentionally unused.
     const { CHAT_UI_URL: _stripped, NEMOCLAW_DASHBOARD_PORT: _stripped2, ...inheritedEnv } =
       process.env;
     const result = spawnSync(process.execPath, [scriptPath], {
