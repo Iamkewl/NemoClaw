@@ -934,9 +934,50 @@ cleanup() {
 #   .openclaw-data/ containing real state data
 # Migrate to the new layout: real data lives directly in .openclaw/.
 # Idempotent: no-op if .openclaw-data doesn't exist.
+#
+# SECURITY (NC-2227-01): Guard against agent-planted data dirs.
+# Only migrate if (a) we are running as root (the agent cannot call
+# this path), (b) the data directory is NOT agent-writable (root-owned),
+# and (c) a migration-complete sentinel does not already exist.
+# After migration, reapply shields-up ownership if shields were active.
 migrate_legacy_layout() {
   local config_dir="$1" data_dir="$2" label="$3"
   [ -d "$data_dir" ] || return 0
+
+  local sentinel="${config_dir}/.migration-complete"
+
+  # Guard 1: Already migrated — the sentinel proves a prior trusted run.
+  if [ -f "$sentinel" ]; then
+    echo "[migration] ${label}: already migrated (sentinel exists), skipping" >&2
+    return 0
+  fi
+
+  # Guard 2: Only root may run migration. The sandbox user cannot reach
+  # this code path (entrypoint runs as root or the non-root branch never
+  # calls migrate), but be explicit.
+  if [ "$(id -u)" -ne 0 ]; then
+    echo "[SECURITY] ${label}: migration skipped — requires root" >&2
+    return 0
+  fi
+
+  # Guard 3: Reject agent-planted data directories. A legitimate legacy
+  # data dir was created by the image build (root-owned). If the data dir
+  # is owned by sandbox, the agent may have planted it to trigger migration.
+  local data_owner
+  data_owner="$(stat -c '%U' "$data_dir" 2>/dev/null || stat -f '%Su' "$data_dir" 2>/dev/null || echo "unknown")"
+  if [ "$data_owner" = "sandbox" ]; then
+    echo "[SECURITY] ${label}: data dir ${data_dir} is sandbox-owned — refusing migration (possible agent-planted trigger)" >&2
+    return 1
+  fi
+
+  # Check if shields were previously active (config dir is root-owned).
+  local shields_were_active=false
+  local config_dir_owner
+  config_dir_owner="$(stat -c '%U' "$config_dir" 2>/dev/null || stat -f '%Su' "$config_dir" 2>/dev/null || echo "unknown")"
+  if [ "$config_dir_owner" = "root" ]; then
+    shields_were_active=true
+  fi
+
   echo "[migration] Detected legacy ${label} layout (${data_dir} exists), migrating..." >&2
   for entry in "$data_dir"/*; do
     [ -e "$entry" ] || [ -L "$entry" ] || continue
@@ -950,8 +991,37 @@ migrate_legacy_layout() {
       cp -a "$entry" "$target"
     fi
   done
-  chown -R sandbox:sandbox "$config_dir" 2>/dev/null || true
+
+  # Only chown state subdirectories, NOT the config dir itself or
+  # protected files (openclaw.json, .config-hash, .env).
+  # This prevents undoing shields-up root ownership on the config dir.
+  for entry in "$config_dir"/*; do
+    [ -d "$entry" ] || continue
+    chown -R sandbox:sandbox "$entry" 2>/dev/null || true
+  done
+
   rm -rf "$data_dir"
+
+  # Write the migration sentinel (root-owned, read-only) so we never
+  # re-run migration on this sandbox.
+  printf 'migrated=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$sentinel"
+  chown root:root "$sentinel" 2>/dev/null || true
+  chmod 444 "$sentinel" 2>/dev/null || true
+
+  # Reapply shields-up ownership if config dir was previously root-locked.
+  if [ "$shields_were_active" = "true" ]; then
+    echo "[migration] Reapplying shields-up ownership on ${config_dir}" >&2
+    chown root:root "$config_dir" 2>/dev/null || true
+    chmod 755 "$config_dir" 2>/dev/null || true
+    # Re-lock known sensitive files if they exist
+    for f in "$config_dir"/openclaw.json "$config_dir"/.config-hash "$config_dir"/.env; do
+      if [ -f "$f" ]; then
+        chown root:root "$f" 2>/dev/null || true
+        chmod 444 "$f" 2>/dev/null || true
+      fi
+    done
+  fi
+
   echo "[migration] Completed ${label} layout migration (${data_dir} removed)" >&2
 }
 

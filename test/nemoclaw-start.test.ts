@@ -735,3 +735,57 @@ describe("nemoclaw-start CHAT_UI_URL override for configurable dashboard port (#
     );
   });
 });
+
+// -------------------------------------------------------------------
+// NC-2227-01: Legacy migration guards
+// -------------------------------------------------------------------
+describe("NC-2227-01: legacy migration guards", () => {
+  const src = fs.readFileSync(START_SCRIPT, "utf-8");
+
+  it("uses a migration-complete sentinel to prevent re-running migration", () => {
+    const fn = src.match(/migrate_legacy_layout\(\) \{([\s\S]*?)^}/m);
+    expect(fn).toBeTruthy();
+    expect(fn[1]).toContain(".migration-complete");
+    expect(fn[1]).toContain("sentinel");
+  });
+
+  it("requires root to run migration", () => {
+    const fn = src.match(/migrate_legacy_layout\(\) \{([\s\S]*?)^}/m);
+    expect(fn).toBeTruthy();
+    expect(fn[1]).toContain("id -u");
+    expect(fn[1]).toContain("migration skipped");
+    expect(fn[1]).toContain("requires root");
+  });
+
+  it("rejects sandbox-owned data directories as potentially agent-planted", () => {
+    const fn = src.match(/migrate_legacy_layout\(\) \{([\s\S]*?)^}/m);
+    expect(fn).toBeTruthy();
+    expect(fn[1]).toContain("data_owner");
+    expect(fn[1]).toContain("sandbox-owned");
+    expect(fn[1]).toContain("possible agent-planted trigger");
+  });
+
+  it("does not chown -R the config directory itself", () => {
+    const fn = src.match(/migrate_legacy_layout\(\) \{([\s\S]*?)^}/m);
+    expect(fn).toBeTruthy();
+    // The old pattern chown -R sandbox:sandbox "$config_dir" must NOT exist
+    expect(fn[1]).not.toMatch(/chown -R sandbox:sandbox "\$config_dir"\s/);
+    // Only subdirectories should be chowned
+    expect(fn[1]).toContain('[ -d "$entry" ] || continue');
+  });
+
+  it("reapplies shields-up ownership if shields were previously active", () => {
+    const fn = src.match(/migrate_legacy_layout\(\) \{([\s\S]*?)^}/m);
+    expect(fn).toBeTruthy();
+    expect(fn[1]).toContain("shields_were_active");
+    expect(fn[1]).toContain("Reapplying shields-up ownership");
+  });
+
+  it("writes a root-owned read-only sentinel after successful migration", () => {
+    const fn = src.match(/migrate_legacy_layout\(\) \{([\s\S]*?)^}/m);
+    expect(fn).toBeTruthy();
+    // Sentinel must be root-owned and 444
+    expect(fn[1]).toMatch(/chown root:root "\$sentinel"/);
+    expect(fn[1]).toMatch(/chmod 444 "\$sentinel"/);
+  });
+});

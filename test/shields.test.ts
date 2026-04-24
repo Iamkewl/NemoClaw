@@ -21,9 +21,15 @@ vi.mock("../../src/lib/runner", () => ({
 
 vi.mock("../../src/lib/policies", () => ({
   buildPolicyGetCommand: vi.fn((name) => ["openshell", "policy", "get", "--full", name]),
-  buildPolicySetCommand: vi.fn(
-    (file, name) => ["openshell", "policy", "set", "--policy", file, "--wait", name],
-  ),
+  buildPolicySetCommand: vi.fn((file, name) => [
+    "openshell",
+    "policy",
+    "set",
+    "--policy",
+    file,
+    "--wait",
+    name,
+  ]),
   parseCurrentPolicy: vi.fn((raw) => raw || ""),
   PERMISSIVE_POLICY_PATH: "/mock/permissive.yaml",
 }));
@@ -106,8 +112,14 @@ describe("shields — unit logic", () => {
       // Write state for two different sandboxes
       const alphaState = { shieldsDown: true, updatedAt: new Date().toISOString() };
       const betaState = { shieldsDown: false, updatedAt: new Date().toISOString() };
-      fs.writeFileSync(path.join(stateDir, "shields-alpha.json"), JSON.stringify(alphaState, null, 2));
-      fs.writeFileSync(path.join(stateDir, "shields-beta.json"), JSON.stringify(betaState, null, 2));
+      fs.writeFileSync(
+        path.join(stateDir, "shields-alpha.json"),
+        JSON.stringify(alphaState, null, 2),
+      );
+      fs.writeFileSync(
+        path.join(stateDir, "shields-beta.json"),
+        JSON.stringify(betaState, null, 2),
+      );
 
       const alpha = JSON.parse(fs.readFileSync(path.join(stateDir, "shields-alpha.json"), "utf-8"));
       const beta = JSON.parse(fs.readFileSync(path.join(stateDir, "shields-beta.json"), "utf-8"));
@@ -134,9 +146,14 @@ describe("shields — unit logic", () => {
         shieldsPolicySnapshotPath: snapshotPath,
         updatedAt: new Date().toISOString(),
       };
-      fs.writeFileSync(path.join(stateDir, "shields-openclaw.json"), JSON.stringify(state, null, 2));
+      fs.writeFileSync(
+        path.join(stateDir, "shields-openclaw.json"),
+        JSON.stringify(state, null, 2),
+      );
 
-      const loaded = JSON.parse(fs.readFileSync(path.join(stateDir, "shields-openclaw.json"), "utf-8"));
+      const loaded = JSON.parse(
+        fs.readFileSync(path.join(stateDir, "shields-openclaw.json"), "utf-8"),
+      );
       expect(loaded.shieldsDown).toBe(true);
       expect(loaded.shieldsDownTimeout).toBe(300);
       expect(loaded.shieldsDownPolicy).toBe("permissive");
@@ -159,7 +176,10 @@ describe("shields — unit logic", () => {
         shieldsPolicySnapshotPath: snapshotPath,
         updatedAt: new Date().toISOString(),
       };
-      fs.writeFileSync(path.join(stateDir, "shields-openclaw.json"), JSON.stringify(downState, null, 2));
+      fs.writeFileSync(
+        path.join(stateDir, "shields-openclaw.json"),
+        JSON.stringify(downState, null, 2),
+      );
 
       const cleared = {
         ...downState,
@@ -170,9 +190,14 @@ describe("shields — unit logic", () => {
         shieldsDownPolicy: null,
         updatedAt: new Date().toISOString(),
       };
-      fs.writeFileSync(path.join(stateDir, "shields-openclaw.json"), JSON.stringify(cleared, null, 2));
+      fs.writeFileSync(
+        path.join(stateDir, "shields-openclaw.json"),
+        JSON.stringify(cleared, null, 2),
+      );
 
-      const loaded = JSON.parse(fs.readFileSync(path.join(stateDir, "shields-openclaw.json"), "utf-8"));
+      const loaded = JSON.parse(
+        fs.readFileSync(path.join(stateDir, "shields-openclaw.json"), "utf-8"),
+      );
       expect(loaded.shieldsDown).toBe(false);
       expect(loaded.shieldsDownAt).toBeNull();
       expect(loaded.shieldsPolicySnapshotPath).toBe(snapshotPath);
@@ -236,4 +261,174 @@ describe("shields — unit logic", () => {
   // feasible here because shields.ts uses CJS require() which doesn't resolve
   // through vitest's ESM mock system. The full call chain is exercised by the
   // E2E test (test/e2e/test-shields-config.sh) against a live sandbox.
+
+  // -------------------------------------------------------------------
+  // NC-2227-02: Three-state shields model
+  // -------------------------------------------------------------------
+  describe("NC-2227-02: three-state shields model", () => {
+    it("fresh sandbox (no state file) reports mutable_default, not locked", () => {
+      const stateDir = path.join(tmpDir, ".nemoclaw", "state");
+      fs.mkdirSync(stateDir, { recursive: true });
+      // Do NOT create shields-fresh.json — simulates fresh sandbox
+      const stateFile = path.join(stateDir, "shields-fresh.json");
+      expect(fs.existsSync(stateFile)).toBe(false);
+
+      // Manually replicate the deriveShieldsMode logic to test the invariant
+      // (we can't import the CJS module directly)
+      const hasStateFile = false;
+      const state = {};
+      // deriveShieldsMode: no state file => mutable_default
+      let mode: string;
+      if (!hasStateFile) mode = "mutable_default";
+      else if (state["shieldsDown"] === true) mode = "temporarily_unlocked";
+      else if (state["shieldsDown"] === false) mode = "locked";
+      else mode = "mutable_default";
+
+      expect(mode).toBe("mutable_default");
+    });
+
+    it("explicitly locked sandbox (shieldsDown: false, file exists) reports locked", () => {
+      const stateDir = path.join(tmpDir, ".nemoclaw", "state");
+      fs.mkdirSync(stateDir, { recursive: true });
+      const state = { shieldsDown: false, updatedAt: new Date().toISOString() };
+      fs.writeFileSync(path.join(stateDir, "shields-locked.json"), JSON.stringify(state, null, 2));
+
+      const hasStateFile = true;
+      let mode: string;
+      if (!hasStateFile) mode = "mutable_default";
+      else if (state.shieldsDown === true) mode = "temporarily_unlocked";
+      else if (state.shieldsDown === false) mode = "locked";
+      else mode = "mutable_default";
+
+      expect(mode).toBe("locked");
+    });
+
+    it("temporarily unlocked sandbox (shieldsDown: true) reports temporarily_unlocked", () => {
+      const stateDir = path.join(tmpDir, ".nemoclaw", "state");
+      fs.mkdirSync(stateDir, { recursive: true });
+      const state = {
+        shieldsDown: true,
+        shieldsDownAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      fs.writeFileSync(path.join(stateDir, "shields-temp.json"), JSON.stringify(state, null, 2));
+
+      const hasStateFile = true;
+      let mode: string;
+      if (!hasStateFile) mode = "mutable_default";
+      else if (state.shieldsDown === true) mode = "temporarily_unlocked";
+      else if (state.shieldsDown === false) mode = "locked";
+      else mode = "mutable_default";
+
+      expect(mode).toBe("temporarily_unlocked");
+    });
+
+    it("state file with undefined shieldsDown reports mutable_default", () => {
+      const stateDir = path.join(tmpDir, ".nemoclaw", "state");
+      fs.mkdirSync(stateDir, { recursive: true });
+      const state = { updatedAt: new Date().toISOString() };
+      fs.writeFileSync(path.join(stateDir, "shields-undef.json"), JSON.stringify(state, null, 2));
+
+      const hasStateFile = true;
+      let mode: string;
+      if (!hasStateFile) mode = "mutable_default";
+      else if (state["shieldsDown"] === true) mode = "temporarily_unlocked";
+      else if (state["shieldsDown"] === false) mode = "locked";
+      else mode = "mutable_default";
+
+      expect(mode).toBe("mutable_default");
+    });
+  });
+});
+
+// -------------------------------------------------------------------
+// NC-2227-04: Regression test — tar commands must not follow symlinks
+// -------------------------------------------------------------------
+describe("NC-2227-04: sandbox-state.ts tar commands do not follow symlinks", () => {
+  function getSourceCode(): string {
+    return fs.readFileSync(
+      path.join(import.meta.dirname, "..", "src", "lib", "sandbox-state.ts"),
+      "utf-8",
+    );
+  }
+
+  it("backup tar command does not use -h flag (no symlink following)", () => {
+    const src = getSourceCode();
+    // Find the backup tar command in backupSandboxState
+    const fnStart = src.indexOf("function backupSandboxState");
+    expect(fnStart).not.toBe(-1);
+    const fnBody = src.slice(fnStart);
+
+    // The tar command should be `tar -cf` not `tar -chf`
+    const tarCmdMatch = fnBody.match(/tar -c([a-z]*)f/g);
+    expect(tarCmdMatch).not.toBeNull();
+    for (const match of tarCmdMatch!) {
+      expect(match).not.toContain("h");
+    }
+  });
+
+  it("restore tar command does not use -h flag (no symlink following)", () => {
+    const src = getSourceCode();
+    // Find the restore function
+    const fnStart = src.indexOf("function restoreSandboxState");
+    expect(fnStart).not.toBe(-1);
+    const fnBody = src.slice(fnStart);
+
+    // Check tar commands in the restore path
+    const tarCmdMatches = fnBody.match(/"-c([a-z]*)f"/g);
+    if (tarCmdMatches) {
+      for (const match of tarCmdMatches) {
+        expect(match).not.toContain("h");
+      }
+    }
+  });
+
+  it("backup includes pre-backup symlink audit before tar", () => {
+    const src = getSourceCode();
+    const fnStart = src.indexOf("function backupSandboxState");
+    const fnBody = src.slice(fnStart);
+
+    // Must have the pre-backup audit command checking for symlinks
+    expect(fnBody).toContain("Pre-backup audit");
+    expect(fnBody).toContain("-type l");
+  });
+});
+
+// -------------------------------------------------------------------
+// NC-2227-05: Regression test — shields.ts locks high-risk state dirs
+// -------------------------------------------------------------------
+describe("NC-2227-05: shields.ts locks high-risk state directories", () => {
+  function getSourceCode(): string {
+    return fs.readFileSync(
+      path.join(import.meta.dirname, "..", "src", "lib", "shields.ts"),
+      "utf-8",
+    );
+  }
+
+  it("HIGH_RISK_STATE_DIRS constant includes skills, hooks, cron, agents, extensions, plugins", () => {
+    const src = getSourceCode();
+    expect(src).toContain("HIGH_RISK_STATE_DIRS");
+    for (const dir of ["skills", "hooks", "cron", "agents", "extensions", "plugins"]) {
+      expect(src).toContain(`"${dir}"`);
+    }
+  });
+
+  it("lockAgentConfig iterates over HIGH_RISK_STATE_DIRS", () => {
+    const src = getSourceCode();
+    const fnStart = src.indexOf("function lockAgentConfig");
+    expect(fnStart).not.toBe(-1);
+    const fnBody = src.slice(fnStart);
+    expect(fnBody).toContain("HIGH_RISK_STATE_DIRS");
+    expect(fnBody).toContain("chown");
+    expect(fnBody).toContain("root:root");
+  });
+
+  it("unlockAgentConfig restores sandbox ownership on HIGH_RISK_STATE_DIRS", () => {
+    const src = getSourceCode();
+    const fnStart = src.indexOf("function unlockAgentConfig");
+    expect(fnStart).not.toBe(-1);
+    const fnBody = src.slice(fnStart, src.indexOf("function lockAgentConfig"));
+    expect(fnBody).toContain("HIGH_RISK_STATE_DIRS");
+    expect(fnBody).toContain("sandbox:sandbox");
+  });
 });

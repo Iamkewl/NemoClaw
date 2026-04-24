@@ -546,8 +546,43 @@ export function backupSandboxState(sandboxName: string, options: BackupOptions =
       return { success: true, manifest, backedUpDirs, failedDirs };
     }
 
+    // NC-2227-04: Pre-backup audit — reject symlinks, hardlinks, and special
+    // files inside state dirs. A compromised agent could plant a symlink like
+    // workspace/copy -> ../openclaw.json to exfiltrate config via backup.
+    const auditCmd = existingDirs
+      .map(
+        (d) =>
+          `find "${dir}/${d}" \\( -type l -o ! -type f -a ! -type d \\) -printf "%y %p\\n" 2>/dev/null`,
+      )
+      .join("; ");
+    _log(`Pre-backup audit: checking for symlinks/special files`);
+    const auditResult = spawnSync("ssh", [...sshArgs(configFile, sandboxName), auditCmd], {
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 30000,
+    });
+    const auditOutput = (auditResult.stdout || "").trim();
+    if (auditOutput.length > 0) {
+      // Found symlinks or special files — log them and reject the backup
+      const violations = auditOutput.split("\n").filter((l) => l.length > 0);
+      _log(
+        `SECURITY: Pre-backup audit found ${violations.length} unsafe entries: ${violations.slice(0, 5).join("; ")}`,
+      );
+      return {
+        success: false,
+        manifest,
+        backedUpDirs,
+        failedDirs: [...existingDirs],
+        error: `Pre-backup audit rejected: symlinks or special files found in state dirs: ${violations.slice(0, 3).join("; ")}`,
+      };
+    }
+    _log("Pre-backup audit passed — no symlinks or special files found");
+
     // Download via SSH+tar
-    const tarCmd = `tar -chf - -C ${dir} ${existingDirs.join(" ")}`;
+    // NC-2227-04: Removed -h flag (was following symlinks). State dirs are
+    // now agent-writable and co-located with config — a compromised agent
+    // could create symlinks to exfiltrate config contents via backup.
+    const tarCmd = `tar -cf - -C ${dir} ${existingDirs.join(" ")}`;
     _log(`Downloading via SSH+tar: ${tarCmd}`);
     const result = spawnSync("ssh", [...sshArgs(configFile, sandboxName), tarCmd], {
       stdio: ["ignore", "pipe", "pipe"],
@@ -634,7 +669,8 @@ export function restoreSandboxState(sandboxName: string, backupPath: string): Re
   const configFile = writeTempSshConfig(sshConfig);
   try {
     // Upload via tar pipe
-    const tarResult = spawnSync("tar", ["-chf", "-", "-C", backupPath, ...localDirs], {
+    // NC-2227-04: Removed -h flag from restore as well — no symlink following.
+    const tarResult = spawnSync("tar", ["-cf", "-", "-C", backupPath, ...localDirs], {
       stdio: ["ignore", "pipe", "pipe"],
       timeout: 60000,
       maxBuffer: 256 * 1024 * 1024,

@@ -91,6 +91,12 @@ function stateFilePath(sandboxName: string): string {
   return path.join(STATE_DIR, `shields-${sandboxName}.json`);
 }
 
+// Three-state shields model:
+//   "mutable_default" — fresh sandbox, shields never configured (the default)
+//   "locked"          — shields up has been run and verified
+//   "temporarily_unlocked" — shields down after a prior shields up
+type ShieldsMode = "mutable_default" | "locked" | "temporarily_unlocked";
+
 interface ShieldsState {
   shieldsDown?: boolean;
   shieldsDownAt?: string | null;
@@ -101,19 +107,39 @@ interface ShieldsState {
   updatedAt?: string;
 }
 
-function loadShieldsState(sandboxName: string): ShieldsState {
+/**
+ * Derive the effective shields mode from persisted state.
+ *
+ * NC-2227-02: A fresh sandbox with no state file must report as
+ * "mutable_default", NOT as "locked". Only report locked after
+ * shields up has actually been run (shieldsDown === false AND
+ * the state file exists with an updatedAt timestamp).
+ */
+function deriveShieldsMode(state: ShieldsState, hasStateFile: boolean): ShieldsMode {
+  if (!hasStateFile) return "mutable_default";
+  if (state.shieldsDown === true) return "temporarily_unlocked";
+  if (state.shieldsDown === false) return "locked";
+  // State file exists but shieldsDown is undefined — treat as mutable default
+  return "mutable_default";
+}
+
+function loadShieldsState(sandboxName: string): ShieldsState & { _hasStateFile: boolean } {
   const filePath = stateFilePath(sandboxName);
-  if (!fs.existsSync(filePath)) return {};
+  if (!fs.existsSync(filePath)) return { _hasStateFile: false };
   try {
-    return JSON.parse(fs.readFileSync(filePath, "utf-8")) as ShieldsState;
+    const state = JSON.parse(fs.readFileSync(filePath, "utf-8")) as ShieldsState;
+    return { ...state, _hasStateFile: true };
   } catch {
-    return {};
+    return { _hasStateFile: false };
   }
 }
 
 function saveShieldsState(sandboxName: string, patch: ShieldsState): ShieldsState {
   const current = loadShieldsState(sandboxName);
-  const updated: ShieldsState = { ...current, ...patch, updatedAt: new Date().toISOString() };
+  // Strip the internal _hasStateFile flag before persisting — it is a
+  // runtime-only marker and must not leak into the JSON state file.
+  const { _hasStateFile: _, ...currentClean } = current;
+  const updated: ShieldsState = { ...currentClean, ...patch, updatedAt: new Date().toISOString() };
   fs.mkdirSync(STATE_DIR, { recursive: true, mode: 0o700 });
   fs.writeFileSync(stateFilePath(sandboxName), JSON.stringify(updated, null, 2), { mode: 0o600 });
   return updated;
@@ -160,6 +186,27 @@ function killTimer(sandboxName: string): void {
 }
 
 // ---------------------------------------------------------------------------
+// NC-2227-05: High-risk state directories that can contain executable code.
+//
+// During shields-up, these must be locked (root:root 755) so the sandbox
+// user cannot create new entries or modify existing ones. This covers both
+// OpenClaw and Hermes agent state dirs that contain executable artifacts
+// (skills, hooks, cron jobs, extensions, plugins, agent definitions).
+//
+// The list is a superset: directories that don't exist in a given agent's
+// config dir are silently skipped.
+// ---------------------------------------------------------------------------
+
+const HIGH_RISK_STATE_DIRS = [
+  "skills",
+  "hooks",
+  "cron",
+  "agents",
+  "extensions",
+  "plugins", // Hermes equivalent of extensions
+];
+
+// ---------------------------------------------------------------------------
 // Config unlock — returns config to the default (mutable) state
 //
 // Sets permissions to sandbox:sandbox 0600/0700, matching what OpenClaw
@@ -204,6 +251,24 @@ function unlockAgentConfig(
   } catch {
     errors.push("chmod 700 config dir");
   }
+
+  // NC-2227-05: Restore sandbox ownership on high-risk state directories.
+  // Use chown -R to restore the full tree (files within may have been
+  // locked to root:root by a prior shields-up).
+  for (const dirName of HIGH_RISK_STATE_DIRS) {
+    const dirPath = `${target.configDir}/${dirName}`;
+    try {
+      kubectlExec(sandboxName, ["chown", "-R", "sandbox:sandbox", dirPath]);
+    } catch {
+      // Directory may not exist for this agent — silently skip
+    }
+    try {
+      kubectlExec(sandboxName, ["chmod", "755", dirPath]);
+    } catch {
+      // Silently skip
+    }
+  }
+
   if (errors.length > 0) {
     console.error(
       `  Warning: Some unlock operations failed: ${errors.join(", ")}. Config may remain read-only.`,
@@ -269,6 +334,24 @@ function lockAgentConfig(
       kubectlExec(sandboxName, ["chattr", "+i", f]);
     } catch {
       chattrSucceeded = false;
+    }
+  }
+
+  // NC-2227-05: Lock high-risk state directories that can contain executable
+  // code (skills, hooks, cron, agents, extensions, plugins). Root-own the
+  // directory and set 755 so the sandbox user can read/execute but cannot
+  // create new entries or modify existing ones.
+  for (const dirName of HIGH_RISK_STATE_DIRS) {
+    const dirPath = `${target.configDir}/${dirName}`;
+    try {
+      kubectlExec(sandboxName, ["chown", "-R", "root:root", dirPath]);
+    } catch {
+      // Directory may not exist for this agent — silently skip
+    }
+    try {
+      kubectlExec(sandboxName, ["chmod", "755", dirPath]);
+    } catch {
+      // Silently skip
     }
   }
 
@@ -586,40 +669,59 @@ function shieldsStatus(sandboxName: string): void {
   validateName(sandboxName, "sandbox name");
 
   const state = loadShieldsState(sandboxName);
+  const mode = deriveShieldsMode(state, state._hasStateFile);
 
-  if (!state.shieldsDown) {
-    console.log("  Shields: UP (lockdown active)");
-    console.log(
-      `  Policy:  restrictive${state.shieldsPolicySnapshotPath ? " (snapshot preserved)" : ""}`,
-    );
-    if (state.shieldsDownAt) {
-      console.log(`  Last unlocked: ${state.shieldsDownAt}`);
+  switch (mode) {
+    case "mutable_default":
+      // NC-2227-02: Fresh sandbox with no shields history — do NOT claim locked
+      console.log("  Shields: NOT CONFIGURED (default mutable state)");
+      console.log("  Config is mutable. Run `nemoclaw <sandbox> shields up` to opt into lockdown.");
+      return;
+
+    case "locked":
+      console.log("  Shields: UP (lockdown active)");
+      console.log(
+        `  Policy:  restrictive${state.shieldsPolicySnapshotPath ? " (snapshot preserved)" : ""}`,
+      );
+      if (state.shieldsDownAt) {
+        console.log(`  Last unlocked: ${state.shieldsDownAt}`);
+      }
+      return;
+
+    case "temporarily_unlocked": {
+      const downSince = state.shieldsDownAt ? new Date(state.shieldsDownAt) : null;
+      const elapsed = downSince ? Math.floor((Date.now() - downSince.getTime()) / 1000) : 0;
+      const remaining =
+        state.shieldsDownTimeout != null ? Math.max(0, state.shieldsDownTimeout - elapsed) : null;
+
+      console.log("  Shields: DOWN (temporarily unlocked)");
+      console.log(`  Since:   ${state.shieldsDownAt ?? "unknown"}`);
+      if (remaining !== null) {
+        const mins = Math.floor(remaining / 60);
+        const secs = remaining % 60;
+        console.log(`  Auto-lockdown in: ${mins}m ${secs}s`);
+      }
+      console.log(`  Reason:  ${state.shieldsDownReason ?? "not specified"}`);
+      console.log(`  Policy:  ${state.shieldsDownPolicy ?? "permissive"}`);
+      return;
     }
-    return;
   }
-
-  const downSince = state.shieldsDownAt ? new Date(state.shieldsDownAt) : null;
-  const elapsed = downSince ? Math.floor((Date.now() - downSince.getTime()) / 1000) : 0;
-  const remaining =
-    state.shieldsDownTimeout != null ? Math.max(0, state.shieldsDownTimeout - elapsed) : null;
-
-  console.log("  Shields: DOWN (default mutable state)");
-  console.log(`  Since:   ${state.shieldsDownAt ?? "unknown"}`);
-  if (remaining !== null) {
-    const mins = Math.floor(remaining / 60);
-    const secs = remaining % 60;
-    console.log(`  Auto-lockdown in: ${mins}m ${secs}s`);
-  }
-  console.log(`  Reason:  ${state.shieldsDownReason ?? "not specified"}`);
-  console.log(`  Policy:  ${state.shieldsDownPolicy ?? "permissive"}`);
 }
 
 // ---------------------------------------------------------------------------
 // Query — check whether shields are currently down
 // ---------------------------------------------------------------------------
 
+/**
+ * Returns true if shields are currently down (temporarily unlocked).
+ * NC-2227-02: Fresh sandboxes (no state file, mutable_default) return
+ * true since the config IS mutable. Only returns false when shields
+ * have been explicitly locked via `shields up`.
+ */
 function isShieldsDown(sandboxName: string): boolean {
-  return loadShieldsState(sandboxName).shieldsDown === true;
+  const state = loadShieldsState(sandboxName);
+  const mode = deriveShieldsMode(state, state._hasStateFile);
+  return mode !== "locked";
 }
 
 // ---------------------------------------------------------------------------
@@ -631,8 +733,10 @@ export {
   shieldsUp,
   shieldsStatus,
   isShieldsDown,
+  deriveShieldsMode,
   parseDuration,
   lockAgentConfig,
+  unlockAgentConfig,
   MAX_TIMEOUT_SECONDS,
   DEFAULT_TIMEOUT_SECONDS,
 };

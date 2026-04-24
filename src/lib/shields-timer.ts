@@ -14,6 +14,7 @@ const path = require("path");
 const { run } = require("./runner");
 const { buildPolicySetCommand } = require("./policies");
 const { lockAgentConfig } = require("./shields");
+const { resolveAgentConfig } = require("./sandbox-config");
 
 const STATE_DIR = path.join(process.env.HOME ?? "/tmp", ".nemoclaw", "state");
 const AUDIT_FILE = path.join(STATE_DIR, "shields-audit.jsonl");
@@ -94,10 +95,23 @@ setTimeout(() => {
     // Re-lock config file using the shared lockAgentConfig from shields.ts.
     // lockAgentConfig runs each operation independently and verifies the
     // on-disk state — it throws if verification fails.
+    //
+    // NC-2227-03: Resolve the full agent config target (including sensitive
+    // files like .config-hash, .env) so the timer re-locks the same scope
+    // that interactive `shields up` uses. Fall back to the bare configPath/
+    // configDir from argv if resolution fails (e.g., registry unavailable).
     let lockVerified = true;
     if (configPath) {
+      let lockTarget: { configPath: string; configDir: string; sensitiveFiles?: string[] };
       try {
-        lockAgentConfig(sandboxName, { configPath, configDir });
+        lockTarget = resolveAgentConfig(sandboxName);
+      } catch {
+        // Fall back to argv-supplied paths without sensitive files —
+        // better to lock the main config than nothing at all.
+        lockTarget = { configPath, configDir };
+      }
+      try {
+        lockAgentConfig(sandboxName, lockTarget);
       } catch (lockErr) {
         lockVerified = false;
         appendAudit({
