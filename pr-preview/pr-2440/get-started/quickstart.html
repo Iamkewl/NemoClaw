@@ -802,12 +802,12 @@ Dashboard: http://127.0.0.1:18789/#token=&lt;auth-token&gt;
 <section id="run-multiple-sandboxes">
 <h3>Run Multiple Sandboxes<a class="headerlink" href="#run-multiple-sandboxes" title="Link to this heading">#</a></h3>
 <p>Each sandbox needs its own dashboard port, since <code class="docutils literal notranslate"><span class="pre">openshell</span> <span class="pre">forward</span></code> refuses to bind a port that another sandbox is already using. Override the port with <code class="docutils literal notranslate"><span class="pre">CHAT_UI_URL</span></code> at onboard time — the dashboard port is derived automatically.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>nemoclaw<span class="w"> </span>onboard<span class="w">                                                        </span><span class="c1"># first sandbox uses 18789</span>
-<span class="nv">CHAT_UI_URL</span><span class="o">=</span>http://127.0.0.1:19000<span class="w"> </span>nemoclaw<span class="w"> </span>onboard<span class="w">                    </span><span class="c1"># second sandbox uses 19000</span>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>nemoclaw<span class="w"> </span>onboard<span class="w">                                            </span><span class="c1"># first sandbox uses 18789</span>
+<span class="gp">$ </span><span class="nv">CHAT_UI_URL</span><span class="o">=</span>http://127.0.0.1:19000<span class="w"> </span>nemoclaw<span class="w"> </span>onboard<span class="w">         </span><span class="c1"># second sandbox uses 19000</span>
 </pre></div>
 </div>
 <p>You can also use <code class="docutils literal notranslate"><span class="pre">NEMOCLAW_DASHBOARD_PORT</span></code> directly if you prefer:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">NEMOCLAW_DASHBOARD_PORT</span><span class="o">=</span><span class="m">19000</span><span class="w"> </span>nemoclaw<span class="w"> </span>onboard
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span><span class="nv">NEMOCLAW_DASHBOARD_PORT</span><span class="o">=</span><span class="m">19000</span><span class="w"> </span>nemoclaw<span class="w"> </span>onboard
 </pre></div>
 </div>
 <p>For full details on port conflicts and overrides, refer to <a class="reference internal" href="../reference/troubleshooting.html#port-already-in-use"><span class="std std-ref">Port already in use</span></a>.</p>
