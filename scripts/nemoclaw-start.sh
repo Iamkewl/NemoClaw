@@ -467,19 +467,20 @@ PYSLACK
 
 # ── Gateway auth token (externalized) ──────────────────────────
 # The gateway auth token is NOT stored in openclaw.json. It is generated
-# at container startup by generate_gateway_token() and:
-#   1. Written to /run/nemoclaw/gateway-token (gateway:gateway 0400)
-#      for host-side reads via openshell sandbox download.
-#   2. Passed as OPENCLAW_GATEWAY_TOKEN env var only to the gateway
-#      process launch line (gosu gateway ...). OpenClaw reads this
-#      natively via its resolveGatewayCredentialsFromValues() path.
+# at container startup and passed as OPENCLAW_GATEWAY_TOKEN env var only
+# to the gateway process launch line. OpenClaw reads this natively via
+# its resolveGatewayCredentialsFromValues() path.
 #
-# The sandbox user (agent) cannot access the token:
-#   - The file is owned by gateway:gateway 0400 (wrong uid).
-#   - The env var is only in the gateway process (/proc/pid/environ
-#     is uid-gated, no-new-privileges blocks escalation).
+# Token file location depends on startup mode:
+#   Root mode:     /run/nemoclaw/gateway-token (gateway:gateway 0400)
+#                  Host reads via kubectl exec (runs as root in pod).
+#                  Sandbox user cannot access: wrong uid, /proc/pid/environ
+#                  is uid-gated, no-new-privileges blocks escalation.
+#   Non-root mode: $XDG_RUNTIME_DIR/nemoclaw/gateway-token (sandbox:sandbox 0400)
+#                  Host reads via openshell sandbox download (sandbox user).
+#                  No uid isolation — matches pre-externalization posture.
 #
-# /run is tmpfs — the token file is regenerated on every container start.
+# Both paths regenerate the token on every container start.
 GATEWAY_TOKEN_DIR="/run/nemoclaw"
 GATEWAY_TOKEN_FILE="${GATEWAY_TOKEN_DIR}/gateway-token"
 

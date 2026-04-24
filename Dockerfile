@@ -225,9 +225,10 @@ USER sandbox
 # Write openclaw.json with gateway config but WITHOUT the real auth token.
 # The gateway auth token is generated at container startup by the entrypoint
 # and passed via OPENCLAW_GATEWAY_TOKEN env var only to the gateway process
-# (running as 'gateway' user). The token is also persisted to
-# /run/nemoclaw/gateway-token (gateway:gateway 0400) for host-side reads.
-# The sandbox user (agent) cannot read the env var (/proc/pid/environ is
+# (running as 'gateway' user). The token file location depends on startup mode:
+#   Root mode:     /run/nemoclaw/gateway-token (gateway:gateway 0400)
+#   Non-root mode: $XDG_RUNTIME_DIR/nemoclaw/gateway-token (sandbox:sandbox 0400)
+# In root mode the sandbox user cannot read the env var (/proc/pid/environ is
 # uid-gated) or the file (wrong uid, no-new-privileges blocks escalation).
 # See: scripts/nemoclaw-start.sh generate_gateway_token()
 #
