@@ -1088,15 +1088,15 @@ When <code class="docutils literal notranslate"><span class="pre">dst</span></co
 </pre></div>
 </div>
 </section>
+</section>
 <section id="openshell-term">
-<h3><code class="docutils literal notranslate"><span class="pre">openshell</span> <span class="pre">term</span></code><a class="headerlink" href="#openshell-term" title="Link to this heading">#</a></h3>
+<h2><code class="docutils literal notranslate"><span class="pre">openshell</span> <span class="pre">term</span></code><a class="headerlink" href="#openshell-term" title="Link to this heading">#</a></h2>
 <p>Open the OpenShell TUI to monitor sandbox activity and approve network egress requests.
 Run this on the host where the sandbox is running.</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>openshell<span class="w"> </span>term
 </pre></div>
 </div>
 <p>For a remote Brev instance, SSH to the instance and run <code class="docutils literal notranslate"><span class="pre">openshell</span> <span class="pre">term</span></code> there, or use a port-forward to the gateway.</p>
-</section>
 <section id="nemoclaw-tunnel-start">
 <h3><code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">tunnel</span> <span class="pre">start</span></code><a class="headerlink" href="#nemoclaw-tunnel-start" title="Link to this heading">#</a></h3>
 <p>Start optional host auxiliary services. This is the cloudflared tunnel when <code class="docutils literal notranslate"><span class="pre">cloudflared</span></code> is installed (for a public URL to the dashboard). Channel messaging (Telegram, Discord, Slack) is not started here; it is configured during <code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">onboard</span></code> and runs through OpenShell-managed constructs.</p>
@@ -1420,7 +1420,9 @@ Running <code class="docutils literal notranslate"><span class="pre">nemoclaw</s
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nemoclaw-name-snapshot-create"><code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">&lt;name&gt;</span> <span class="pre">snapshot</span> <span class="pre">create</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nemoclaw-name-snapshot-list"><code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">&lt;name&gt;</span> <span class="pre">snapshot</span> <span class="pre">list</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nemoclaw-name-snapshot-restore-selector-to-dst"><code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">&lt;name&gt;</span> <span class="pre">snapshot</span> <span class="pre">restore</span> <span class="pre">[selector]</span> <span class="pre">[--to</span> <span class="pre">&lt;dst&gt;]</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#openshell-term"><code class="docutils literal notranslate"><span class="pre">openshell</span> <span class="pre">term</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#openshell-term"><code class="docutils literal notranslate"><span class="pre">openshell</span> <span class="pre">term</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nemoclaw-tunnel-start"><code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">tunnel</span> <span class="pre">start</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nemoclaw-tunnel-stop"><code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">tunnel</span> <span class="pre">stop</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nemoclaw-status"><code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">status</span></code></a></li>
