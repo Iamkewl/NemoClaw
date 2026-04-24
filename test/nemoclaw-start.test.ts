@@ -157,16 +157,22 @@ describe("nemoclaw-start externalized gateway token", () => {
   });
 
   it("generates a token in non-root mode for gateway auth", () => {
-    const nonRootBlock = src.match(
-      /if \[ "\$\(id -u\)" -ne 0 \]; then([\s\S]*?)^fi$/m,
-    );
-    expect(nonRootBlock).toBeTruthy();
-    const body = nonRootBlock[1];
-    // Non-root path must generate a token so the gateway has valid auth
-    expect(body).toContain("secrets.token_hex(32)");
-    expect(body).toContain("OPENCLAW_GATEWAY_TOKEN");
-    // Must also write token file for host-side retrieval
-    expect(body).toContain("GATEWAY_TOKEN_FILE");
+    // The non-root path generates a token for the gateway
+    expect(src).toContain("_NONROOT_GATEWAY_TOKEN");
+    expect(src).toContain('OPENCLAW_GATEWAY_TOKEN="$_NONROOT_GATEWAY_TOKEN"');
+  });
+
+  it("does not export token or write token file in non-root mode", () => {
+    // Token must NOT be globally exported to sandbox shell env
+    expect(src).not.toMatch(/export OPENCLAW_GATEWAY_TOKEN/);
+    // The non-root path must not write to GATEWAY_TOKEN_FILE (prevents
+    // filesystem leak via XDG_RUNTIME_DIR fallback)
+    const nonRootTokenGen = src.indexOf("_NONROOT_GATEWAY_TOKEN");
+    const rootGenerateCall = src.indexOf("generate_gateway_token\n");
+    // Between the non-root token gen and the root path, there should be
+    // no reference to GATEWAY_TOKEN_FILE
+    const nonRootSection = src.slice(nonRootTokenGen, rootGenerateCall);
+    expect(nonRootSection).not.toContain("GATEWAY_TOKEN_FILE");
   });
 });
 

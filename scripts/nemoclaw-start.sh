@@ -977,20 +977,13 @@ if [ "$(id -u)" -ne 0 ]; then
   apply_model_override
   apply_cors_override
   apply_slack_token_override
-  # Non-root: no privilege separation — the sandbox user can read the token.
-  # Generate a token anyway so the gateway has valid auth credentials.
-  # Without this, openclaw.json has an empty token and the gateway will fail.
+  # Non-root: no privilege separation, but we still avoid unnecessary exposure.
+  # Generate a token and store it in a script-local variable — do NOT export
+  # it or write it to a file. Pass it only on the gateway launch line so it
+  # lives solely in the gateway process env, not in the sandbox shell env or
+  # the filesystem.
   _NONROOT_GATEWAY_TOKEN="$(python3 -c "import secrets; print(secrets.token_hex(32), end='')")"
-  export OPENCLAW_GATEWAY_TOKEN="$_NONROOT_GATEWAY_TOKEN"
-  # Write token file so host-side retrieval (openshell sandbox download) works.
-  # Try default location first; if not writable, fall back to user-writable location.
-  if ! mkdir -p "$GATEWAY_TOKEN_DIR" 2>/dev/null; then
-    GATEWAY_TOKEN_DIR="${XDG_RUNTIME_DIR:-/tmp}/nemoclaw"
-    GATEWAY_TOKEN_FILE="${GATEWAY_TOKEN_DIR}/gateway-token"
-    mkdir -p "$GATEWAY_TOKEN_DIR"
-  fi
-  printf '%s' "$_NONROOT_GATEWAY_TOKEN" >"$GATEWAY_TOKEN_FILE"
-  printf '[SECURITY] Non-root mode — gateway token generated but not isolated (no privilege separation)\n' >&2
+  printf '[SECURITY] Non-root mode — gateway token generated (process-env only, no file written)\n' >&2
   install_configure_guard
   configure_messaging_channels
   validate_openclaw_symlinks
@@ -1079,8 +1072,11 @@ if [ "$(id -u)" -ne 0 ]; then
   # inject code into any Node process via NODE_OPTIONS).
   validate_tmp_permissions "$_PROXY_FIX_SCRIPT"
 
-  # Start gateway in background, auto-pair, then wait
-  nohup "$OPENCLAW" gateway run --port "${_DASHBOARD_PORT}" >/tmp/gateway.log 2>&1 &
+  # Start gateway in background, auto-pair, then wait.
+  # Pass OPENCLAW_GATEWAY_TOKEN only on this launch line so it lives solely
+  # in the gateway process env — not exported to the sandbox shell.
+  OPENCLAW_GATEWAY_TOKEN="$_NONROOT_GATEWAY_TOKEN" \
+    nohup "$OPENCLAW" gateway run --port "${_DASHBOARD_PORT}" >/tmp/gateway.log 2>&1 &
   GATEWAY_PID=$!
   echo "[gateway] openclaw gateway launched (pid $GATEWAY_PID)" >&2
   start_auto_pair
