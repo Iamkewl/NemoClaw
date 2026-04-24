@@ -205,6 +205,81 @@ describe("Dockerfile gateway token externalization", () => {
   });
 });
 
+describe("gateway token security regression tests", () => {
+  const src = fs.readFileSync(START_SCRIPT, "utf-8");
+  const dockerfile = fs.readFileSync(
+    path.join(import.meta.dirname, "..", "Dockerfile"),
+    "utf-8",
+  );
+
+  it("openclaw.json never contains a non-empty gateway auth token at build time", () => {
+    // The Dockerfile must write an empty token, clear after doctor, then pin hash.
+    // At no point should a real token survive into the final image layer.
+    expect(dockerfile).toContain("'auth': {'token': ''}");
+    // Post-doctor clearing step exists
+    expect(dockerfile).toContain("cfg.setdefault('gateway', {}).setdefault('auth', {})['token'] = ''");
+  });
+
+  it("gateway process runs under a distinct uid via gosu in root mode", () => {
+    // The gateway must run as the 'gateway' user, not as sandbox or root.
+    // This ensures /proc/<pid>/environ is uid-gated from the sandbox user.
+    expect(src).toMatch(/gosu gateway.*gateway run/);
+  });
+
+  it("sandbox shell env and rc files never receive the gateway token", () => {
+    // No global export of OPENCLAW_GATEWAY_TOKEN
+    expect(src).not.toMatch(/export OPENCLAW_GATEWAY_TOKEN/);
+    // Old export_gateway_token function must not exist (wrote to .bashrc/.profile)
+    expect(src).not.toMatch(/^export_gateway_token\(\)/m);
+    // No marker blocks for token in rc files
+    expect(src).not.toContain("nemoclaw-gateway-token begin");
+  });
+
+  it("non-root token file uses restrictive permissions (0400)", () => {
+    expect(src).toContain('chmod 0400 "$_NONROOT_TOKEN_FILE"');
+  });
+
+  it("non-root token file is removed before rewrite to prevent stale reads", () => {
+    // rm -f before write prevents reading a stale token from a previous start
+    const rmIdx = src.indexOf('rm -f "$_NONROOT_TOKEN_FILE"');
+    const writeIdx = src.indexOf('printf \'%s\' "$_NONROOT_GATEWAY_TOKEN" >"$_NONROOT_TOKEN_FILE"');
+    expect(rmIdx).toBeGreaterThan(-1);
+    expect(writeIdx).toBeGreaterThan(-1);
+    expect(writeIdx).toBeGreaterThan(rmIdx);
+  });
+
+  it("host-side token retrieval tries three paths in the correct order", () => {
+    const onboardSrc = fs.readFileSync(
+      path.join(import.meta.dirname, "..", "src", "lib", "onboard.ts"),
+      "utf-8",
+    );
+    const fn = onboardSrc.match(
+      /function fetchGatewayAuthTokenFromSandbox[\s\S]*?^}/m,
+    );
+    expect(fn).toBeTruthy();
+    const body = fn[0];
+    // Path 1: kubectl exec for root-mode token
+    const kubectlIdx = body.indexOf("/run/nemoclaw/gateway-token");
+    // Path 2: sandbox download for non-root token
+    const nonRootIdx = body.indexOf("/tmp/.runtime/nemoclaw/gateway-token");
+    // Path 3: legacy openclaw.json fallback
+    const legacyIdx = body.indexOf("openclaw.json");
+    expect(kubectlIdx).toBeGreaterThan(-1);
+    expect(nonRootIdx).toBeGreaterThan(-1);
+    expect(legacyIdx).toBeGreaterThan(-1);
+    // Correct order: kubectl → non-root download → legacy
+    expect(nonRootIdx).toBeGreaterThan(kubectlIdx);
+    expect(legacyIdx).toBeGreaterThan(nonRootIdx);
+  });
+
+  it("entrypoint documents both root and non-root token paths", () => {
+    // Root mode path documented
+    expect(src).toContain("Root mode:     /run/nemoclaw/gateway-token");
+    // Non-root mode path documented
+    expect(src).toContain("Non-root mode: $XDG_RUNTIME_DIR/nemoclaw/gateway-token");
+  });
+});
+
 describe("nemoclaw-start configure guard (#1114)", () => {
   const src = fs.readFileSync(START_SCRIPT, "utf-8");
 
