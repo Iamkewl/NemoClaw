@@ -2639,34 +2639,48 @@ async function preflight() {
   // unable to resolve registry.npmjs.org; npm then retries for ~15 min and
   // prints the cryptic `Exit handler never called`.
   const dns = probeContainerDns();
+  // Only reasons where the probe actually *ran* nslookup and observed a DNS
+  // failure warrant blocking — other reasons are inconclusive (probe itself
+  // couldn't run, got killed, etc.) and shouldn't fail a valid environment.
+  const dnsIsFatal = dns.reason === "servers_unreachable" || dns.reason === "resolution_failed";
+
   if (dns.ok) {
     console.log("  ✓ Container DNS resolution works");
-  } else {
-    // Tailor the headline to the actual probe failure. image_pull_failed is
-    // a different kind of problem from DNS inside the container; others all
-    // point at DNS.
+  } else if (!dnsIsFatal) {
+    // Inconclusive probe — warn but proceed. If the sandbox build really
+    // does hit a DNS issue, the user will see #2101 pointers in that layer.
     if (dns.reason === "image_pull_failed") {
-      console.error("  ✗ Could not run the DNS probe: docker failed to pull busybox.");
-      console.error(
-        "    (this usually means the docker daemon itself cannot reach Docker Hub —",
+      console.warn(
+        "  ⚠ Container DNS probe inconclusive: docker couldn't pull the busybox test image.",
       );
-      console.error(
-        "     e.g., a firewall blocks outbound TCP:443 to registry-1.docker.io, or",
+      console.warn(
+        "    This usually means the docker daemon itself can't reach Docker Hub,",
       );
-      console.error("     the host needs an HTTP proxy).");
+      console.warn(
+        "    but doesn't prove container DNS is broken — the sandbox build may still succeed.",
+      );
     } else {
-      console.error("  ✗ DNS resolution from inside a docker container failed.");
+      console.warn(
+        `  ⚠ Container DNS probe inconclusive (reason: ${dns.reason ?? "unknown"}).`,
+      );
     }
+    if (dns.details) {
+      for (const line of String(dns.details).split("\n").slice(-3)) {
+        if (line.trim()) console.warn(`    ${line.trim()}`);
+      }
+    }
+    console.warn(
+      "    Proceeding. If the sandbox build later hangs at `npm ci`, see issue #2101.",
+    );
+  } else {
+    console.error("  ✗ DNS resolution from inside a docker container failed.");
     if (dns.details) {
       for (const line of String(dns.details).split("\n").slice(-4)) {
         if (line.trim()) console.error(`    ${line.trim()}`);
       }
     }
     console.error("");
-
-    // Only show the #2101-specific context for DNS failures, not for image
-    // pull failures (which are a different category of problem).
-    if (dns.reason !== "image_pull_failed") {
+    {
       console.error(
         "  The sandbox build runs `npm ci` inside a container and needs to resolve",
       );
