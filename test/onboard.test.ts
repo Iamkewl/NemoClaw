@@ -50,6 +50,7 @@ import {
   summarizeProbeFailure,
   shouldIncludeBuildContextPath,
   writeSandboxConfigSyncFile,
+  formatOnboardConfigSummary,
 } from "../dist/lib/onboard";
 import { stageOptimizedSandboxBuildContext } from "../dist/lib/sandbox-build-context";
 import { buildWebSearchDockerConfig } from "../dist/lib/web-search";
@@ -748,6 +749,92 @@ describe("onboard helpers", () => {
         delete process.env.NEMOCLAW_PROXY_PORT;
       } else {
         process.env.NEMOCLAW_PROXY_PORT = priorPort;
+      }
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("#2281: bakes NEMOCLAW_AGENT_TIMEOUT env into the staged Dockerfile", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-onboard-dockerfile-timeout-"));
+    const dockerfilePath = path.join(tmpDir, "Dockerfile");
+    fs.writeFileSync(
+      dockerfilePath,
+      [
+        "ARG NEMOCLAW_MODEL=nvidia/nemotron-3-super-120b-a12b",
+        "ARG NEMOCLAW_PROVIDER_KEY=nvidia",
+        "ARG NEMOCLAW_PRIMARY_MODEL_REF=nvidia/nemotron-3-super-120b-a12b",
+        "ARG CHAT_UI_URL=http://127.0.0.1:18789",
+        "ARG NEMOCLAW_INFERENCE_BASE_URL=https://inference.local/v1",
+        "ARG NEMOCLAW_INFERENCE_API=openai-completions",
+        "ARG NEMOCLAW_INFERENCE_COMPAT_B64=e30=",
+        "ARG NEMOCLAW_WEB_SEARCH_ENABLED=0",
+        "ARG NEMOCLAW_BUILD_ID=default",
+        "ARG NEMOCLAW_AGENT_TIMEOUT=600",
+      ].join("\n"),
+    );
+
+    const priorTimeout = process.env.NEMOCLAW_AGENT_TIMEOUT;
+    process.env.NEMOCLAW_AGENT_TIMEOUT = "1800";
+    try {
+      patchStagedDockerfile(
+        dockerfilePath,
+        "gpt-5.4",
+        "http://127.0.0.1:18789",
+        "build-timeout",
+        "openai-api",
+      );
+      const patched = fs.readFileSync(dockerfilePath, "utf8");
+      assert.match(patched, /^ARG NEMOCLAW_AGENT_TIMEOUT=1800$/m);
+    } finally {
+      if (priorTimeout === undefined) {
+        delete process.env.NEMOCLAW_AGENT_TIMEOUT;
+      } else {
+        process.env.NEMOCLAW_AGENT_TIMEOUT = priorTimeout;
+      }
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("#2281: rejects malformed NEMOCLAW_AGENT_TIMEOUT and keeps default", () => {
+    const tmpDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "nemoclaw-onboard-dockerfile-timeout-default-"),
+    );
+    const dockerfilePath = path.join(tmpDir, "Dockerfile");
+    fs.writeFileSync(
+      dockerfilePath,
+      [
+        "ARG NEMOCLAW_MODEL=nvidia/nemotron-3-super-120b-a12b",
+        "ARG NEMOCLAW_PROVIDER_KEY=nvidia",
+        "ARG NEMOCLAW_PRIMARY_MODEL_REF=nvidia/nemotron-3-super-120b-a12b",
+        "ARG CHAT_UI_URL=http://127.0.0.1:18789",
+        "ARG NEMOCLAW_INFERENCE_BASE_URL=https://inference.local/v1",
+        "ARG NEMOCLAW_INFERENCE_API=openai-completions",
+        "ARG NEMOCLAW_INFERENCE_COMPAT_B64=e30=",
+        "ARG NEMOCLAW_WEB_SEARCH_ENABLED=0",
+        "ARG NEMOCLAW_BUILD_ID=default",
+        "ARG NEMOCLAW_AGENT_TIMEOUT=600",
+      ].join("\n"),
+    );
+
+    const priorTimeout = process.env.NEMOCLAW_AGENT_TIMEOUT;
+    // Malformed: not a positive integer. Should be rejected, default kept.
+    process.env.NEMOCLAW_AGENT_TIMEOUT = "not-a-number\nRUN rm -rf /";
+    try {
+      patchStagedDockerfile(
+        dockerfilePath,
+        "gpt-5.4",
+        "http://127.0.0.1:18789",
+        "build-timeout-bad",
+        "openai-api",
+      );
+      const patched = fs.readFileSync(dockerfilePath, "utf8");
+      assert.match(patched, /^ARG NEMOCLAW_AGENT_TIMEOUT=600$/m);
+      assert.doesNotMatch(patched, /RUN rm -rf/);
+    } finally {
+      if (priorTimeout === undefined) {
+        delete process.env.NEMOCLAW_AGENT_TIMEOUT;
+      } else {
+        process.env.NEMOCLAW_AGENT_TIMEOUT = priorTimeout;
       }
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
@@ -5313,5 +5400,72 @@ const { createSandbox } = require(${onboardPath});
       patchPos > pullPos,
       "pullAndResolveBaseImageDigest must be called BEFORE patchStagedDockerfile — regression #1904",
     );
+  });
+
+  it("formatOnboardConfigSummary renders all collected fields (#2165)", () => {
+    const summary = formatOnboardConfigSummary({
+      provider: "gemini-api",
+      model: "gemini-2.5-flash",
+      credentialEnv: "GEMINI_API_KEY",
+      webSearchConfig: { fetchEnabled: true },
+      enabledChannels: ["telegram", "slack"],
+      sandboxName: "my-assistant",
+      notes: ["Sandbox build takes ~6 minutes on this host."],
+    });
+
+    assert.ok(summary.includes("Review configuration"), "summary has review heading");
+    assert.ok(summary.includes("gemini-api"), "summary includes provider");
+    assert.ok(summary.includes("gemini-2.5-flash"), "summary includes model");
+    assert.ok(
+      summary.includes("GEMINI_API_KEY (stored in ~/.nemoclaw/credentials.json)"),
+      "summary shows API key env var + storage location",
+    );
+    assert.ok(summary.includes("enabled"), "summary includes web-search enabled");
+    assert.ok(summary.includes("telegram, slack"), "summary lists enabled channels");
+    assert.ok(summary.includes("my-assistant"), "summary shows sandbox name");
+    assert.ok(
+      summary.includes("Note:          Sandbox build takes ~6 minutes on this host."),
+      "summary renders notes under sandbox name",
+    );
+
+    // No messaging, no web search → "none" / "disabled"
+    const bareSummary = formatOnboardConfigSummary({
+      provider: "nvidia-prod",
+      model: "nvidia/nemotron-3-super-120b-a12b",
+      credentialEnv: "NVIDIA_API_KEY",
+      webSearchConfig: null,
+      enabledChannels: [],
+      sandboxName: "test",
+    });
+    assert.ok(bareSummary.includes("Messaging:     none"), "empty channels renders as 'none'");
+    assert.ok(
+      bareSummary.includes("Web search:    disabled"),
+      "null webSearch renders as 'disabled'",
+    );
+
+    // No credentialEnv → "(not required for <provider>)" placeholder
+    const localSummary = formatOnboardConfigSummary({
+      provider: "ollama-local",
+      model: "llama3:8b",
+      credentialEnv: null,
+      webSearchConfig: null,
+      enabledChannels: [],
+      sandboxName: "local",
+    });
+    assert.ok(
+      localSummary.includes("(not required for ollama-local)"),
+      "null credentialEnv falls back to a provider-specific message",
+    );
+
+    // Missing provider/model → "(unset)" placeholder, not "undefined"
+    const orphanSummary = formatOnboardConfigSummary({
+      provider: null,
+      model: null,
+      webSearchConfig: null,
+      enabledChannels: null,
+      sandboxName: "orphan",
+    });
+    assert.ok(!orphanSummary.includes("undefined"), "null fields never render as 'undefined'");
+    assert.ok(orphanSummary.includes("(unset)"), "null fields fall back to '(unset)'");
   });
 });

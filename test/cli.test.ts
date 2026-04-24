@@ -174,6 +174,15 @@ describe("CLI dispatch", () => {
     expect(r.out.includes("No resumable onboarding session was found")).toBeTruthy();
   });
 
+  it("resume rejection clarifies --resume semantics and points to onboard (#2281)", () => {
+    const r = run("onboard --resume --non-interactive --yes-i-accept-third-party-software");
+    expect(r.code).toBe(1);
+    expect(r.out.includes("No resumable onboarding session was found")).toBeTruthy();
+    expect(r.out.includes("--resume only continues an interrupted onboarding run")).toBeTruthy();
+    expect(r.out.includes("To change configuration on an existing sandbox, rebuild it")).toBeTruthy();
+    expect(r.out.includes("nemoclaw onboard")).toBeTruthy();
+  });
+
   it("setup-spark --help exits 0 and shows onboard usage", () => {
     const r = run("setup-spark --help");
     expect(r.code).toBe(0);
@@ -1116,6 +1125,17 @@ describe("CLI dispatch", () => {
         'if [ "$1" = "sandbox" ] && [ "$2" = "get" ] && [ "$3" = "alpha" ]; then',
         "  echo 'Error: status: NotFound, message: \"sandbox not found\"' >&2",
         "  exit 1",
+        "fi",
+        // Simulate a healthy, active `nemoclaw` named gateway so the
+        // lifecycle guard confirms healthy_named and the registry removal
+        // path fires. Without this, the guard preserves the entry (#2276).
+        'if [ "$1" = "status" ]; then',
+        "  printf 'Server Status\\n\\n  Gateway: nemoclaw\\n  Status: Connected\\n'",
+        "  exit 0",
+        "fi",
+        'if [ "$1" = "gateway" ] && [ "$2" = "info" ]; then',
+        "  printf 'Gateway: nemoclaw\\n'",
+        "  exit 0",
         "fi",
         "exit 0",
       ].join("\n"),
@@ -2351,7 +2371,7 @@ describe("CLI dispatch", () => {
 });
 
 describe("list shows live gateway inference", () => {
-  it("shows stored sandbox inference instead of live gateway inference", () => {
+  it("shows live gateway inference for the default sandbox (#2369)", () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-cli-list-live-"));
     const localBin = path.join(home, "bin");
     const registryDir = path.join(home, ".nemoclaw");
@@ -2396,10 +2416,16 @@ describe("list shows live gateway inference", () => {
     });
 
     expect(r.code).toBe(0);
-    expect(r.out).toContain("configured-model");
-    expect(r.out).toContain("configured-provider");
-    expect(r.out).not.toContain("nvidia/nemotron-3-super-120b-a12b");
-    expect(r.out).not.toContain("nvidia-prod");
+    // Live gateway values render on the default sandbox's main row.
+    expect(r.out).toContain(
+      "model: nvidia/nemotron-3-super-120b-a12b  provider: nvidia-prod  GPU  policies: pypi, npm",
+    );
+    // The stale (stored) row must not appear.
+    expect(r.out).not.toContain(
+      "model: configured-model  provider: configured-provider  GPU  policies: pypi, npm",
+    );
+    // Onboarded values appear in the drift annotation.
+    expect(r.out).toContain("(onboarded: model=configured-model, provider=configured-provider)");
   });
 
   it("falls back to registry values when openshell inference get fails", () => {

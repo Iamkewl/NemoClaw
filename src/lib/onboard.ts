@@ -1395,6 +1395,16 @@ function patchStagedDockerfile(
       `ARG NEMOCLAW_REASONING=${reasoning}`,
     );
   }
+  // NEMOCLAW_AGENT_TIMEOUT — override agents.defaults.timeoutSeconds at build
+  // time. Lets users increase the per-request inference timeout without
+  // editing the Dockerfile. Ref: issue #2281
+  const agentTimeout = process.env.NEMOCLAW_AGENT_TIMEOUT;
+  if (agentTimeout && POSITIVE_INT_RE.test(agentTimeout)) {
+    dockerfile = dockerfile.replace(
+      /^ARG NEMOCLAW_AGENT_TIMEOUT=.*$/m,
+      `ARG NEMOCLAW_AGENT_TIMEOUT=${agentTimeout}`,
+    );
+  }
   // Honor NEMOCLAW_PROXY_HOST / NEMOCLAW_PROXY_PORT exported in the host
   // shell so the sandbox-side nemoclaw-start.sh sees them via $ENV at runtime.
   // Without this, the host export is silently dropped at image build time and
@@ -3282,6 +3292,55 @@ async function promptValidatedSandboxName() {
 
 // ── Step 5: Sandbox ──────────────────────────────────────────────
 
+/**
+ * Render the configuration summary shown before the destructive sandbox build.
+ * Extracted from confirmOnboardConfiguration() for direct unit testing — see #2165.
+ *
+ * Fields:
+ * - credentialEnv:    env-var name of the API key (e.g. "NVIDIA_API_KEY").
+ *                     Rendered with the fixed credentials.json location so
+ *                     users can see where the key was stored.
+ * - notes:            additional bullet lines shown under the summary
+ *                     (e.g. "~6 minutes on this host"). Each note rendered
+ *                     as "Note: <text>" so it's visually distinct.
+ */
+function formatOnboardConfigSummary({
+  provider,
+  model,
+  credentialEnv = null,
+  webSearchConfig,
+  enabledChannels,
+  sandboxName,
+  notes = [],
+}) {
+  const bar = `  ${"─".repeat(50)}`;
+  const messaging =
+    Array.isArray(enabledChannels) && enabledChannels.length > 0
+      ? enabledChannels.join(", ")
+      : "none";
+  const webSearch = webSearchConfig && webSearchConfig.fetchEnabled === true ? "enabled" : "disabled";
+  const apiKeyLine = credentialEnv
+    ? `  API key:       ${credentialEnv} (stored in ~/.nemoclaw/credentials.json)`
+    : `  API key:       (not required for ${provider ?? "this provider"})`;
+  const noteLines = (Array.isArray(notes) ? notes : [])
+    .filter((n) => typeof n === "string" && n.length > 0)
+    .map((n) => `  Note:          ${n}`);
+  return [
+    "",
+    bar,
+    "  Review configuration",
+    bar,
+    `  Provider:      ${provider ?? "(unset)"}`,
+    `  Model:         ${model ?? "(unset)"}`,
+    apiKeyLine,
+    `  Web search:    ${webSearch}`,
+    `  Messaging:     ${messaging}`,
+    `  Sandbox name:  ${sandboxName}`,
+    ...noteLines,
+    bar,
+  ].join("\n");
+}
+
 // eslint-disable-next-line complexity
 async function createSandbox(
   gpu,
@@ -3301,6 +3360,7 @@ async function createSandbox(
     sandboxNameOverride ?? (await promptValidatedSandboxName()),
     "sandbox name",
   );
+
   const effectivePort = agent ? agent.forwardPort : CONTROL_UI_PORT;
   const chatUiUrl = process.env.CHAT_UI_URL || `http://127.0.0.1:${effectivePort}`;
 
@@ -4218,6 +4278,12 @@ async function setupNim(gpu) {
             continue selectionLoop;
           }
         }
+
+        // Hydrate from saved credentials (~/.nemoclaw/credentials.json)
+        // before checking env, so rebuild and other non-interactive callers
+        // can resolve keys stored during the original interactive onboard.
+        // See #2273.
+        hydrateCredentialEnv(credentialEnv);
 
         if (selected.key === "build") {
           // Allow NEMOCLAW_PROVIDER_KEY as a fallback for NVIDIA_API_KEY
@@ -5893,10 +5959,7 @@ async function setupPoliciesWithSelection(sandboxName, options = {}) {
       process.exit(1);
     }
     note(`  [resume] Reapplying policy presets: ${chosen.join(", ")}`);
-    for (const name of chosen) {
-      if (applied.includes(name)) continue;
-      policies.applyPreset(sandboxName, name);
-    }
+    syncPresetSelection(sandboxName, applied, chosen);
     return chosen;
   }
 
@@ -5947,20 +6010,7 @@ async function setupPoliciesWithSelection(sandboxName, options = {}) {
       process.exit(1);
     }
     note(`  [non-interactive] Applying policy presets: ${chosen.join(", ")}`);
-    for (const name of chosen) {
-      for (let attempt = 0; attempt < 3; attempt += 1) {
-        try {
-          policies.applyPreset(sandboxName, name);
-          break;
-        } catch (err) {
-          const message = err && err.message ? err.message : String(err);
-          if (!message.includes("sandbox not found") || attempt === 2) {
-            throw err;
-          }
-          sleep(2);
-        }
-      }
-    }
+    syncPresetSelection(sandboxName, applied, chosen);
     return chosen;
   }
 
@@ -5984,8 +6034,40 @@ async function setupPoliciesWithSelection(sandboxName, options = {}) {
 
   const accessByName = {};
   for (const p of resolvedPresets) accessByName[p.name] = p.access;
-  const newlySelected = interactiveChoice.filter((name) => !applied.includes(name));
-  const deselected = applied.filter((name) => !interactiveChoice.includes(name));
+  syncPresetSelection(sandboxName, applied, interactiveChoice, accessByName);
+  return interactiveChoice;
+}
+
+/**
+ * Reconcile the sandbox's currently-applied preset list with the user's
+ * target selection:
+ *   - remove presets in `applied` but not in `target` (narrow)
+ *   - apply presets in `target` but not in `applied` (widen)
+ *   - leave unchanged presets untouched (no wasteful re-apply)
+ *
+ * Shared between the interactive and non-interactive paths so "narrow the
+ * selection" works identically in both. Fixes #2177 (non-interactive path
+ * was apply-only, so deselected presets lingered).
+ *
+ * @param {string} sandboxName  Target sandbox.
+ * @param {string[]} applied    Preset names currently applied to the sandbox.
+ * @param {string[]} target     Preset names the user wants applied after this call.
+ * @param {Object<string, string>|null} [accessByName=null]
+ *   Optional map of preset name → access mode ("read" | "read-write").
+ *   When provided, applyPreset receives the mode per preset so the gateway
+ *   can distinguish read vs read-write installs.
+ * @returns {void}
+ */
+function syncPresetSelection(
+  sandboxName: string,
+  applied: string[],
+  target: string[],
+  accessByName: Record<string, string> | null = null,
+): void {
+  const targetSet = new Set(target);
+  const appliedSet = new Set(applied);
+  const deselected = applied.filter((name) => !targetSet.has(name));
+  const newlySelected = target.filter((name) => !appliedSet.has(name));
 
   for (const name of deselected) {
     for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -6005,11 +6087,16 @@ async function setupPoliciesWithSelection(sandboxName, options = {}) {
   }
 
   for (const name of newlySelected) {
+    const options = accessByName ? { access: accessByName[name] } : undefined;
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
-        // Pass access mode so applyPreset can distinguish read vs read-write
-        // when preset infrastructure supports it.
-        policies.applyPreset(sandboxName, name, { access: accessByName[name] });
+        // applyPreset returns false (without throwing) on some error paths —
+        // e.g. unknown preset, malformed YAML. Treat that as a failure so
+        // setupPoliciesWithSelection doesn't silently report success on a
+        // preset that never got applied.
+        if (!policies.applyPreset(sandboxName, name, options)) {
+          throw new Error(`Failed to apply preset '${name}'.`);
+        }
         break;
       } catch (err) {
         const message = err && err.message ? err.message : String(err);
@@ -6020,7 +6107,6 @@ async function setupPoliciesWithSelection(sandboxName, options = {}) {
       }
     }
   }
-  return interactiveChoice;
 }
 
 // ── Dashboard ────────────────────────────────────────────────────
@@ -6346,7 +6432,7 @@ function printDashboard(sandboxName, model, provider, nimContainer = null, agent
   console.log(`  ${"─".repeat(50)}`);
   console.log("");
   console.log("  To change settings later:");
-  console.log(`    Model:       openshell inference set -g nemoclaw -m <model> -p <provider>`);
+  console.log(`    Model:       openshell inference set -g nemoclaw --model <model> --provider <provider>`);
   console.log(`    Policies:    nemoclaw ${sandboxName} policy-add`);
   console.log("    Credentials: nemoclaw credentials reset <KEY>  then  nemoclaw onboard");
   console.log("");
@@ -6458,7 +6544,9 @@ async function onboard(opts = {}) {
       session = onboardSession.loadSession();
       if (!session || session.resumable === false) {
         console.error("  No resumable onboarding session was found.");
-        console.error("  Run: nemoclaw onboard");
+        console.error("  --resume only continues an interrupted onboarding run.");
+        console.error("  To change configuration on an existing sandbox, rebuild it:");
+        console.error("    nemoclaw onboard");
         process.exit(1);
       }
       const sessionFrom = session?.metadata?.fromDockerfile || null;
@@ -6667,6 +6755,43 @@ async function onboard(opts = {}) {
           nimContainer,
         });
         break;
+      }
+
+      // Prompt for the sandbox name and show the review gate BEFORE
+      // setupInference runs upsertProvider / `inference set` on the gateway.
+      // On retry (inferenceResult.retry === "selection") the user is re-prompted
+      // for provider/model above and sees this gate again with the new config.
+      // See #2221 (CodeRabbit).
+      if (!sandboxName) {
+        sandboxName = await promptValidatedSandboxName();
+      }
+      console.log(
+        formatOnboardConfigSummary({
+          provider,
+          model,
+          credentialEnv,
+          webSearchConfig,
+          enabledChannels:
+            selectedMessagingChannels.length > 0 ? selectedMessagingChannels : null,
+          sandboxName,
+          notes: ["Sandbox build takes ~6 minutes on this host."],
+        }),
+      );
+      console.log("  Web search and messaging channels will be prompted next.");
+      if (!isNonInteractive() && !dangerouslySkipPermissions) {
+        const answer = (await promptOrDefault("  Apply this configuration? [Y/n]: ", null, "y"))
+          .trim()
+          .toLowerCase();
+        if (answer === "n" || answer === "no") {
+          console.log("  Aborted. Re-run `nemoclaw onboard` to start over.");
+          console.log(
+            "  Credentials entered so far are stored in ~/.nemoclaw/credentials.json —",
+          );
+          console.log(
+            "  clear them with `nemoclaw credentials reset <KEY>` if you no longer want them.",
+          );
+          process.exit(0);
+        }
       }
 
       startRecordedStep("inference", { sandboxName, provider, model });
@@ -6926,6 +7051,7 @@ module.exports = {
   setupInference,
   setupMessagingChannels,
   setupNim,
+  formatOnboardConfigSummary,
   isInferenceRouteReady,
   isNonInteractive,
   isOpenclawReady,

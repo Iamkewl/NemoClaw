@@ -44,7 +44,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: nightly-e2e
+  group: nightly-e2e-${{ github.event_name }}-${{ github.event_name == 'workflow_dispatch' && github.ref || 'schedule' }}
   cancel-in-progress: true
 
 jobs:
@@ -75,7 +75,10 @@ jobs:
           if-no-files-found: ignore
 
   cloud-experimental-e2e:
-    if: github.repository == 'NVIDIA/NemoClaw'
+    # DISABLED: CLI/docs command reference drift causes check-docs failures.
+    # Landlock fix landed in OpenShell#810 (v0.0.32+). Re-enable once
+    # docs-drift is resolved.
+    if: github.repository == 'NVIDIA/NemoClaw' && vars.CLOUD_EXPERIMENTAL_E2E_ENABLED == 'true'
     runs-on: ubuntu-latest
     # Main suite + check-docs + network-policy skip script can exceed 45m on cold runners.
     timeout-minutes: 90
@@ -430,6 +433,7 @@ jobs:
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
           NEMOCLAW_NON_INTERACTIVE: "1"
           NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE: "1"
+          NEMOCLAW_SANDBOX_NAME: "e2e-deploy-svc"
         run: bash test/e2e/test-deployment-services.sh
 
       - name: Upload test log on failure
@@ -663,8 +667,28 @@ jobs:
 
   notify-on-failure:
     runs-on: ubuntu-latest
-    needs: [cloud-e2e, cloud-experimental-e2e, messaging-providers-e2e, token-rotation-e2e, sandbox-survival-e2e, hermes-e2e, skip-permissions-e2e, sandbox-operations-e2e, inference-routing-e2e, network-policy-e2e, deployment-services-e2e, diagnostics-e2e, snapshot-commands-e2e, shields-config-e2e, rebuild-openclaw-e2e, upgrade-stale-sandbox-e2e, rebuild-hermes-e2e, gpu-e2e]
-    if: ${{ always() && contains(needs.*.result, 'failure') }}
+    needs:
+      [
+        cloud-e2e,
+        cloud-experimental-e2e,
+        messaging-providers-e2e,
+        token-rotation-e2e,
+        sandbox-survival-e2e,
+        hermes-e2e,
+        skip-permissions-e2e,
+        sandbox-operations-e2e,
+        inference-routing-e2e,
+        network-policy-e2e,
+        deployment-services-e2e,
+        diagnostics-e2e,
+        snapshot-commands-e2e,
+        shields-config-e2e,
+        rebuild-openclaw-e2e,
+        upgrade-stale-sandbox-e2e,
+        rebuild-hermes-e2e,
+        gpu-e2e,
+      ]
+    if: ${{ always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
     permissions:
       issues: write
     steps:
@@ -674,6 +698,14 @@ jobs:
           script: |
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const title = 'Nightly E2E failed';
+
+            const needs = ${{ toJSON(needs) }};
+            const failed = Object.entries(needs).filter(([, v]) => v.result === 'failure').map(([k]) => k);
+            const cancelled = Object.entries(needs).filter(([, v]) => v.result === 'cancelled').map(([k]) => k);
+            const summary = [
+              failed.length ? `**Failed:** ${failed.join(', ')}` : '',
+              cancelled.length ? `**Cancelled:** ${cancelled.join(', ')}` : '',
+            ].filter(Boolean).join('\n');
 
             const { data: existing } = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
@@ -689,14 +721,14 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: match.number,
-                body: `Failed again on ${new Date().toISOString().split('T')[0]}.\n\n**Run:** ${runUrl}\n**Artifacts:** Check the run artifacts for install/test logs (artifact names vary by job).`,
+                body: `Failed again on ${new Date().toISOString().split('T')[0]}.\n\n**Run:** ${runUrl}\n${summary}\n**Artifacts:** Check the run artifacts for install/test logs (artifact names vary by job).`,
               });
             } else {
               await github.rest.issues.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 title: `${title} — ${new Date().toISOString().split('T')[0]}`,
-                body: `The nightly E2E pipeline failed.\n\n**Run:** ${runUrl}\n**Artifacts:** Check the run artifacts for install/test logs (artifact names vary by job).`,
+                body: `The nightly E2E pipeline failed.\n\n**Run:** ${runUrl}\n${summary}\n**Artifacts:** Check the run artifacts for install/test logs (artifact names vary by job).`,
                 labels: ['bug', 'CI/CD'],
               });
             }
