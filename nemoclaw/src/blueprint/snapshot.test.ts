@@ -405,12 +405,12 @@ describe("snapshot", () => {
       expect(archived).toBeDefined();
     });
 
-    it("rejects when ~/.openclaw is a symlink", () => {
+    it("returns false when ~/.openclaw is a symlink", () => {
       addDir(`${SNAP}/openclaw`);
       addFile(`${SNAP}/openclaw/openclaw.json`, '{"restored":true}');
       addSymlink(OPENCLAW_DIR, "/attacker-controlled");
 
-      expect(() => rollbackFromSnapshot(SNAP)).toThrow(/symbolic link/);
+      expect(rollbackFromSnapshot(SNAP)).toBe(false);
     });
   });
 

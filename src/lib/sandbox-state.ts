@@ -127,6 +127,41 @@ function isWithinRoot(candidatePath: string, rootPath: string): boolean {
 }
 
 /**
+ * Reject a path if it — or any ancestor up to $HOME — is a symlink.
+ * Prevents an attacker from planting a symlink at the target path to
+ * redirect reads or writes to an attacker-controlled directory.
+ *
+ * Mirrors the pattern from config-io.ts (PR #2290) and
+ * nemoclaw/src/blueprint/snapshot.ts.
+ */
+function rejectSymlinksOnPath(targetPath: string): void {
+  const home = path.resolve(process.env.HOME || os.homedir());
+  const resolved = path.resolve(targetPath);
+
+  const relToHome = path.relative(home, resolved);
+  if (relToHome === "" || relToHome.startsWith("..") || path.isAbsolute(relToHome)) {
+    return;
+  }
+
+  let current = resolved;
+  while (current !== home && current !== path.dirname(current)) {
+    try {
+      const stat = lstatSync(current);
+      if (stat.isSymbolicLink()) {
+        const linkTarget = readlinkSync(current);
+        throw new Error(
+          `Refusing to operate on path: ${current} is a symbolic link ` +
+            `(target: ${linkTarget}). This may indicate a symlink attack.`,
+        );
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    current = path.dirname(current);
+  }
+}
+
+/**
  * List tar entries and validate every path is within targetDir.
  * Rejects absolute paths, path traversal (..), and null bytes.
  */
@@ -480,6 +515,12 @@ export function backupSandboxState(
   }
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const backupPath = path.join(REBUILD_BACKUPS_DIR, sandboxName, timestamp);
+
+  // SECURITY: Verify backup destination ancestors are not symlinks.
+  // Without this check, an attacker who plants ~/.nemoclaw/rebuild-backups
+  // as a symlink could redirect snapshot content to an arbitrary directory.
+  rejectSymlinksOnPath(backupPath);
+
   mkdirSync(backupPath, { recursive: true, mode: 0o700 });
 
   // Capture applied policy presets from the registry so they can be

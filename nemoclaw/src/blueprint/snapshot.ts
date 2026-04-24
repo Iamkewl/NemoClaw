@@ -223,16 +223,17 @@ export function rollbackFromSnapshot(snapshotDir: string): boolean {
     return false;
   }
 
-  // SECURITY: Verify restore destination is not a symlink before writing.
-  // Without this check, an attacker who replaces ~/.openclaw with a symlink
-  // could redirect snapshot contents to an arbitrary directory.
-  rejectSymlinksOnPath(OPENCLAW_DIR);
-
   const archivePath = existsSync(OPENCLAW_DIR)
     ? join(HOME, `.openclaw.nemoclaw-archived.${compactTimestamp()}`)
     : null;
 
   try {
+    // SECURITY: Verify restore destination is not a symlink before writing.
+    // Without this check, an attacker who replaces ~/.openclaw with a symlink
+    // could redirect snapshot contents to an arbitrary directory.
+    // Inside the try/catch to preserve the boolean-return contract.
+    rejectSymlinksOnPath(OPENCLAW_DIR);
+
     if (archivePath !== null) {
       moveSync(OPENCLAW_DIR, archivePath);
     }
