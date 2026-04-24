@@ -30,7 +30,7 @@ const STEP_STATES: readonly StepStatus[] = [
   "failed",
   "skipped",
 ];
-const VALID_STEP_STATES = new Set<string>(STEP_STATES);
+const VALID_STEP_STATES: ReadonlySet<string> = new Set(STEP_STATES);
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -175,13 +175,13 @@ function readStringArray(value: SessionJsonValue | undefined): string[] | null {
   return value.filter((entry): entry is string => typeof entry === "string");
 }
 
+function isStepStatus(value: string): value is StepStatus {
+  return VALID_STEP_STATES.has(value);
+}
+
 function readStepStatus(value: SessionJsonValue | undefined): StepStatus | null {
-  if (value === "pending") return value;
-  if (value === "in_progress") return value;
-  if (value === "complete") return value;
-  if (value === "failed") return value;
-  if (value === "skipped") return value;
-  return null;
+  if (typeof value !== "string") return null;
+  return isStepStatus(value) ? value : null;
 }
 
 function parseWebSearchConfig(value: SessionJsonValue | undefined): WebSearchConfig | null {

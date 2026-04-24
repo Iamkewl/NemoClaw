@@ -20,6 +20,7 @@
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import type { ProcessEnv } from "node:process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -198,7 +199,7 @@ process.exit(0);
   fs.writeFileSync(openshellPath, stub, { mode: 0o755 });
 }
 
-function runCli(action: string, extraEnv: NodeJS.ProcessEnv = {}): HarnessResult {
+function runCli(action: string, extraEnv: ProcessEnv = {}): HarnessResult {
   const repoRoot = path.join(import.meta.dirname, "..");
   const result = spawnSync(
     process.execPath,

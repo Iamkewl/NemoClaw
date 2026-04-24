@@ -6,6 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import type { ProcessEnv } from "node:process";
 
 // Extract the two functions from nemoclaw-start.sh so they can be tested
 // in isolation without sourcing the full startup script.
@@ -37,7 +38,7 @@ function extractFunction(name: string): string {
 const ENSURE_IDENTITY_SYMLINK = extractFunction("ensure_identity_symlink");
 const FIX_OPENCLAW_DATA_OWNERSHIP = extractFunction("fix_openclaw_data_ownership");
 
-function runShell(script: string, env: NodeJS.ProcessEnv = {}) {
+function runShell(script: string, env: ProcessEnv = {}) {
   return spawnSync("bash", ["-euo", "pipefail", "-c", script], {
     cwd: path.join(import.meta.dirname, ".."),
     encoding: "utf-8",

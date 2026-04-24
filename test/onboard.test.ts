@@ -6,6 +6,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { ProcessEnv } from "node:process";
 import { describe, expect, it } from "vitest";
 
 import { stageOptimizedSandboxBuildContext } from "../dist/lib/sandbox-build-context";
@@ -3285,7 +3286,7 @@ const { createSandbox } = require(${onboardPath});
 `;
       fs.writeFileSync(scriptPath, script);
 
-      const env: NodeJS.ProcessEnv = {
+      const env: ProcessEnv = {
         ...process.env,
         HOME: tmpDir,
         PATH: `${fakeBin}:${process.env.PATH || ""}`,
@@ -3614,7 +3615,7 @@ const { createSandbox } = require(${onboardPath});
       fs.writeFileSync(scriptPath, script);
 
       // Run WITHOUT NEMOCLAW_NON_INTERACTIVE to exercise interactive path
-      const env: NodeJS.ProcessEnv = {
+      const env: ProcessEnv = {
         ...process.env,
         HOME: tmpDir,
         PATH: `${fakeBin}:${process.env.PATH || ""}`,
@@ -3751,7 +3752,7 @@ const { createSandbox } = require(${onboardPath});
       fs.writeFileSync(scriptPath, script);
 
       // Run WITHOUT NEMOCLAW_NON_INTERACTIVE to exercise interactive path
-      const env: NodeJS.ProcessEnv = {
+      const env: ProcessEnv = {
         ...process.env,
         HOME: tmpDir,
         PATH: `${fakeBin}:${process.env.PATH || ""}`,
@@ -3882,7 +3883,7 @@ const { createSandbox } = require(${onboardPath});
       fs.writeFileSync(scriptPath, script);
 
       // Run WITHOUT NEMOCLAW_NON_INTERACTIVE to exercise interactive path
-      const env: NodeJS.ProcessEnv = {
+      const env: ProcessEnv = {
         ...process.env,
         HOME: tmpDir,
         PATH: `${fakeBin}:${process.env.PATH || ""}`,

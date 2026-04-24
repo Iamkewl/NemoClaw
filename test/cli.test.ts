@@ -6,6 +6,7 @@ import { execSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { ProcessEnv } from "node:process";
 
 const CLI = path.join(import.meta.dirname, "..", "bin", "nemoclaw.js");
 
@@ -25,13 +26,17 @@ function readBufferOrStringProperty(value: object, key: "stdout" | "stderr"): st
   return typeof property === "string" || Buffer.isBuffer(property) ? property : undefined;
 }
 
+function toText(value: string | Buffer | undefined): string {
+  return typeof value === "string" ? value : Buffer.isBuffer(value) ? value.toString("utf8") : "";
+}
+
 function readCliErrorOutput(error: CliErrorShape | string | null | undefined): CliRunResult {
   if (!error || typeof error === "string") {
     return { code: 1, out: String(error || "") };
   }
   return {
     code: typeof error.status === "number" ? error.status : 1,
-    out: `${typeof error.stdout === "string" ? error.stdout : ""}${typeof error.stderr === "string" ? error.stderr : ""}`,
+    out: `${toText(error.stdout)}${toText(error.stderr)}`,
   };
 }
 
@@ -41,7 +46,7 @@ function run(args: string): CliRunResult {
 
 function runWithEnv(
   args: string,
-  env: NodeJS.ProcessEnv = {},
+  env: ProcessEnv = {},
   timeout: number = Number(process.env.NEMOCLAW_EXEC_TIMEOUT || 10000),
 ): CliRunResult {
   try {

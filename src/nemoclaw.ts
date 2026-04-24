@@ -163,6 +163,7 @@ function runOpenshell(args: CommandArgs, opts: RunnerOptions = {}) {
     env: opts.env,
     stdio: opts.stdio,
     ignoreError: opts.ignoreError,
+    timeout: opts.timeout,
     errorLine: console.error,
     exit: (code: number) => process.exit(code),
   });
@@ -173,6 +174,7 @@ function captureOpenshell(args: CommandArgs, opts: RunnerOptions = {}) {
     cwd: ROOT,
     env: opts.env,
     ignoreError: opts.ignoreError,
+    timeout: opts.timeout,
     errorLine: console.error,
     exit: (code: number) => process.exit(code),
   });

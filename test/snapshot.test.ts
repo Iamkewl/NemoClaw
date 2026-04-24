@@ -9,6 +9,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, it, expect, afterAll, beforeEach } from "vitest";
 
 // Override HOME BEFORE importing sandbox-state — it reads process.env.HOME
@@ -38,7 +39,7 @@ function isSandboxStateModule(value: object | null): value is SandboxStateModule
 }
 
 const loadedSandboxState = await import(
-  path.join(REPO_ROOT, "dist", "lib", "sandbox-state.js"),
+  pathToFileURL(path.join(REPO_ROOT, "dist", "lib", "sandbox-state.js")).href,
 );
 if (!isSandboxStateModule(loadedSandboxState)) {
   throw new Error("Expected sandbox-state module exports to be available");
