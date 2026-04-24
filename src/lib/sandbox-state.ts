@@ -141,12 +141,13 @@ function isRebuildManifest(value: unknown): value is RebuildManifest {
     isStringArray(value.stateDirs) &&
     typeof value.writableDir === "string" &&
     typeof value.backupPath === "string" &&
-    (value.blueprintDigest === null || typeof value.blueprintDigest === "string") &&
+    (value.blueprintDigest === undefined ||
+      value.blueprintDigest === null ||
+      typeof value.blueprintDigest === "string") &&
     (value.policyPresets === undefined || isStringArray(value.policyPresets)) &&
     (value.instances === undefined ||
       (Array.isArray(value.instances) && value.instances.every((entry) => isInstanceBackup(entry)))) &&
-    (value.name === undefined || typeof value.name === "string") &&
-    (value.error === undefined || typeof value.error === "string")
+    (value.name === undefined || typeof value.name === "string")
   );
 }
 
@@ -777,7 +778,9 @@ function readManifest(backupPath: string): RebuildManifest | null {
   if (!existsSync(manifestPath)) return null;
   try {
     const parsed = parseJson<unknown>(readFileSync(manifestPath, "utf-8"));
-    return isRebuildManifest(parsed) ? parsed : null;
+    return isRebuildManifest(parsed)
+      ? { ...parsed, blueprintDigest: parsed.blueprintDigest ?? null }
+      : null;
   } catch {
     return null;
   }

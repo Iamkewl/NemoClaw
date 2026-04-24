@@ -826,16 +826,17 @@ describe("runner", () => {
     beforeEach(() => {
       captureStdout();
       mockExeca.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
-      // main() calls loadBlueprint() before dispatching the action
       seedBlueprintFile();
     });
 
-    it("throws on unknown action", async () => {
-      await expect(main(["bogus"])).rejects.toThrow(/Unknown action/);
+    it("throws on unknown action with the raw invalid token", async () => {
+      store.clear();
+      await expect(main(["bogus"])).rejects.toThrow(/Unknown action 'bogus'/);
     });
 
-    it("throws on missing action", async () => {
-      await expect(main([])).rejects.toThrow(/Unknown action/);
+    it("throws on missing action with a clear marker", async () => {
+      store.clear();
+      await expect(main([])).rejects.toThrow(/Unknown action '\(missing\)'/);
     });
 
     it("parses plan with --profile and --dry-run", async () => {

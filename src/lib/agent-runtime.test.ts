@@ -58,14 +58,23 @@ describe("buildRecoveryScript", () => {
     expect(script).toContain("--port 18789");
   });
 
-  it("uses the agent gateway_command, not a hardcoded openclaw", () => {
+  it("launches the default gateway command through the validated agent binary", () => {
     const script = buildRecoveryScript(minimalAgent, 19000);
-    expect(script).toContain("test-agent gateway run --port 19000");
+    expect(script).toContain("command -v 'test-agent'");
+    expect(script).toContain('nohup "$AGENT_BIN" gateway run --port 19000');
   });
 
   it("falls back to openclaw gateway run when gateway_command is absent", () => {
     const agent = makeAgent({ gateway_command: undefined });
     const script = buildRecoveryScript(agent, 19000);
-    expect(script).toContain("openclaw gateway run --port 19000");
+    expect(script).toContain('nohup "$AGENT_BIN" gateway run --port 19000');
+  });
+
+  it("validates and launches custom gateway commands explicitly", () => {
+    const agent = makeAgent({ gateway_command: "custom-launch --mode recovery" });
+    const script = buildRecoveryScript(agent, 19000);
+    expect(script).toContain("GATEWAY_CMD_BIN='custom-launch'");
+    expect(script).toContain('command -v "$GATEWAY_CMD_BIN" >/dev/null 2>&1');
+    expect(script).toContain("nohup custom-launch --mode recovery --port 19000");
   });
 });

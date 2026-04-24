@@ -32,6 +32,9 @@ describe("http-probe helpers", () => {
     expect(summarizeProbeError('{"error":{"message":"bad key"}}', 401)).toBe(
       "HTTP 401: bad key",
     );
+    expect(
+      summarizeProbeError('{"error":{"details":{"reason":"bad key","retry":false}}}', 401),
+    ).toBe('HTTP 401: {"reason":"bad key","retry":false}');
     expect(summarizeProbeError(" plain  text   body ", 500)).toBe("HTTP 500: plain text body");
     expect(summarizeProbeFailure("", 0, 28, "timeout")).toBe("curl failed (exit 28): timeout");
   });

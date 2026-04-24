@@ -582,7 +582,8 @@ export async function actionRollback(rid: string): Promise<void> {
 // ── CLI ─────────────────────────────────────────────────────────
 
 export async function main(argv: string[] = process.argv.slice(2)): Promise<void> {
-  const action = isAction(argv[0]) ? argv[0] : undefined;
+  const rawAction = argv.at(0);
+  const action = isAction(rawAction) ? rawAction : undefined;
   let profile = "default";
   let planPath: string | undefined;
   let runId: string | undefined;
@@ -592,6 +593,12 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
   function requireValue(flag: string, i: number): string {
     if (i >= argv.length) throw new Error(`${flag} requires a value`);
     return argv[i];
+  }
+
+  if (!action) {
+    throw new Error(
+      `Unknown action '${rawAction ?? "(missing)"}'. Use: plan, apply, status, rollback`,
+    );
   }
 
   for (let i = 1; i < argv.length; i++) {
@@ -614,15 +621,17 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
     }
   }
 
-  const blueprint = loadBlueprint();
-
   switch (action) {
-    case "plan":
+    case "plan": {
+      const blueprint = loadBlueprint();
       await actionPlan(profile, blueprint, { dryRun, endpointUrl });
       break;
-    case "apply":
+    }
+    case "apply": {
+      const blueprint = loadBlueprint();
       await actionApply(profile, blueprint, { planPath, endpointUrl });
       break;
+    }
     case "status":
       actionStatus(runId);
       break;
@@ -632,8 +641,5 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
       }
       await actionRollback(runId);
       break;
-    case undefined:
-    default:
-      throw new Error(`Unknown action '${String(action)}'. Use: plan, apply, status, rollback`);
   }
 }

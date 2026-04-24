@@ -70,7 +70,7 @@ function probeOpenShellInference(): { endpoint: string; provider: string; model:
     const provider = readStringProperty(parsedObject, "provider");
     const model = readStringProperty(parsedObject, "model");
     return {
-      endpoint: endpoint ?? provider ?? "",
+      endpoint: endpoint ?? "",
       provider: provider ?? "",
       model: model ?? "",
     };

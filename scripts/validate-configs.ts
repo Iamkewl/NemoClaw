@@ -108,11 +108,12 @@ function formatError(err: {
   params?: ValidationParams;
 }): string {
   const path = err.instancePath || "/";
+  const message = err.message ?? "unknown error";
   const detail = err.params?.additionalProperty
-    ? `${err.message} '${err.params.additionalProperty}'`
+    ? `${message} '${err.params.additionalProperty}'`
     : err.params?.unevaluatedProperty
-      ? `${err.message} '${err.params.unevaluatedProperty}'`
-      : err.message ?? "unknown error";
+      ? `${message} '${err.params.unevaluatedProperty}'`
+      : message;
   return `  ${path}: ${detail}`;
 }
 

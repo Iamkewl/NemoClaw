@@ -1326,6 +1326,13 @@ export function renderTextReport(
   return lines.join("\n");
 }
 
+function requireCliValue(flag: string, value: string | undefined): string {
+  if (!value || value.startsWith("-")) {
+    throw new Error(`Missing value for ${flag}`);
+  }
+  return value;
+}
+
 function parseInteger(flag: string, value: string | undefined): number {
   if (!value) {
     throw new Error(`Missing value for ${flag}`);
@@ -1353,13 +1360,11 @@ export function parseArgs(argv: string[]): CliOptions {
     const arg = argv[index];
     switch (arg) {
       case "--root":
-        options.rootDir = path.resolve(
-          requireDefined(argv[index + 1], "Missing value for --root"),
-        );
+        options.rootDir = path.resolve(requireCliValue("--root", argv[index + 1]));
         index += 1;
         break;
       case "--project":
-        projectPaths.push(requireDefined(argv[index + 1], "Missing value for --project"));
+        projectPaths.push(requireCliValue("--project", argv[index + 1]));
         index += 1;
         break;
       case "--top-files":

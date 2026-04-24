@@ -76,6 +76,20 @@ type ProbeErrorBody = {
   details?: ProbeErrorDetail;
 };
 
+function formatProbeErrorDetail(detail: ProbeErrorDetail): string {
+  if (typeof detail === "string") {
+    return detail;
+  }
+  if (typeof detail === "number" || typeof detail === "boolean" || detail === null) {
+    return String(detail);
+  }
+  try {
+    return JSON.stringify(detail);
+  } catch {
+    return "[unserializable detail]";
+  }
+}
+
 export function summarizeProbeError(body = "", status = 0): string {
   if (!body) return `HTTP ${status} with no response body`;
   try {
@@ -86,7 +100,7 @@ export function summarizeProbeError(body = "", status = 0): string {
       parsed?.message ||
       parsed?.detail ||
       parsed?.details;
-    if (message) return `HTTP ${status}: ${String(message)}`;
+    if (message !== undefined) return `HTTP ${status}: ${formatProbeErrorDetail(message)}`;
   } catch {
     /* non-JSON body — fall through to raw text */
   }

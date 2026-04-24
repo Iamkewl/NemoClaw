@@ -571,7 +571,7 @@ function hasNamedGateway(output = ""): boolean {
 
 function getActiveGatewayName(output = ""): string | null {
   const match = stripAnsi(output).match(/^\s*Gateway:\s+(.+?)\s*$/m);
-  return match ? match[1].trim() : "";
+  return match ? match[1].trim() : null;
 }
 
 function getNamedGatewayLifecycleState() {
