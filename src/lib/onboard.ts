@@ -6714,7 +6714,7 @@ function syncPresetSelection(
 const CONTROL_UI_PORT = DASHBOARD_PORT;
 
 // Dashboard helpers — delegated to src/lib/dashboard-contract.ts
-const { buildChain, buildControlUiUrls, getDashboardForwardPort } = dashboardContract;
+const { buildChain, buildControlUiUrls } = dashboardContract;
 
 // Parses `openshell forward list` output and returns the sandbox currently
 // owning `portToStop`, or null. Exported for unit testing — see #2169.
