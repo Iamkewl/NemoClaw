@@ -1,21 +1,16 @@
 ---
 name: "nemoclaw-user-get-started"
-description: "Installs NemoClaw, launches a sandbox, and runs the first agent prompt. Use when onboarding, installing, or launching a NemoClaw sandbox for the first time. Trigger keywords - nemoclaw quickstart, install nemoclaw openclaw sandbox, nemoclaw windows wsl2 setup, nemoclaw install windows docker desktop."
+description: "Lists the hardware, software, and container runtime requirements for running NemoClaw. Use when verifying prerequisites before installation. Trigger keywords - nemoclaw prerequisites, nemoclaw supported platforms, nemoclaw hardware software, nemoclaw quickstart, install nemoclaw openclaw sandbox."
 ---
 
 <!-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-# NemoClaw Quickstart: Install, Launch, and Run Your First Agent
+# NemoClaw Prerequisites
 
 ## Gotchas
 
-- **OpenShell lifecycle.** For NemoClaw-managed environments, use `nemoclaw onboard` when you need to create or recreate the OpenShell gateway or sandbox.
 - Ollama binds to `0.0.0.0` so the sandbox can reach it through Docker.
-
-## Prerequisites
-
-Before getting started, check the prerequisites to ensure you have the necessary software and hardware to run NemoClaw.
 
 > **Alpha software:** NemoClaw is in alpha, available as an early preview since March 16, 2026.
 > APIs, configuration schemas, and runtime behavior are subject to breaking changes between releases.
@@ -319,10 +314,10 @@ Refer to `nemoclaw <name> policy-add` (use the `nemoclaw-user-reference` skill) 
 
 ## Step 5: Uninstall
 
-To remove NemoClaw and all resources created during setup, run the uninstall script:
+To remove NemoClaw and all resources created during setup, run the CLI's built-in uninstall command:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/NVIDIA/NemoClaw/refs/heads/main/uninstall.sh | bash
+nemoclaw uninstall
 ```
 
 | Flag               | Effect                                              |
@@ -331,9 +326,19 @@ curl -fsSL https://raw.githubusercontent.com/NVIDIA/NemoClaw/refs/heads/main/uni
 | `--keep-openshell` | Leave the `openshell` binary installed.              |
 | `--delete-models`  | Also remove NemoClaw-pulled Ollama models.           |
 
+`nemoclaw uninstall` runs the version-pinned `uninstall.sh` that shipped with your installed CLI, so it does not fetch anything over the network at uninstall time.
+
+If the `nemoclaw` CLI is missing or broken, fall back to the hosted script:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/NVIDIA/NemoClaw/refs/heads/main/uninstall.sh | bash
+```
+
+For a full comparison of the two forms — what they fetch, what they trust, and when to prefer each — see `nemoclaw uninstall` vs. the hosted `uninstall.sh` (use the `nemoclaw-user-reference` skill).
+
 ## References
 
-- **Load [references/windows-setup.md](references/windows-setup.md)** when installing NemoClaw on Windows, enabling WSL 2, configuring Docker Desktop for Windows, or troubleshooting a Windows-specific install error. Includes Windows-only prerequisites that must be completed before the Quickstart.
+- **Load [references/prerequisites.md](references/prerequisites.md)** when verifying prerequisites before installation. Lists the hardware, software, and container runtime requirements for running NemoClaw.
 
 ## Related Skills
 

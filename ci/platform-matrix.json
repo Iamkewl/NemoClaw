@@ -33,7 +33,7 @@
       "status": "tested",
       "prd_priority": "P1",
       "ci_tested": true,
-      "notes": "Use the standard installer and `nemoclaw onboard`."
+      "notes": "Use the standard installer and `nemoclaw onboard`. For an end-to-end walkthrough with local Ollama inference, see the [DGX Spark tutorial](https://docs.nvidia.com/nemoclaw/latest/get-started/tutorials/dgx-spark.html)."
     },
     {
       "name": "Windows WSL2",

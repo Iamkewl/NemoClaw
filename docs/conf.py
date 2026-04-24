@@ -42,6 +42,13 @@ extensions = [
 
 redirects = {
     "reference/inference-profiles": "../inference/inference-options.html",
+    # Platform Setup reorganization: Windows and DGX Spark moved under
+    # get-started/platform-setup/ in April 2026. DGX Spark then moved again
+    # to get-started/tutorials/ when it was reframed as a tutorial.
+    "get-started/windows-setup": "platform-setup/windows.html",
+    "get-started/dgx-spark-setup": "tutorials/dgx-spark.html",
+    "get-started/platform-setup": "platform-setup/index.html",
+    "get-started/platform-setup/dgx-spark": "../tutorials/dgx-spark.html",
 }
 
 autodoc_default_options = {

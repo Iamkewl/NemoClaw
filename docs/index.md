@@ -296,8 +296,10 @@ Release Notes <about/release-notes>
 :caption: Get Started
 :hidden:
 
+Prerequisites <get-started/prerequisites>
+Platform Setup <get-started/platform-setup/index>
 Quickstart <get-started/quickstart>
-Windows Prerequisites <get-started/windows-setup>
+Tutorial <get-started/tutorials/dgx-spark>
 ```
 
 ```{toctree}
