@@ -6110,18 +6110,20 @@ function findOpenclawJsonPath(dir) {
 }
 
 /**
- * Pull gateway auth token from the sandbox. The token lives at
- * /run/nemoclaw/gateway-token (gateway:gateway 0400). Since
- * `openshell sandbox download` runs as the sandbox user (uid 998)
- * and cannot read gateway-owned files, we use kubectl exec (via
- * the K3s container) which runs as root and can read the file.
+ * Pull gateway auth token from the sandbox.
  *
- * Falls back to sandbox download of openclaw.json for images that
- * predate this change.
+ * Tries three retrieval paths in order:
+ *  1. kubectl exec cat /run/nemoclaw/gateway-token  (root mode — gateway:gateway 0400)
+ *  2. sandbox download /tmp/.runtime/nemoclaw/gateway-token  (non-root mode — sandbox:sandbox 0400)
+ *  3. sandbox download openclaw.json → gateway.auth.token  (pre-externalization images)
+ *
+ * Path 1 uses the same kubectl-via-K3s pattern as shields.ts — it runs as
+ * root inside the pod so it can read gateway-owned files.
+ * Path 2 works because sandbox download runs as the sandbox user, which owns
+ * the non-root token file.
  */
 function fetchGatewayAuthTokenFromSandbox(sandboxName) {
-  // Primary: read the externalized token via kubectl exec (runs as root,
-  // bypasses DAC on gateway:gateway 0400 file). Same pattern as shields.ts.
+  // 1. Root mode: kubectl exec reads gateway:gateway 0400 file (same as shields.ts)
   try {
     const K3S_CONTAINER = "openshell-cluster-nemoclaw";
     const result = execFileSync("docker", [
@@ -6132,13 +6134,27 @@ function fetchGatewayAuthTokenFromSandbox(sandboxName) {
     const token = result.toString().trim();
     if (token.length > 0) return token;
   } catch {
-    // kubectl exec not available (e.g., non-K3s environment) — fall through
+    // kubectl exec not available or file absent — fall through
   }
 
-  // Fallback: read from openclaw.json via sandbox download (pre-externalization images)
+  // 2. Non-root mode: token at $XDG_RUNTIME_DIR/nemoclaw/gateway-token
+  // (sandbox-owned, downloadable via openshell sandbox download)
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-token-"));
   try {
     const destDir = `${tmpDir}${path.sep}`;
+    const nonRootResult = runOpenshell(
+      ["sandbox", "download", sandboxName, "/tmp/.runtime/nemoclaw/gateway-token", destDir],
+      { ignoreError: true, stdio: ["ignore", "ignore", "ignore"] },
+    );
+    if (nonRootResult.status === 0) {
+      const tokenPath = findFileRecursive(tmpDir, "gateway-token");
+      if (tokenPath) {
+        const token = fs.readFileSync(tokenPath, "utf-8").trim();
+        if (token.length > 0) return token;
+      }
+    }
+
+    // 3. Legacy: openclaw.json (pre-externalization images)
     const result = runOpenshell(
       ["sandbox", "download", sandboxName, "/sandbox/.openclaw/openclaw.json", destDir],
       { ignoreError: true, stdio: ["ignore", "ignore", "ignore"] },
