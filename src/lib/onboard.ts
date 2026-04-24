@@ -2782,7 +2782,20 @@ async function preflight() {
         console.error(
           "  2. If you run docker natively inside WSL (not Docker Desktop), apply the Linux fix:",
         );
-        printLinuxFix("172.17.0.1", null);
+        // Reuse the same bridge-IP detection the Linux branch uses — a
+        // native-docker-in-WSL install can have a custom bridge subnet
+        // just like any other Linux host, so a hardcoded 172.17.0.1
+        // would break those users' copy-paste.
+        const wslBridgeIp = getDockerBridgeGatewayIp();
+        let wslBridgeNote: string | null = null;
+        if (wslBridgeIp && wslBridgeIp !== "172.17.0.1") {
+          wslBridgeNote = `     (detected your docker bridge gateway at ${wslBridgeIp})`;
+        } else if (!wslBridgeIp) {
+          wslBridgeNote =
+            "     (could not auto-detect bridge IP — the snippet below uses docker's default; verify with:\n" +
+            "      docker network inspect bridge --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}')";
+        }
+        printLinuxFix(wslBridgeIp || "172.17.0.1", wslBridgeNote);
       } else {
         console.error(
           "  Configure your docker daemon to use a DNS server that accepts UDP:53.",
