@@ -14,6 +14,9 @@
 #                            Discord coverage with cross-talk assertions. See issue #1903.
 #   sandbox-survival-e2e     Sandbox survival across gateway restarts (onboard, inference,
 #                            gateway stop/start, verify sandbox + workspace + inference).
+#   double-onboard-e2e       Two sandboxes alive at once — second must auto-allocate a free
+#                            dashboard port. Guards #2174 (crash on second onboard) and #849
+#                            (first sandbox destroyed by second). Fake OpenAI endpoint.
 #   hermes-e2e               Hermes Agent E2E — install → onboard --agent hermes → health
 #                            probe → live inference. Validates the multi-agent architecture.
 #   skip-permissions-e2e     Validates --dangerously-skip-permissions activates the permissive
@@ -263,6 +266,34 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: sandbox-survival-install-log
+          path: /tmp/nemoclaw-e2e-install.log
+          if-no-files-found: ignore
+
+  # ── Double-onboard E2E ───────────────────────────────────────
+  # Two sandboxes alive at once: first takes the default dashboard port,
+  # second must auto-allocate to the next free port. Guards #2174 (crash
+  # on second onboard) and #849 (first sandbox destroyed by second). Uses
+  # a local fake OpenAI-compatible endpoint — no NVIDIA_API_KEY required.
+  double-onboard-e2e:
+    if: github.repository == 'NVIDIA/NemoClaw'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Run double-onboard E2E test
+        env:
+          NEMOCLAW_NON_INTERACTIVE: "1"
+          NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE: "1"
+          GITHUB_TOKEN: ${{ github.token }}
+        run: bash test/e2e/test-double-onboard.sh
+
+      - name: Upload install log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: double-onboard-install-log
           path: /tmp/nemoclaw-e2e-install.log
           if-no-files-found: ignore
 
@@ -663,7 +694,7 @@ jobs:
 
   notify-on-failure:
     runs-on: ubuntu-latest
-    needs: [cloud-e2e, cloud-experimental-e2e, messaging-providers-e2e, token-rotation-e2e, sandbox-survival-e2e, hermes-e2e, skip-permissions-e2e, sandbox-operations-e2e, inference-routing-e2e, network-policy-e2e, deployment-services-e2e, diagnostics-e2e, snapshot-commands-e2e, shields-config-e2e, rebuild-openclaw-e2e, upgrade-stale-sandbox-e2e, rebuild-hermes-e2e, gpu-e2e]
+    needs: [cloud-e2e, cloud-experimental-e2e, messaging-providers-e2e, token-rotation-e2e, sandbox-survival-e2e, double-onboard-e2e, hermes-e2e, skip-permissions-e2e, sandbox-operations-e2e, inference-routing-e2e, network-policy-e2e, deployment-services-e2e, diagnostics-e2e, snapshot-commands-e2e, shields-config-e2e, rebuild-openclaw-e2e, upgrade-stale-sandbox-e2e, rebuild-hermes-e2e, gpu-e2e]
     if: ${{ always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
     permissions:
       issues: write
