@@ -79,7 +79,15 @@ get_jetpack_version() {
           || error "Sudo is required to load br_netfilter and write /etc/modules-load.d and /etc/sysctl.d drop-ins."
       fi
       apply_br_netfilter_setup
-      info "br_netfilter applied: bridge-nf-call-{iptables,ip6tables}=1; persisted to /etc/sysctl.d/99-nemoclaw.conf + /etc/modules-load.d/nemoclaw.conf" >&2
+      # Read the values back from /proc (not just "we set it to 1") so the
+      # log is actual evidence that the apply path landed — useful when a
+      # user is validating the fix on their own Jetson and needs to confirm
+      # from log output alone that the runtime state is correct.
+      local v4 v6
+      v4="$(cat /proc/sys/net/bridge/bridge-nf-call-iptables 2>/dev/null || echo '?')"
+      v6="$(cat /proc/sys/net/bridge/bridge-nf-call-ip6tables 2>/dev/null || echo '?')"
+      info "br_netfilter runtime: bridge-nf-call-iptables=$v4, bridge-nf-call-ip6tables=$v6 — sandbox → ClusterIP routing (CoreDNS, services) is unblocked; no docker or k3s restart needed" >&2
+      info "Reboot persistence: /etc/modules-load.d/nemoclaw.conf, /etc/sysctl.d/99-nemoclaw.conf" >&2
     fi
     return 0
   fi
