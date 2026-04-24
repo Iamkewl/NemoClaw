@@ -71,11 +71,15 @@ export function findFreeDashboardPort(
   preferred: number,
   options: { probe?: PortProbe } = {},
 ): number | null {
+  if (!Number.isInteger(preferred) || preferred < 1024 || preferred > 65535) {
+    return null;
+  }
   const probe = options.probe;
   const held = new Set(probe?.listForwardPorts() ?? []);
   const isFree = probe?.probePortFree ?? (() => true);
   for (let offset = 0; offset < PORT_WINDOW; offset++) {
     const port = preferred + offset;
+    if (port > 65535) break;
     if (!held.has(port) && isFree(port)) return port;
   }
   return null;

@@ -103,4 +103,20 @@ describe("findFreeDashboardPort", () => {
     });
     expect(port).toBeNull();
   });
+
+  it("does not allocate ports above 65535 when preferred is near the upper bound", () => {
+    const port = findFreeDashboardPort(65535, {
+      probe: {
+        listForwardPorts: () => [65535],
+        probePortFree: () => true,
+      },
+    });
+    expect(port).toBeNull();
+  });
+
+  it("returns null when preferred port is out of range", () => {
+    expect(findFreeDashboardPort(0)).toBeNull();
+    expect(findFreeDashboardPort(65536)).toBeNull();
+    expect(findFreeDashboardPort(1023)).toBeNull();
+  });
 });

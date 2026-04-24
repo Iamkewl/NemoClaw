@@ -178,6 +178,12 @@ export function registerSandbox(entry: SandboxEntry): void {
         Array.isArray(entry.disabledChannels) && entry.disabledChannels.length > 0
           ? [...entry.disabledChannels]
           : undefined,
+      dashboardPort:
+        Number.isInteger(entry.dashboardPort) &&
+        (entry.dashboardPort as number) >= 1024 &&
+        (entry.dashboardPort as number) <= 65535
+          ? entry.dashboardPort
+          : undefined,
     };
     if (!data.defaultSandbox) {
       data.defaultSandbox = entry.name;

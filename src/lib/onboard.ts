@@ -3454,7 +3454,8 @@ async function createSandbox(
                 "  Pass --recreate-sandbox or set NEMOCLAW_RECREATE_SANDBOX=1 to force recreation.",
               );
             }
-            const reusePort = ensureDashboardForward(sandboxName, chatUiUrl);
+            const reuseUrl = reuseChatUiUrlFor(sandboxName, chatUiUrl);
+            const reusePort = ensureDashboardForward(sandboxName, reuseUrl);
             registry.updateSandbox(sandboxName, { dashboardPort: reusePort });
             return sandboxName;
           }
@@ -3482,7 +3483,8 @@ async function createSandbox(
           const normalizedAnswer = answer.trim().toLowerCase();
           if (normalizedAnswer !== "n" && normalizedAnswer !== "no") {
             upsertMessagingProviders(messagingTokenDefs);
-            const reusePort = ensureDashboardForward(sandboxName, chatUiUrl);
+            const reuseUrl = reuseChatUiUrlFor(sandboxName, chatUiUrl);
+            const reusePort = ensureDashboardForward(sandboxName, reuseUrl);
             registry.updateSandbox(sandboxName, { dashboardPort: reusePort });
             return sandboxName;
           }
@@ -3522,7 +3524,8 @@ async function createSandbox(
           if (Object.keys(abortHashes).length > 0) {
             registry.updateSandbox(sandboxName, { providerCredentialHashes: abortHashes });
           }
-          const reusePort = ensureDashboardForward(sandboxName, chatUiUrl);
+          const reuseUrl = reuseChatUiUrlFor(sandboxName, chatUiUrl);
+          const reusePort = ensureDashboardForward(sandboxName, reuseUrl);
           registry.updateSandbox(sandboxName, { dashboardPort: reusePort });
           return sandboxName;
         }
@@ -6064,6 +6067,18 @@ const CONTROL_UI_PORT = DASHBOARD_PORT;
 // isLoopbackHostname — see urlUtils import above
 const { resolveDashboardForwardTarget, buildControlUiUrls } = dashboard;
 
+/**
+ * Pick the chatUiUrl to use when re-forwarding an already-registered sandbox.
+ * Precedence: user-set CHAT_UI_URL env > stored dashboardPort > caller-supplied
+ * default. This prevents reuse paths from always re-requesting the default port
+ * and ratcheting an auto-allocated sandbox upward on each onboard (#2174).
+ */
+function reuseChatUiUrlFor(sandboxName, fallbackUrl) {
+  if (process.env.CHAT_UI_URL) return fallbackUrl;
+  const stored = registry.getSandbox(sandboxName)?.dashboardPort;
+  return typeof stored === "number" ? `http://127.0.0.1:${stored}` : fallbackUrl;
+}
+
 function ensureDashboardForward(sandboxName, chatUiUrl = `http://127.0.0.1:${CONTROL_UI_PORT}`) {
   const requestedPort = Number(getDashboardForwardPort(chatUiUrl));
   // Parse the forward list once; reuse for both conflict detection and picker.
@@ -6102,8 +6117,21 @@ function ensureDashboardForward(sandboxName, chatUiUrl = `http://127.0.0.1:${CON
       );
     }
     const heldPorts = forwardEntries.map((e) => e.port);
+    // Also reject ports bound by non-openshell processes (Docker containers,
+    // other local servers). Without this, auto-alloc would hand out a port
+    // that `openshell forward start` then fails to bind, leaving a persisted
+    // dashboardPort pointing at a dead forward.
+    const isPortBoundLocally = (p) => {
+      const out = runCapture(["lsof", "-i", `:${p}`, "-sTCP:LISTEN", "-P", "-n"], {
+        ignoreError: true,
+      });
+      return typeof out === "string" && out.trim().length > 0;
+    };
     const chosen = findFreeDashboardPort(requestedPort, {
-      probe: { listForwardPorts: () => heldPorts, probePortFree: () => true },
+      probe: {
+        listForwardPorts: () => heldPorts,
+        probePortFree: (p) => !isPortBoundLocally(p),
+      },
     });
     if (chosen === null) {
       const windowSummary = forwardEntries
@@ -6247,8 +6275,16 @@ function getDashboardAccessInfo(sandboxName, options = {}) {
   const token = Object.prototype.hasOwnProperty.call(options, "token")
     ? options.token
     : fetchGatewayAuthTokenFromSandbox(sandboxName);
+  // Precedence: caller-supplied > CHAT_UI_URL env > stored dashboardPort > default.
+  // The stored-port tier ensures the completion banner shows the port actually
+  // allocated by ensureDashboardForward, not the original default (#2174).
+  const storedPort = registry.getSandbox(sandboxName)?.dashboardPort;
+  const storedUrl = typeof storedPort === "number" ? `http://127.0.0.1:${storedPort}` : null;
   const chatUiUrl =
-    options.chatUiUrl || process.env.CHAT_UI_URL || `http://127.0.0.1:${CONTROL_UI_PORT}`;
+    options.chatUiUrl ||
+    process.env.CHAT_UI_URL ||
+    storedUrl ||
+    `http://127.0.0.1:${CONTROL_UI_PORT}`;
   const dashboardPort = Number(getDashboardForwardPort(chatUiUrl));
   const dashboardAccess = buildControlUiUrls(token, dashboardPort).map((url, index) => ({
     label: index === 0 ? "Dashboard" : `Alt ${index}`,
@@ -6270,8 +6306,14 @@ function getDashboardAccessInfo(sandboxName, options = {}) {
 }
 
 function getDashboardGuidanceLines(dashboardAccess = [], options = {}) {
+  const storedPort =
+    options.sandboxName && registry.getSandbox(options.sandboxName)?.dashboardPort;
+  const storedUrl = typeof storedPort === "number" ? `http://127.0.0.1:${storedPort}` : null;
   const dashboardPort = getDashboardForwardPort(
-    options.chatUiUrl || process.env.CHAT_UI_URL || `http://127.0.0.1:${CONTROL_UI_PORT}`,
+    options.chatUiUrl ||
+      process.env.CHAT_UI_URL ||
+      storedUrl ||
+      `http://127.0.0.1:${CONTROL_UI_PORT}`,
   );
   const guidance = [`Port ${dashboardPort} must be forwarded before opening these URLs.`];
   if (isWsl(options)) {
@@ -6303,7 +6345,7 @@ function printDashboard(sandboxName, model, provider, nimContainer = null, agent
 
   const token = fetchGatewayAuthTokenFromSandbox(sandboxName);
   const dashboardAccess = getDashboardAccessInfo(sandboxName, { token });
-  const guidanceLines = getDashboardGuidanceLines(dashboardAccess);
+  const guidanceLines = getDashboardGuidanceLines(dashboardAccess, { sandboxName });
 
   console.log("");
   console.log(`  ${"─".repeat(50)}`);
