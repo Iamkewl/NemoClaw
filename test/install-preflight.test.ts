@@ -103,9 +103,6 @@ echo "unexpected npm invocation: $*" >&2; exit 98`,
 
 // ---------------------------------------------------------------------------
 
-// Each test in this suite spawns `bash install.sh` — a real shell script that
-// sources files, checks git, and runs npm. The default 5 s vitest timeout is
-// not enough on loaded CI hosts, causing persistent flakes. 15 s is plenty.
 describe("installer runtime preflight", { timeout: 15_000 }, () => {
   it("attempts nvm upgrade when system Node.js is below minimum version", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-install-preflight-"));
