@@ -535,7 +535,7 @@ $ nemoclaw my-assistant snapshot restore 2026-04-21T07-35-55-987Z
 $ nemoclaw my-assistant snapshot restore v3 --to my-assistant-clone
 ```
 
-### `openshell term`
+## `openshell term`
 
 Open the OpenShell TUI to monitor sandbox activity and approve network egress requests.
 Run this on the host where the sandbox is running.
@@ -668,7 +668,7 @@ All ports must be non-privileged integers between 1024 and 65535.
 | Variable | Default | Service |
 |----------|---------|---------|
 | `NEMOCLAW_GATEWAY_PORT` | 8080 | OpenShell gateway |
-| `NEMOCLAW_DASHBOARD_PORT` | 18789 | Dashboard UI |
+| `NEMOCLAW_DASHBOARD_PORT` | 18789 (auto-derived from `CHAT_UI_URL` port if set) | Dashboard UI |
 | `NEMOCLAW_VLLM_PORT` | 8000 | vLLM / NIM inference |
 | `NEMOCLAW_OLLAMA_PORT` | 11434 | Ollama inference |
 | `NEMOCLAW_OLLAMA_PROXY_PORT` | 11435 | Ollama auth proxy |
