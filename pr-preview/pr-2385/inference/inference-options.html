@@ -45,7 +45,7 @@
 
 
 
-    <script src="../_static/documentation_options.js?v=6d9d808d"></script>
+    <script src="../_static/documentation_options.js?v=8883b710"></script>
     <script src="../_static/doctools.js?v=9a2dae69"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.16.1';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = '../versions1.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = '0.0.23';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = '0.0.24';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             false;
         </script>
@@ -613,6 +613,42 @@ Ollama appears when it is installed or running on the host.</p>
 </table>
 </div>
 </section>
+<section id="choosing-the-right-option-for-nemotron">
+<h2>Choosing the Right Option for Nemotron<a class="headerlink" href="#choosing-the-right-option-for-nemotron" title="Link to this heading">#</a></h2>
+<p>NVIDIA Nemotron models expose OpenAI-compatible APIs across every supported deployment surface, so two onboarding options can route to Nemotron.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Where Nemotron is hosted</p></th>
+<th class="head"><p>Onboard wizard option</p></th>
+<th class="head"><p>Why</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">build.nvidia.com</span></code> (NVIDIA-hosted)</p></td>
+<td><p><strong>Option 1: NVIDIA Endpoints</strong></p></td>
+<td><p>NemoClaw sets the base URL to <code class="docutils literal notranslate"><span class="pre">https://integrate.api.nvidia.com/v1</span></code> for you and validates the model against the build catalog.</p></td>
+</tr>
+<tr class="row-odd"><td><p>Self-hosted NIM container</p></td>
+<td><p><strong>Option 3: Other OpenAI-compatible endpoint</strong></p></td>
+<td><p>NIM exposes an OpenAI-compatible <code class="docutils literal notranslate"><span class="pre">/v1/chat/completions</span></code> route. Point the base URL at your NIM service and enter the Nemotron model ID.</p></td>
+</tr>
+<tr class="row-even"><td><p>Enterprise NVIDIA AI Enterprise gateway</p></td>
+<td><p><strong>Option 3: Other OpenAI-compatible endpoint</strong></p></td>
+<td><p>Enterprise gateways front Nemotron with the same OpenAI-compatible contract. Use the gateway’s base URL and your enterprise token.</p></td>
+</tr>
+<tr class="row-odd"><td><p>vLLM, SGLang, or TRT-LLM serving Nemotron weights</p></td>
+<td><p><strong>Option 3: Other OpenAI-compatible endpoint</strong></p></td>
+<td><p>Each runtime exposes Nemotron through <code class="docutils literal notranslate"><span class="pre">/v1/chat/completions</span></code>. Use the runtime’s base URL and the model ID it reports.</p></td>
+</tr>
+<tr class="row-even"><td><p>Local NIM started by the wizard</p></td>
+<td><p><strong>Local NVIDIA NIM</strong> (experimental)</p></td>
+<td><p>Requires <code class="docutils literal notranslate"><span class="pre">NEMOCLAW_EXPERIMENTAL=1</span></code> and a NIM-capable GPU. NemoClaw pulls and manages the container for you.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>For Option 3, the API key environment variable is <code class="docutils literal notranslate"><span class="pre">COMPATIBLE_API_KEY</span></code>. Set it to whatever credential your endpoint expects, or any non-empty placeholder if your endpoint does not require auth.</p>
+</section>
 <section id="experimental-options">
 <h2>Experimental Options<a class="headerlink" href="#experimental-options" title="Link to this heading">#</a></h2>
 <p>The following local inference options require <code class="docutils literal notranslate"><span class="pre">NEMOCLAW_EXPERIMENTAL=1</span></code> and, when prerequisites are met, appear in the onboarding selection list.</p>
@@ -734,6 +770,7 @@ If validation fails, the wizard returns to provider selection.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#how-inference-routing-works">How Inference Routing Works</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#provider-status">Provider Status</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#provider-options">Provider Options</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#choosing-the-right-option-for-nemotron">Choosing the Right Option for Nemotron</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#experimental-options">Experimental Options</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#validation">Validation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#next-steps">Next Steps</a></li>

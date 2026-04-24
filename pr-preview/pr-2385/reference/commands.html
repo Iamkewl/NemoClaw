@@ -45,7 +45,7 @@
 
 
 
-    <script src="../_static/documentation_options.js?v=6d9d808d"></script>
+    <script src="../_static/documentation_options.js?v=8883b710"></script>
     <script src="../_static/doctools.js?v=9a2dae69"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.16.1';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = '../versions1.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = '0.0.23';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = '0.0.24';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             false;
         </script>
@@ -1052,8 +1052,8 @@ Versions (<code class="docutils literal notranslate"><span class="pre">v1</span>
 </pre></div>
 </div>
 </section>
-<section id="nemoclaw-name-snapshot-restore-selector">
-<h3><code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">&lt;name&gt;</span> <span class="pre">snapshot</span> <span class="pre">restore</span> <span class="pre">[selector]</span></code><a class="headerlink" href="#nemoclaw-name-snapshot-restore-selector" title="Link to this heading">#</a></h3>
+<section id="nemoclaw-name-snapshot-restore-selector-to-dst">
+<h3><code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">&lt;name&gt;</span> <span class="pre">snapshot</span> <span class="pre">restore</span> <span class="pre">[selector]</span> <span class="pre">[--to</span> <span class="pre">&lt;dst&gt;]</span></code><a class="headerlink" href="#nemoclaw-name-snapshot-restore-selector-to-dst" title="Link to this heading">#</a></h3>
 <p>Restore sandbox state from a snapshot.
 The sandbox must be running before you restore.
 If no selector is provided, the latest snapshot is used.
@@ -1064,10 +1064,22 @@ Restore performs a clean replacement of each state directory, removing files tha
 <li><p>An exact name passed to <code class="docutils literal notranslate"><span class="pre">snapshot</span> <span class="pre">create</span> <span class="pre">--name</span></code>.</p></li>
 <li><p>An exact or prefix timestamp (partial prefixes are accepted when they match exactly one snapshot).</p></li>
 </ul>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>nemoclaw<span class="w"> </span>my-assistant<span class="w"> </span>snapshot<span class="w"> </span>restore
+<p>Pass <code class="docutils literal notranslate"><span class="pre">--to</span> <span class="pre">&lt;dst&gt;</span></code> to restore the snapshot into a different sandbox instead of the source.
+When <code class="docutils literal notranslate"><span class="pre">dst</span></code> does not exist, it is auto-created by reusing the source sandbox’s container image — no re-onboarding needed.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp"># </span>restore<span class="w"> </span>latest<span class="w"> </span>snapshot<span class="w"> </span><span class="k">in</span>-place
+<span class="gp">$ </span>nemoclaw<span class="w"> </span>my-assistant<span class="w"> </span>snapshot<span class="w"> </span>restore
+
+<span class="gp"># </span>restore<span class="w"> </span>by<span class="w"> </span>version
 <span class="gp">$ </span>nemoclaw<span class="w"> </span>my-assistant<span class="w"> </span>snapshot<span class="w"> </span>restore<span class="w"> </span>v3
+
+<span class="gp"># </span>restore<span class="w"> </span>by<span class="w"> </span>user-assigned<span class="w"> </span>name
 <span class="gp">$ </span>nemoclaw<span class="w"> </span>my-assistant<span class="w"> </span>snapshot<span class="w"> </span>restore<span class="w"> </span>before-upgrade
-<span class="gp">$ </span>nemoclaw<span class="w"> </span>my-assistant<span class="w"> </span>snapshot<span class="w"> </span>restore<span class="w"> </span><span class="m">2026</span>-04-14T
+
+<span class="gp"># </span>restore<span class="w"> </span>by<span class="w"> </span>exact<span class="w"> </span>timestamp
+<span class="gp">$ </span>nemoclaw<span class="w"> </span>my-assistant<span class="w"> </span>snapshot<span class="w"> </span>restore<span class="w"> </span><span class="m">2026</span>-04-21T07-35-55-987Z
+
+<span class="gp"># </span>clone<span class="w"> </span>v3<span class="w"> </span>into<span class="w"> </span>another<span class="w"> </span>sandbox
+<span class="gp">$ </span>nemoclaw<span class="w"> </span>my-assistant<span class="w"> </span>snapshot<span class="w"> </span>restore<span class="w"> </span>v3<span class="w"> </span>--to<span class="w"> </span>my-assistant-clone
 </pre></div>
 </div>
 </section>
@@ -1357,7 +1369,7 @@ Running <code class="docutils literal notranslate"><span class="pre">nemoclaw</s
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nemoclaw-backup-all"><code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">backup-all</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nemoclaw-name-snapshot-create"><code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">&lt;name&gt;</span> <span class="pre">snapshot</span> <span class="pre">create</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nemoclaw-name-snapshot-list"><code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">&lt;name&gt;</span> <span class="pre">snapshot</span> <span class="pre">list</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nemoclaw-name-snapshot-restore-selector"><code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">&lt;name&gt;</span> <span class="pre">snapshot</span> <span class="pre">restore</span> <span class="pre">[selector]</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nemoclaw-name-snapshot-restore-selector-to-dst"><code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">&lt;name&gt;</span> <span class="pre">snapshot</span> <span class="pre">restore</span> <span class="pre">[selector]</span> <span class="pre">[--to</span> <span class="pre">&lt;dst&gt;]</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#openshell-term"><code class="docutils literal notranslate"><span class="pre">openshell</span> <span class="pre">term</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nemoclaw-tunnel-start"><code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">tunnel</span> <span class="pre">start</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nemoclaw-tunnel-stop"><code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">tunnel</span> <span class="pre">stop</span></code></a></li>
