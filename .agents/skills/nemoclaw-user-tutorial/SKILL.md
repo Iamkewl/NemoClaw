@@ -18,7 +18,7 @@ This tutorial assumes you have already completed the Quickstart (use the `nemocl
 
 This tutorial shows you how to set up NemoClaw with Ollama on an NVIDIA DGX Spark. By the end, your NemoClaw sandbox routes inference to a local Ollama server running on the Spark GPU instead of a cloud provider.
 
-DGX Spark ships with Ubuntu 24.04 and Docker pre-installed, so no extra pre-setup is required before the standard installer. Refer to [Platform Setup](docs/get-started/platform-setup/index.md) for the full pre-setup matrix across platforms.
+DGX Spark ships with Ubuntu 24.04 and Docker pre-installed, so no extra pre-setup is required before the standard installer. Refer to Platform Setup (use the `nemoclaw-user-platform-setup` skill) for the full pre-setup matrix across platforms.
 
 ## Step 1: How NemoClaw Runs on DGX Spark
 

@@ -20,7 +20,7 @@ The sandbox image is approximately 2.4 GB compressed. During image push, the Doc
 |------------|----------------------------------|
 | Node.js    | 22.16 or later |
 | npm        | 10 or later |
-| Platform   | See [Platform Setup](docs/get-started/platform-setup/index.md) |
+| Platform   | See Platform Setup (use the `nemoclaw-user-platform-setup` skill) |
 
 :::{warning} OpenShell Lifecycle
 For NemoClaw-managed environments, use `nemoclaw onboard` when you need to create or recreate the OpenShell gateway or sandbox.
@@ -29,7 +29,7 @@ Avoid `openshell self-update`, `npm update -g openshell`, `openshell gateway sta
 
 ## Supported Platforms
 
-For the list of tested platform and container runtime combinations, and for platform-specific pre-setup steps (Windows, DGX Spark), see [Platform Setup](docs/get-started/platform-setup/index.md).
+For the list of tested platform and container runtime combinations, and for platform-specific pre-setup steps (Windows, DGX Spark), see Platform Setup (use the `nemoclaw-user-platform-setup` skill).
 
 ## Next
 

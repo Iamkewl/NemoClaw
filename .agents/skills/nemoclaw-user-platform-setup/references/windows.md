@@ -93,7 +93,7 @@ All NemoClaw commands run inside WSL, not in PowerShell.
 
 ## Related
 
-- [Platform Setup](docs/get-started/platform-setup/index.md) — hub page covering all platforms with extra pre-setup.
+- Platform Setup (use the `nemoclaw-user-platform-setup` skill) — hub page covering all platforms with extra pre-setup.
 
 ## Troubleshooting
 

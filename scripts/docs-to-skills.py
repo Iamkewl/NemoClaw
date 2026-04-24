@@ -433,15 +433,27 @@ def rewrite_doc_paths(
     source_page: DocPage,
     docs_dir: Path,
     doc_to_skill: dict[str, str],
+    output_file: Path | None = None,
 ) -> str:
-    """Resolve relative doc paths to repo-root paths or skill cross-references.
+    """Resolve relative doc paths to skill cross-refs or output-relative paths.
 
     Handles:
-    - Markdown links: [text](../path.md) → [text](docs/path.md) or skill ref
-    - Include placeholders: "included from ../../README.md" → repo-root path
+    - Markdown links: [text](../path.md) → [text](relative/path) or skill ref
+    - Include placeholders: "included from ../../README.md" → output-relative path
+
+    When *output_file* is provided, emitted paths are made relative to the
+    output file's directory so link checkers that resolve paths from the
+    file's own location (the standard convention) can follow them. Without
+    *output_file*, paths are repo-root-relative.
     """
     repo_root = docs_dir.parent
     source_dir = source_page.path.parent
+
+    def _emit_path(resolved: Path) -> str:
+        """Build the on-disk path string to emit for a resolved target."""
+        if output_file is not None:
+            return os.path.relpath(resolved, start=output_file.parent)
+        return str(resolved.relative_to(repo_root))
 
     def _resolve_link(match: re.Match) -> str:
         link_text = match.group(1)
@@ -451,8 +463,13 @@ def rewrite_doc_paths(
         if raw_path.startswith(("http://", "https://", "#", "mailto:")):
             return match.group(0)
 
-        # Strip fragment anchors before checking extension
-        path_no_frag = raw_path.split("#")[0]
+        # Preserve fragment anchors across the rewrite
+        if "#" in raw_path:
+            path_no_frag, _, frag = raw_path.partition("#")
+            frag = "#" + frag
+        else:
+            path_no_frag = raw_path
+            frag = ""
 
         # Skip non-doc files
         if not path_no_frag.endswith(".md") and not path_no_frag.endswith(".html"):
@@ -471,8 +488,7 @@ def rewrite_doc_paths(
             skill_name = doc_to_skill[rel_str]
             return f"{link_text} (use the `{skill_name}` skill)"
 
-        # Fall back to repo-root-relative path
-        return f"[{link_text}]({rel_to_repo})"
+        return f"[{link_text}]({_emit_path(resolved)}{frag})"
 
     # Rewrite markdown links: [text](path)
     text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", _resolve_link, text)
@@ -482,10 +498,10 @@ def rewrite_doc_paths(
         raw_path = match.group(1).strip()
         resolved = (source_dir / raw_path).resolve()
         try:
-            rel_to_repo = resolved.relative_to(repo_root)
+            resolved.relative_to(repo_root)
         except ValueError:
             return match.group(0)
-        return f"> *Content included from `{rel_to_repo}` — see the original doc for full text.*"
+        return f"> *Content included from `{_emit_path(resolved)}` — see the original doc for full text.*"
 
     text = re.sub(
         r"> \*Content included from ([^\n]+) — see the original doc for full text\.\*",
@@ -1026,11 +1042,22 @@ def generate_skill(
     """
     description = build_skill_description(name, pages)
 
-    def _clean(text: str, source: DocPage) -> str:
+    # Resolve link paths relative to the primary output location so link
+    # checkers that resolve from each file's own directory can follow them.
+    # Using output_dirs[0] is a pragmatic choice; secondary mirrors (for
+    # example a .claude/skills symlink to .agents/skills) share the same
+    # effective directory.
+    primary_skill_dir = output_dirs[0] / name if output_dirs else None
+    skill_md_path = primary_skill_dir / "SKILL.md" if primary_skill_dir else None
+
+    def _clean(text: str, source: DocPage, output_file: Path | None = None) -> str:
         """Apply directive cleanup and path rewriting for a source page."""
         result = clean_myst_directives(text)
         if docs_dir and doc_to_skill is not None:
-            result = rewrite_doc_paths(result, source, docs_dir, doc_to_skill)
+            target = output_file if output_file is not None else skill_md_path
+            result = rewrite_doc_paths(
+                result, source, docs_dir, doc_to_skill, output_file=target
+            )
         return result
 
     procedures = [
@@ -1200,7 +1227,10 @@ def generate_skill(
     ref_files: dict[str, str] = {}
     for rp in reference_pages + context_pages:
         ref_name = rp.path.stem + ".md"
-        body = normalize_heading_levels(_clean(rp.body, rp))
+        ref_output_file = (
+            primary_skill_dir / "references" / ref_name if primary_skill_dir else None
+        )
+        body = normalize_heading_levels(_clean(rp.body, rp, output_file=ref_output_file))
         ref_files[ref_name] = body
 
     # --- Write output ---
@@ -1296,7 +1326,6 @@ EXCLUDED_PATTERNS = {
     "CHANGELOG.md",
     "LICENSE.md",
     "license.md",
-    "index.md",
     # Maintainer-only content consumed directly by skills/dashboards;
     # not user-facing documentation.
     "triage-instructions.md",
@@ -1306,9 +1335,17 @@ EXCLUDED_PATTERNS = {
 def scan_docs(docs_dir: Path) -> list[DocPage]:
     """Recursively scan a directory for documentation markdown files."""
     pages: list[DocPage] = []
+    docs_root_index = (docs_dir / "index.md").resolve()
     for md_path in sorted(docs_dir.rglob("*.md")):
         # Skip excluded files
         if md_path.name in EXCLUDED_PATTERNS:
+            continue
+        # Skip the top-level docs/index.md (Sphinx landing page — mostly
+        # boilerplate). Subdirectory index.md files (for example
+        # docs/get-started/platform-setup/index.md) are hub pages with
+        # real content and should be included so links to them can
+        # resolve to a generated skill instead of a file path.
+        if md_path.resolve() == docs_root_index:
             continue
         # Skip include fragments and templates
         if md_path.parent.name.startswith("_"):

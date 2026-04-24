@@ -670,7 +670,7 @@ If you run other services on Spark that expect port 3000, bind them to a differe
 
 ## Windows Subsystem for Linux
 
-For environment setup steps, see Windows Prerequisites (use the `nemoclaw-user-windows-presetup` skill).
+For environment setup steps, see Windows Prerequisites (use the `nemoclaw-user-platform-setup` skill).
 
 ### `wsl --install --no-distribution` returns Forbidden (403)
 
@@ -730,7 +730,7 @@ $ sudo systemctl stop ollama
 $ OLLAMA_CONTEXT_LENGTH=16384 ollama serve
 ```
 
-For additional troubleshooting, see the Quickstart (use the `nemoclaw-user-get-started` skill) and Windows Setup (use the `nemoclaw-user-windows-presetup` skill) pages.
+For additional troubleshooting, see the Quickstart (use the `nemoclaw-user-get-started` skill) and Windows Setup (use the `nemoclaw-user-platform-setup` skill) pages.
 
 ## Podman
 
