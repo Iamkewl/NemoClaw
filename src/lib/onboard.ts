@@ -27,6 +27,8 @@ const LOCAL_INFERENCE_TIMEOUT_SECS = envInt("NEMOCLAW_LOCAL_INFERENCE_TIMEOUT", 
 const ANSI_RE = /\x1B(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1B\\)|[@-_])/g;
 const runner: typeof import("./runner") = require("./runner");
 const { ROOT, SCRIPTS, redact, run, runCapture, runFile, shellQuote, validateName } = runner;
+const errnoUtils: typeof import("./errno") = require("./errno");
+const { isErrnoException } = errnoUtils;
 
 type RunnerOptions = {
   env?: NodeJS.ProcessEnv;
@@ -36,10 +38,6 @@ type RunnerOptions = {
   timeout?: number;
   openshellBinary?: string;
 };
-
-function isErrnoException(error: object | null): error is NodeJS.ErrnoException {
-  return error !== null && "code" in error;
-}
 
 function parseJson<T>(text: string): T {
   return JSON.parse(text);
@@ -237,9 +235,9 @@ type RemoteProviderConfigEntry = {
   skipVerify?: boolean;
 };
 
-type LooseScalar = string | number | boolean | null | undefined;
-type LooseValue = LooseScalar | LooseObject | LooseValue[];
-type LooseObject = { [key: string]: LooseValue };
+// Re-export shared JSON types under the names used throughout this module.
+// See src/lib/json-types.ts for the canonical definitions.
+import type { JsonScalar as LooseScalar, JsonValue as LooseValue, JsonObject as LooseObject } from "./json-types";
 
 type OnboardOptions = {
   nonInteractive?: boolean;
@@ -5747,6 +5745,12 @@ async function setupMessagingChannels(): Promise<string[]> {
       console.log("");
       console.log(`  ${ch.help}`);
       const token = normalizeCredentialValue(await prompt(`  ${ch.label}: `, { secret: true }));
+      if (token && ch.tokenFormat && !ch.tokenFormat.test(token)) {
+        console.log(`  ✗ Invalid format. ${ch.tokenFormatHint || "Check the token and try again."}`);
+        console.log(`  Skipped ${ch.name} (invalid token format)`);
+        enabled.delete(ch.name);
+        continue;
+      }
       if (token) {
         saveCredential(ch.envKey, token);
         process.env[ch.envKey] = token;
@@ -5767,6 +5771,14 @@ async function setupMessagingChannels(): Promise<string[]> {
         const appToken = normalizeCredentialValue(
           await prompt(`  ${ch.appTokenLabel}: `, { secret: true }),
         );
+        if (appToken && ch.appTokenFormat && !ch.appTokenFormat.test(appToken)) {
+          console.log(
+            `  ✗ Invalid format. ${ch.appTokenFormatHint || "Check the token and try again."}`,
+          );
+          console.log(`  Skipped ${ch.name} app token (invalid token format)`);
+          enabled.delete(ch.name);
+          continue;
+        }
         if (appToken) {
           saveCredential(ch.appTokenEnvKey, appToken);
           process.env[ch.appTokenEnvKey] = appToken;
@@ -7825,6 +7837,7 @@ module.exports = {
   runCaptureOpenshell,
   setupInference,
   setupMessagingChannels,
+  MESSAGING_CHANNELS,
   setupNim,
   formatOnboardConfigSummary,
   isInferenceRouteReady,
