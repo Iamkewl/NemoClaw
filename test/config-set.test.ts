@@ -122,6 +122,25 @@ describe("config set helpers", () => {
       expect(isRecognizedConfigPath("provider.__proto__.polluted")).toBe(false);
       expect(isRecognizedConfigPath("tools.hasOwnProperty")).toBe(false);
     });
+
+    // Modify-bypass: an existing key is always a recognized target,
+    // even under a root we haven't whitelisted. Keeps us resilient to
+    // OpenClaw adding a new top-level namespace before we add it here.
+    it("accepts modification of an existing key under an unlisted root", () => {
+      expect(
+        isRecognizedConfigPath("customRoot.foo", { customRoot: { foo: "bar" } }),
+      ).toBe(true);
+    });
+
+    it("still rejects unset keys under an unlisted root when a config is supplied", () => {
+      expect(isRecognizedConfigPath("unlistedRoot.newLeaf", { provider: {} })).toBe(false);
+    });
+
+    it("still rejects prototype-pollution segments even when a config is supplied", () => {
+      expect(
+        isRecognizedConfigPath("provider.__proto__.polluted", { provider: {} }),
+      ).toBe(false);
+    });
   });
 
   describe("validateUrlValue", () => {

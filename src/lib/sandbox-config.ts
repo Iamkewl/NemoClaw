@@ -165,16 +165,18 @@ const UNSAFE_KEY_SEGMENTS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Return true when a dotpath is syntactically valid and its first segment
- * is in RECOGNIZED_TOP_LEVEL_KEYS. Does not consult the loaded config, so a
- * first-time write under a recognized namespace (e.g.
- * `provider.compatible-endpoint.timeoutSeconds` on a fresh install) is
- * accepted even before the intermediate objects exist.
+ * Return true when a dotpath is syntactically valid and either (a) already
+ * exists in the loaded config — a modify, which is always allowed because
+ * OpenClaw wrote it — or (b) passes the root allow-list for first-time
+ * writes. The modify bypass keeps us resilient to schema drift: if
+ * OpenClaw ever adds a top-level namespace we haven't whitelisted, users
+ * who already have it populated can still tweak values under it.
  */
-function isRecognizedConfigPath(dotpath: string): boolean {
+function isRecognizedConfigPath(dotpath: string, config?: ConfigObject): boolean {
   if (!dotpath || typeof dotpath !== "string") return false;
   const keys = dotpath.split(".");
   if (keys.some((key) => !key || UNSAFE_KEY_SEGMENTS.has(key))) return false;
+  if (config !== undefined && extractDotpath(config, dotpath) !== undefined) return true;
   return RECOGNIZED_TOP_LEVEL_KEYS.has(keys[0]);
 }
 
@@ -378,7 +380,7 @@ function configSet(sandboxName: string, opts: ConfigSetOpts = {}): void {
     process.exit(1);
   }
 
-  if (!isRecognizedConfigPath(opts.key)) {
+  if (!isRecognizedConfigPath(opts.key, config)) {
     console.error(
       `  Key validation failed: "${opts.key}" is not a recognized ${target.agentName} config path.`,
     );
