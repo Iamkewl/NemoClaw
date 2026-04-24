@@ -7,7 +7,10 @@ type OnboardKnownHostsInternals = {
   pruneKnownHostsEntries: (contents: string) => string;
 };
 
-type OnboardKnownHostsCandidate = Partial<OnboardKnownHostsInternals> | null;
+type OnboardKnownHostsCandidate = {
+  pruneKnownHostsEntries?: unknown;
+  default?: unknown;
+} | null;
 
 function isOnboardKnownHostsInternals(
   value: OnboardKnownHostsCandidate,

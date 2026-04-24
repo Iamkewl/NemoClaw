@@ -9,7 +9,10 @@ type OnboardValidationInternals = {
   getValidationProbeCurlArgs: (opts?: { isWsl?: boolean }) => string[];
 };
 
-type OnboardValidationCandidate = Partial<OnboardValidationInternals> | null;
+type OnboardValidationCandidate = {
+  getValidationProbeCurlArgs?: unknown;
+  default?: unknown;
+} | null;
 
 function isOnboardValidationInternals(
   value: OnboardValidationCandidate,
