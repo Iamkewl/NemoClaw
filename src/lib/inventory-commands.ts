@@ -11,6 +11,7 @@ export interface SandboxEntry {
   policies?: string[] | null;
   messagingChannels?: string[] | null;
   agent?: string | null;
+  dashboardPort?: number;
 }
 
 export interface MessagingBridgeHealth {
@@ -98,6 +99,9 @@ export async function listSandboxesCommand(deps: ListSandboxesCommandDeps): Prom
     const connected = sessionCount !== null && sessionCount > 0 ? " ●" : "";
     log(`    ${sb.name}${def}${connected}`);
     log(`      model: ${model}  provider: ${provider}  ${gpu}  policies: ${presets}`);
+    if (typeof sb.dashboardPort === "number") {
+      log(`      dashboard: http://127.0.0.1:${sb.dashboardPort}`);
+    }
   }
   log("");
   log("  * = default sandbox");
@@ -116,6 +120,9 @@ export function showStatusCommand(deps: ShowStatusCommandDeps): void {
       const def = isDefault ? " *" : "";
       const model = sb.model;
       log(`    ${sb.name}${def}${model ? ` (${model})` : ""}`);
+      if (typeof sb.dashboardPort === "number") {
+        log(`      dashboard: http://127.0.0.1:${sb.dashboardPort}`);
+      }
     }
     log("");
   }

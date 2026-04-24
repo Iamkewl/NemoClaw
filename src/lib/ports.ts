@@ -46,3 +46,37 @@ export const VLLM_PORT = parsePort("NEMOCLAW_VLLM_PORT", 8000);
 export const OLLAMA_PORT = parsePort("NEMOCLAW_OLLAMA_PORT", 11434);
 /** Ollama auth proxy port (default 11435, override via NEMOCLAW_OLLAMA_PROXY_PORT). */
 export const OLLAMA_PROXY_PORT = parsePort("NEMOCLAW_OLLAMA_PROXY_PORT", 11435);
+
+/**
+ * Injectable probes so tests can drive `findFreeDashboardPort` without touching
+ * real openshell or real sockets.
+ */
+export interface PortProbe {
+  listForwardPorts: () => number[];
+  probePortFree: (port: number) => boolean;
+}
+
+/**
+ * Try up to 10 ports starting at the preferred port before giving up.
+ * Anything beyond that and the operator has bigger problems; fail loudly.
+ */
+const PORT_WINDOW = 10;
+
+/**
+ * Find a free dashboard port, preferring `preferred` and walking upward.
+ * Skips ports already claimed by openshell forwards and ports bound by
+ * other host processes. Returns null if the 10-port window is exhausted.
+ */
+export function findFreeDashboardPort(
+  preferred: number,
+  options: { probe?: PortProbe } = {},
+): number | null {
+  const probe = options.probe;
+  const held = new Set(probe?.listForwardPorts() ?? []);
+  const isFree = probe?.probePortFree ?? (() => true);
+  for (let offset = 0; offset < PORT_WINDOW; offset++) {
+    const port = preferred + offset;
+    if (!held.has(port) && isFree(port)) return port;
+  }
+  return null;
+}

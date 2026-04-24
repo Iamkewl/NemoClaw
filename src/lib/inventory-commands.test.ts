@@ -50,6 +50,39 @@ describe("inventory commands", () => {
     );
   });
 
+  it("prints the dashboard URL for each sandbox when dashboardPort is set", async () => {
+    const lines: string[] = [];
+    await listSandboxesCommand({
+      recoverRegistryEntries: async () => ({
+        sandboxes: [
+          {
+            name: "alpha",
+            model: "m",
+            provider: "p",
+            gpuEnabled: false,
+            policies: [],
+            dashboardPort: 18789,
+          },
+          {
+            name: "beta",
+            model: "m",
+            provider: "p",
+            gpuEnabled: false,
+            policies: [],
+            dashboardPort: 18790,
+          },
+        ],
+        defaultSandbox: "alpha",
+      }),
+      getLiveInference: () => null,
+      loadLastSession: () => null,
+      log: (message = "") => lines.push(message),
+    });
+
+    expect(lines).toContain("      dashboard: http://127.0.0.1:18789");
+    expect(lines).toContain("      dashboard: http://127.0.0.1:18790");
+  });
+
   it("shows stored sandbox inference instead of live gateway inference in list output", async () => {
     const lines: string[] = [];
     await listSandboxesCommand({
@@ -86,6 +119,25 @@ describe("inventory commands", () => {
     expect(lines).toContain(
       "      model: configured-beta  provider: beta-provider  CPU  policies: none",
     );
+  });
+
+  it("prints the dashboard URL per sandbox in status when dashboardPort is set", () => {
+    const lines: string[] = [];
+    showStatusCommand({
+      listSandboxes: () => ({
+        sandboxes: [
+          { name: "alpha", model: "m", dashboardPort: 18789 },
+          { name: "beta", model: "m", dashboardPort: 18790 },
+        ],
+        defaultSandbox: "alpha",
+      }),
+      getLiveInference: () => null,
+      showServiceStatus: vi.fn(),
+      log: (message = "") => lines.push(message),
+    });
+
+    expect(lines).toContain("      dashboard: http://127.0.0.1:18789");
+    expect(lines).toContain("      dashboard: http://127.0.0.1:18790");
   });
 
   it("flags messaging bridge as degraded when checkMessagingBridgeHealth reports conflicts", () => {

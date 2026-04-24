@@ -22,6 +22,8 @@ export interface SandboxEntry {
   providerCredentialHashes?: Record<string, string>;
   messagingChannels?: string[];
   disabledChannels?: string[];
+  /** Host-side port for the openshell forward to the OpenClaw dashboard (#2174). */
+  dashboardPort?: number;
 }
 
 export interface SandboxRegistry {

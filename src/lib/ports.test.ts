@@ -3,7 +3,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 // Import from compiled dist/ so coverage is attributed correctly.
-import { parsePort } from "../../dist/lib/ports";
+import { parsePort, findFreeDashboardPort } from "../../dist/lib/ports";
 
 describe("parsePort", () => {
   const ENV_KEY = "TEST_PORT";
@@ -68,5 +68,39 @@ describe("parsePort", () => {
   it("rejects special characters that could break pgrep patterns", () => {
     process.env[ENV_KEY] = ".*";
     expect(() => parsePort(ENV_KEY, 8080)).toThrow("Invalid port");
+  });
+});
+
+describe("findFreeDashboardPort", () => {
+  it("skips ports already held by openshell forwards", () => {
+    const port = findFreeDashboardPort(18789, {
+      probe: {
+        listForwardPorts: () => [18789, 18790],
+        probePortFree: () => true,
+      },
+    });
+    expect(port).toBe(18791);
+  });
+
+  it("skips ports bound by other host processes", () => {
+    const bound = new Set([18789, 18790]);
+    const port = findFreeDashboardPort(18789, {
+      probe: {
+        listForwardPorts: () => [],
+        probePortFree: (p) => !bound.has(p),
+      },
+    });
+    expect(port).toBe(18791);
+  });
+
+  it("returns null when the 10-port window is exhausted", () => {
+    const allHeld = Array.from({ length: 10 }, (_, i) => 18789 + i);
+    const port = findFreeDashboardPort(18789, {
+      probe: {
+        listForwardPorts: () => allHeld,
+        probePortFree: () => true,
+      },
+    });
+    expect(port).toBeNull();
   });
 });

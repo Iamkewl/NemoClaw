@@ -9,6 +9,7 @@ export interface OnboardCommandOptions {
   acceptThirdPartySoftware: boolean;
   agent: string | null;
   dangerouslySkipPermissions: boolean;
+  controlUiPort: number | null;
 }
 
 export interface RunOnboardCommandDeps {
@@ -36,7 +37,7 @@ const ONBOARD_BASE_ARGS = [
 
 function onboardUsageLines(noticeAcceptFlag: string): string[] {
   return [
-    `  Usage: nemoclaw onboard [--non-interactive] [--resume] [--recreate-sandbox] [--from <Dockerfile>] [--agent <name>] [--dangerously-skip-permissions] [${noticeAcceptFlag}]`,
+    `  Usage: nemoclaw onboard [--non-interactive] [--resume] [--recreate-sandbox] [--from <Dockerfile>] [--agent <name>] [--control-ui-port <n>] [--dangerously-skip-permissions] [${noticeAcceptFlag}]`,
     "",
   ];
 }
@@ -67,6 +68,28 @@ export function parseOnboardArgs(
       exit(1);
     }
     parsedArgs.splice(fromIdx, 2);
+  }
+
+  let controlUiPort: number | null = null;
+  const controlUiPortIdx = parsedArgs.indexOf("--control-ui-port");
+  if (controlUiPortIdx !== -1) {
+    const raw = parsedArgs[controlUiPortIdx + 1];
+    if (typeof raw !== "string" || raw.startsWith("--")) {
+      error("  --control-ui-port requires a port number");
+      printOnboardUsage(error, noticeAcceptFlag);
+      exit(1);
+    }
+    if (!/^\d+$/.test(raw)) {
+      error(`  --control-ui-port '${raw}' must be an integer between 1024 and 65535`);
+      exit(1);
+    }
+    const parsed = Number(raw);
+    if (parsed < 1024 || parsed > 65535) {
+      error(`  --control-ui-port '${raw}' must be an integer between 1024 and 65535`);
+      exit(1);
+    }
+    controlUiPort = parsed;
+    parsedArgs.splice(controlUiPortIdx, 2);
   }
 
   let agent: string | null = null;
@@ -105,6 +128,7 @@ export function parseOnboardArgs(
       parsedArgs.includes(noticeAcceptFlag) || String(deps.env[noticeAcceptEnv] || "") === "1",
     agent,
     dangerouslySkipPermissions: parsedArgs.includes("--dangerously-skip-permissions"),
+    controlUiPort,
   };
 }
 
@@ -116,6 +140,12 @@ export async function runOnboardCommand(deps: RunOnboardCommandDeps): Promise<vo
   }
 
   const options = parseOnboardArgs(deps.args, deps.noticeAcceptFlag, deps.noticeAcceptEnv, deps);
+  // --control-ui-port takes precedence over existing CHAT_UI_URL. The onboard
+  // flow reads CHAT_UI_URL directly in many places, so setting it here is the
+  // single seam that makes the flag effective without threading it through.
+  if (options.controlUiPort !== null) {
+    process.env.CHAT_UI_URL = `http://127.0.0.1:${options.controlUiPort}`;
+  }
   await deps.runOnboard(options);
 }
 
